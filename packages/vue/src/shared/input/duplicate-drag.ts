@@ -1,4 +1,4 @@
-import type { Editor } from '@open-pencil/core/editor'
+import { captureMoveState, type Editor } from '@open-pencil/core/editor'
 
 import { useI18n } from '#vue/i18n/useI18n.js'
 import type { DragOriginal } from '#vue/shared/input/drag-original'
@@ -24,11 +24,7 @@ export function duplicateAndDrag(
     })
     if (!clone) continue
     newIds.push(clone.id)
-    newOriginals.set(clone.id, {
-      x: source.x,
-      y: source.y,
-      parentId
-    })
+    newOriginals.set(clone.id, captureMoveState(editor.graph, clone))
   }
   editor.select(newIds)
   editor.requestRender()

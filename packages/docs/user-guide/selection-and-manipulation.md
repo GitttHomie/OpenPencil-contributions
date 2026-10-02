@@ -20,6 +20,12 @@ Select objects to move, resize, rotate, duplicate, and organize them on the canv
 - **Arrow keys** — nudge selected nodes by 1 px
 - <kbd>Shift</kbd> + arrow keys — nudge by 10 px
 
+Dragging into a frame makes the selection its children. Drag outside the current container to move it into the container under the pointer, or onto the page when no container is underneath. The highlighted container is the drop target. Reparenting preserves the objects' visual position and rotation; dropping into auto layout places them at the insertion marker.
+
+In auto layout, left/right arrows reorder horizontal children and up/down arrows reorder vertical children. Each key press moves one slot, including with Shift. Selected siblings retain their relative order. Absolute-positioned children still nudge by pixels.
+
+Press <kbd>Escape</kbd> during a drag to restore the original positions. Each drag is one undo step, including parent and sibling-order changes. Moving a selected parent and one of its descendants moves the parent once.
+
 ## Resizing
 
 Selected nodes show 8 resize handles (4 corners + 4 edge midpoints). Drag any handle to resize.

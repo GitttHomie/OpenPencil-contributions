@@ -174,3 +174,38 @@ describe('hitTest', () => {
     expect(graph.hitTest(50, 50, page)?.id).toBe(rectId)
   })
 })
+
+describe('container drop targeting', () => {
+  test('uses the frontmost eligible container and excludes entire moving subtrees', () => {
+    const graph = new SceneGraph()
+    const back = graph.createNode('FRAME', pageId(graph), { width: 300, height: 300 })
+    const front = graph.createNode('FRAME', pageId(graph), { width: 200, height: 200 })
+    const nested = graph.createNode('FRAME', front.id, { width: 100, height: 100 })
+    expect(graph.hitTestFrame(50, 50, new Set(), pageId(graph))?.id).toBe(nested.id)
+    expect(graph.hitTestFrame(50, 50, new Set([front.id]), pageId(graph))?.id).toBe(back.id)
+    graph.updateNode(front.id, { locked: true })
+    expect(graph.hitTestFrame(50, 50, new Set(), pageId(graph))?.id).toBe(back.id)
+  })
+
+  test('finds visible overflowing children but respects ancestor clipping', () => {
+    const graph = new SceneGraph()
+    const parent = graph.createNode('FRAME', pageId(graph), { width: 100, height: 100 })
+    const nested = graph.createNode('FRAME', parent.id, { x: 150, width: 100, height: 100 })
+    expect(graph.hitTestFrame(200, 50, new Set(), pageId(graph))?.id).toBe(nested.id)
+    graph.updateNode(parent.id, { clipsContent: true })
+    expect(graph.hitTestFrame(200, 50, new Set(), pageId(graph))).toBeNull()
+  })
+
+  test('rotated frames are tested in local coordinates', () => {
+    const graph = new SceneGraph()
+    const frame = graph.createNode('FRAME', pageId(graph), {
+      x: 100,
+      y: 100,
+      width: 200,
+      height: 40,
+      rotation: 90
+    })
+    expect(graph.hitTestFrame(200, 40, new Set(), pageId(graph))?.id).toBe(frame.id)
+    expect(graph.hitTestFrame(120, 120, new Set(), pageId(graph))).toBeNull()
+  })
+})

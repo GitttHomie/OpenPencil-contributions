@@ -1,61 +1,153 @@
-import type { Vector } from '@open-pencil/scene-graph/primitives'
+import { isEqual } from 'es-toolkit'
 
-import { collectNodePositions, pushPositionUndo } from './history/position'
+import type { SceneNode } from '@open-pencil/scene-graph'
+import { getWorldMatrix } from '@open-pencil/scene-graph/coordinate'
+import Matrix from '@open-pencil/scene-graph/matrix'
+
+import { getNodeEditCapability } from './capabilities'
+import { applyMoveStates, captureMoveState, type MoveState } from './history/move'
 import type { EditorContext } from './types'
 
 const NUDGE_COMMIT_DELAY = 300
 
+function nudgePosition(
+  ctx: EditorContext,
+  node: SceneNode,
+  parent: SceneNode | undefined,
+  dx: number,
+  dy: number
+) {
+  const inverse = parent ? Matrix.invert(getWorldMatrix(parent, ctx.graph)) : null
+  const origin = inverse ? Matrix.mapPoint(inverse, { x: 0, y: 0 }) : { x: 0, y: 0 }
+  const target = inverse ? Matrix.mapPoint(inverse, { x: dx, y: dy }) : { x: dx, y: dy }
+  ctx.graph.updateNode(node.id, {
+    x: node.x + target.x - origin.x,
+    y: node.y + target.y - origin.y
+  })
+}
+
+function layoutDirection(ctx: EditorContext, node: SceneNode): 'LTR' | 'RTL' {
+  let current: SceneNode | undefined = node
+  while (current) {
+    if (current.layoutDirection !== 'AUTO') return current.layoutDirection
+    current = current.parentId ? ctx.graph.getNode(current.parentId) : undefined
+  }
+  return 'LTR'
+}
+
+function movableSelection(ctx: EditorContext): Set<string> {
+  return new Set(
+    [...ctx.state.selectedIds].filter((id) => {
+      let node = ctx.graph.getNode(id)
+      if (!node || !getNodeEditCapability(ctx.graph, id).editable) return false
+      while (node) {
+        if (node.locked) return false
+        if (node.id !== id && ctx.state.selectedIds.has(node.id)) return false
+        node = node.parentId ? ctx.graph.getNode(node.parentId) : undefined
+      }
+      return true
+    })
+  )
+}
+
+function reorderedChildren(
+  ctx: EditorContext,
+  parent: SceneNode,
+  selected: ReadonlySet<string>,
+  dx: number,
+  dy: number
+): string[] {
+  const children = ctx.graph.getChildren(parent.id)
+  const flow = children.filter((node) => node.visible && node.layoutPositioning !== 'ABSOLUTE')
+  const rtl = layoutDirection(ctx, parent) === 'RTL'
+  const main = parent.layoutMode === 'HORIZONTAL' ? dx : dy
+  let delta = Math.sign(main) * (parent.layoutMode === 'HORIZONTAL' && rtl ? -1 : 1)
+  if (parent.layoutMode === 'GRID') {
+    delta = dy
+      ? Math.sign(dy) * Math.max(1, parent.gridTemplateColumns.length)
+      : Math.sign(dx) * (rtl ? -1 : 1)
+  }
+  if (!delta) return parent.childIds
+
+  const order = flow.map((node) => node.id)
+  for (let step = 0; step < Math.abs(delta); step++) {
+    const direction = Math.sign(delta)
+    for (
+      let i = direction > 0 ? order.length - 2 : 1;
+      direction > 0 ? i >= 0 : i < order.length;
+      i -= direction
+    ) {
+      const next = i + direction
+      if (selected.has(order[i]) && !selected.has(order[next])) {
+        ;[order[i], order[next]] = [order[next], order[i]]
+      }
+    }
+  }
+  let index = 0
+  return children.map((node) =>
+    node.visible && node.layoutPositioning !== 'ABSOLUTE' ? order[index++] : node.id
+  )
+}
+
 export function createNudgeActions(ctx: EditorContext) {
-  let nudgeOriginals: Map<string, Vector> | null = null
-  let nudgeCommitTimer: ReturnType<typeof setTimeout> | null = null
+  let sequence = 0
+  let previousTime = 0
+  let previousSelection = ''
 
-  function commitNudge() {
-    if (!nudgeOriginals) return
-    const originals = nudgeOriginals
-    nudgeOriginals = null
-    nudgeCommitTimer = null
-
-    const finals = collectNodePositions(ctx, originals.keys())
-    pushPositionUndo(ctx, 'Nudge', originals, finals)
+  function flushNudge() {
+    sequence++
+    previousTime = 0
   }
 
   function nudgeSelected(dx: number, dy: number) {
-    const ids = [...ctx.state.selectedIds]
-    if (ids.length === 0) return
-
-    const movable: string[] = []
-    for (const id of ids) {
-      const node = ctx.graph.getNode(id)
-      if (node && !node.locked) movable.push(id)
-    }
-    if (movable.length === 0) return
-
-    if (!nudgeOriginals) {
-      nudgeOriginals = new Map()
-      for (const id of movable) {
-        const node = ctx.graph.getNode(id)
-        if (node) nudgeOriginals.set(id, { x: node.x, y: node.y })
-      }
+    if (!dx && !dy) return
+    const selected = movableSelection(ctx)
+    if (selected.size === 0) return
+    const before = new Map<string, MoveState>()
+    const layoutParents = new Set<string>()
+    const remember = (node: SceneNode) => {
+      if (!before.has(node.id)) before.set(node.id, captureMoveState(ctx.graph, node))
     }
 
-    for (const id of movable) {
+    for (const id of selected) {
       const node = ctx.graph.getNode(id)
       if (!node) continue
-      ctx.graph.updateNode(id, { x: node.x + dx, y: node.y + dy })
-      ctx.runLayoutForNode(id)
+      const parent = node.parentId ? ctx.graph.getNode(node.parentId) : undefined
+      if (parent && parent.layoutMode !== 'NONE' && node.layoutPositioning !== 'ABSOLUTE') {
+        layoutParents.add(parent.id)
+        continue
+      }
+      remember(node)
+      nudgePosition(ctx, node, parent, dx, dy)
     }
-
-    if (nudgeCommitTimer) clearTimeout(nudgeCommitTimer)
-    nudgeCommitTimer = setTimeout(commitNudge, NUDGE_COMMIT_DELAY)
-
+    for (const parentId of layoutParents) {
+      const parent = ctx.graph.getNode(parentId)
+      if (!parent) continue
+      const next = reorderedChildren(ctx, parent, selected, dx, dy)
+      if (isEqual(next, parent.childIds)) continue
+      for (const node of ctx.graph.getChildren(parentId)) remember(node)
+      next.forEach((id, index) => ctx.graph.reorderChild(id, parentId, index))
+      ctx.runLayoutForNode(parentId)
+    }
+    if (before.size === 0) return
+    const after = new Map<string, MoveState>()
+    for (const id of before.keys()) {
+      const node = ctx.graph.getNode(id)
+      if (node) after.set(id, captureMoveState(ctx.graph, node))
+    }
+    const now = Date.now()
+    const selection = JSON.stringify([[...selected].sort(), [...before.keys()].sort()])
+    if (now - previousTime > NUDGE_COMMIT_DELAY || selection !== previousSelection) sequence++
+    previousTime = now
+    previousSelection = selection
+    // Record immediately so Undo works even before the key-repeat sequence settles.
+    ctx.undo.push({
+      label: layoutParents.size ? 'Reorder' : 'Nudge',
+      coalesceKey: `nudge-${sequence}`,
+      forward: () => applyMoveStates(ctx, after),
+      inverse: () => applyMoveStates(ctx, before)
+    })
     ctx.requestRender()
-  }
-
-  function flushNudge() {
-    if (nudgeCommitTimer) {
-      clearTimeout(nudgeCommitTimer)
-      commitNudge()
-    }
   }
 
   return { nudgeSelected, flushNudge }

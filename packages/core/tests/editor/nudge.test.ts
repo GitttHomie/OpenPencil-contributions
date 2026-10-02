@@ -122,3 +122,112 @@ describe('nudgeSelected', () => {
     expect(getNodeOrThrow(editor.graph, rect.id).y).toBe(200)
   })
 })
+
+describe('auto-layout keyboard reordering', () => {
+  function row(direction: 'LTR' | 'RTL' = 'LTR') {
+    const editor = createEditor()
+    const parent = editor.graph.createNode('FRAME', editor.state.currentPageId, {
+      width: 400,
+      height: 100,
+      layoutMode: 'HORIZONTAL',
+      layoutDirection: direction,
+      primaryAxisSizing: 'FIXED',
+      counterAxisSizing: 'FIXED',
+      itemSpacing: 10
+    })
+    const children = ['A', 'B', 'C', 'D'].map((name) =>
+      editor.graph.createNode('RECTANGLE', parent.id, {
+        name,
+        width: 50,
+        height: 40
+      })
+    )
+    editor.runLayoutForNode(parent.id)
+    return { editor, parent, children }
+  }
+
+  test('arrows reorder immediately and undo restores order, including rapid key repeats', () => {
+    const {
+      editor,
+      parent,
+      children: [a, b, c, d]
+    } = row()
+    editor.select([b.id])
+    editor.nudgeSelected(1, 0)
+    expect(parent.childIds).toEqual([a.id, c.id, b.id, d.id])
+    editor.nudgeSelected(1, 0)
+    expect(parent.childIds).toEqual([a.id, c.id, d.id, b.id])
+    editor.undoAction()
+    expect(parent.childIds).toEqual([a.id, b.id, c.id, d.id])
+    expect(editor.undo.canUndo).toBe(false)
+    editor.redoAction()
+    expect(parent.childIds).toEqual([a.id, c.id, d.id, b.id])
+    editor.dispose()
+  })
+
+  test('Shift moves one slot and perpendicular arrows leave row order unchanged', () => {
+    const {
+      editor,
+      parent,
+      children: [a, b, c, d]
+    } = row()
+    editor.select([b.id])
+    editor.nudgeSelected(0, 10)
+    expect(editor.undo.canUndo).toBe(false)
+    editor.nudgeSelected(10, 0)
+    expect(parent.childIds).toEqual([a.id, c.id, b.id, d.id])
+    editor.dispose()
+  })
+
+  test('multi-selection moves together and ignores absolute children', () => {
+    const {
+      editor,
+      parent,
+      children: [a, b, c, d]
+    } = row()
+    editor.graph.updateNode(c.id, { layoutPositioning: 'ABSOLUTE' })
+    editor.select([b.id, a.id])
+    editor.nudgeSelected(1, 0)
+    expect(parent.childIds).toEqual([d.id, a.id, c.id, b.id])
+    editor.undoAction()
+    expect(parent.childIds).toEqual([a.id, b.id, c.id, d.id])
+    editor.select([c.id])
+    const x = c.x
+    editor.nudgeSelected(1, 0)
+    expect(c.x).toBe(x + 1)
+    editor.dispose()
+  })
+
+  test('RTL rows use visual direction and vertical lists use up/down', () => {
+    const {
+      editor,
+      parent,
+      children: [a, b, c, d]
+    } = row('RTL')
+    editor.select([b.id])
+    editor.nudgeSelected(1, 0)
+    expect(parent.childIds).toEqual([b.id, a.id, c.id, d.id])
+    editor.graph.updateNode(parent.id, { layoutMode: 'VERTICAL' })
+    editor.nudgeSelected(0, 1)
+    expect(parent.childIds).toEqual([a.id, b.id, c.id, d.id])
+    editor.dispose()
+  })
+
+  test('locked ancestry and selected descendants do not move independently', () => {
+    const {
+      editor,
+      parent,
+      children: [a]
+    } = row()
+    editor.select([parent.id, a.id])
+    const childX = a.x
+    editor.nudgeSelected(10, 0)
+    expect(parent.x).toBe(10)
+    expect(a.x).toBe(childX)
+    editor.graph.updateNode(parent.id, { locked: true })
+    editor.select([a.id])
+    editor.nudgeSelected(1, 0)
+    expect(a.x).toBe(childX)
+    editor.dispose()
+  })
+})

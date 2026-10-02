@@ -1,4 +1,4 @@
-import type { Tool } from '@open-pencil/core/editor'
+import type { Tool, MoveState } from '@open-pencil/core/editor'
 import type {
   DerivedTextGlyph,
   GeometryPath,
@@ -33,10 +33,13 @@ export interface DragMove {
   currentY: number
   appliedDx: number
   appliedDy: number
+  previewPositions?: Map<string, Vector>
+  finishInteraction?: () => void
+  isCurrentGraph?: () => boolean
   startScreenX: number
   startScreenY: number
   dragStarted: boolean
-  originals: Map<string, { x: number; y: number; parentId: string }>
+  originals: Map<string, MoveState>
   duplicated?: boolean
   duplicatedPreviousSelection?: Set<string>
   autoLayoutParentId?: string

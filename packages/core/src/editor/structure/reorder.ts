@@ -1,4 +1,5 @@
 import { assertNodeEditable } from '#core/editor/capabilities'
+import { applyMoveStates, captureMoveState } from '#core/editor/history/move'
 import type { EditorContext } from '#core/editor/types'
 import { computeLayout } from '#core/layout'
 
@@ -10,9 +11,7 @@ export function createStructureReorderActions(ctx: EditorContext) {
     if (!node) return
 
     if (node.parentId !== parentId) {
-      const absPos = ctx.graph.getAbsolutePosition(nodeId)
-      const parentAbs = ctx.graph.getAbsolutePosition(parentId)
-      ctx.graph.updateNode(nodeId, { x: absPos.x - parentAbs.x, y: absPos.y - parentAbs.y })
+      ctx.graph.reparentNode(nodeId, parentId)
     }
 
     ctx.graph.reorderChild(nodeId, parentId, insertIndex)
@@ -27,27 +26,16 @@ export function createStructureReorderActions(ctx: EditorContext) {
     const node = ctx.graph.getNode(nodeId)
     if (!node) return
     const origParentId = node.parentId ?? ctx.state.currentPageId
-    const origX = node.x
-    const origY = node.y
-    const origIndex = ctx.graph.getNode(origParentId)?.childIds.indexOf(nodeId) ?? -1
+    const original = captureMoveState(ctx.graph, node)
 
     doReorderChild(nodeId, parentId, insertIndex)
+    if (origParentId !== parentId) ctx.runLayoutForNode(origParentId)
+    const final = captureMoveState(ctx.graph, node)
 
     ctx.undo.push({
       label: 'Reorder',
-      forward: () => {
-        doReorderChild(nodeId, parentId, insertIndex)
-      },
-      inverse: () => {
-        ctx.graph.reorderChild(nodeId, origParentId, origIndex >= 0 ? origIndex : 0)
-        ctx.graph.updateNode(nodeId, { x: origX, y: origY })
-        computeLayout(ctx.graph, origParentId)
-        ctx.runLayoutForNode(origParentId)
-        if (origParentId !== parentId) {
-          computeLayout(ctx.graph, parentId)
-          ctx.runLayoutForNode(parentId)
-        }
-      }
+      forward: () => applyMoveStates(ctx, new Map([[nodeId, final]])),
+      inverse: () => applyMoveStates(ctx, new Map([[nodeId, original]]))
     })
   }
 
@@ -57,27 +45,18 @@ export function createStructureReorderActions(ctx: EditorContext) {
     const node = ctx.graph.getNode(nodeId)
     if (!node) return
     const origParentId = node.parentId ?? ctx.state.currentPageId
-    const origIndex = ctx.graph.getNode(origParentId)?.childIds.indexOf(nodeId) ?? 0
-    const origX = node.x
-    const origY = node.y
+    const original = captureMoveState(ctx.graph, node)
 
+    ctx.graph.reparentNode(nodeId, newParentId)
     ctx.graph.reorderChild(nodeId, newParentId, insertIndex)
     ctx.runLayoutForNode(newParentId)
     if (origParentId !== newParentId) ctx.runLayoutForNode(origParentId)
+    const final = captureMoveState(ctx.graph, node)
 
     ctx.undo.push({
       label: 'Reorder',
-      forward: () => {
-        ctx.graph.reorderChild(nodeId, newParentId, insertIndex)
-        ctx.runLayoutForNode(newParentId)
-        if (origParentId !== newParentId) ctx.runLayoutForNode(origParentId)
-      },
-      inverse: () => {
-        ctx.graph.reorderChild(nodeId, origParentId, origIndex)
-        ctx.graph.updateNode(nodeId, { x: origX, y: origY })
-        ctx.runLayoutForNode(origParentId)
-        if (origParentId !== newParentId) ctx.runLayoutForNode(newParentId)
-      }
+      forward: () => applyMoveStates(ctx, new Map([[nodeId, final]])),
+      inverse: () => applyMoveStates(ctx, new Map([[nodeId, original]]))
     })
   }
 

@@ -174,7 +174,7 @@ export interface EditorContext {
   getTextEditor: () => TextEditor | null
   requestRender: () => void
   requestRepaint: () => void
-  beginInteractiveEdit: () => () => void
+  beginInteractiveEdit: (cancel?: () => void) => () => void
   onEditorEvent: <K extends EditorEventName>(event: K, handler: EditorEvents[K]) => () => void
   emitEditorEvent: <K extends EditorEventName>(
     event: K,

@@ -165,33 +165,33 @@ function hitTestFrameChildren(
   px: number,
   py: number,
   parentId: string,
-  offsetX: number,
-  offsetY: number,
-  excludeIds: Set<string>
+  excludeIds: Set<string>,
+  transformCache = new Map<string, boolean>()
 ): SceneNode | null {
   const parent = graph.nodes.get(parentId)
   if (!parent) return null
 
-  let best: SceneNode | null = null
-
-  for (const childId of parent.childIds) {
+  if (parent.clipsContent && !containsPoint(px, py, parent, graph, transformCache)) return null
+  for (const childId of parent.childIds.toReversed()) {
     if (excludeIds.has(childId)) continue
     const child = graph.nodes.get(childId)
-    if (!child || child.internalOnly || !child.visible) continue
-
-    const ax = offsetX + child.x
-    const ay = offsetY + child.y
+    if (
+      !child ||
+      child.internalOnly ||
+      !child.visible ||
+      child.locked ||
+      child.librarySource?.readOnly ||
+      child.type === 'INSTANCE'
+    )
+      continue
 
     if (!CONTAINER_TYPES.has(child.type)) continue
-    if (px < ax || px > ax + child.width || py < ay || py > ay + child.height) continue
-
-    best = child
-
-    const deeper = hitTestFrameChildren(graph, px, py, childId, ax, ay, excludeIds)
-    if (deeper) best = deeper
+    const deeper = hitTestFrameChildren(graph, px, py, childId, excludeIds, transformCache)
+    if (deeper) return deeper
+    if (containsPoint(px, py, child, graph, transformCache)) return child
   }
 
-  return best
+  return null
 }
 
 export function hitTestFrame(
@@ -201,5 +201,5 @@ export function hitTestFrame(
   excludeIds: Set<string>,
   scopeId?: string
 ): SceneNode | null {
-  return hitTestFrameChildren(graph, px, py, scopeId ?? graph.rootId, 0, 0, excludeIds)
+  return hitTestFrameChildren(graph, px, py, scopeId ?? graph.rootId, excludeIds)
 }

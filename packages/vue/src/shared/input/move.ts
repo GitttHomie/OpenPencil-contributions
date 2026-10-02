@@ -6,34 +6,32 @@ import {
   isPastPointerDragThreshold,
   POINTER_DRAG_START_THRESHOLD_PX
 } from '#vue/shared/input/drag-threshold'
-import { findMoveDropTarget, reparentOutsideNodes } from '#vue/shared/input/drop-target'
+import { findMoveDropTarget } from '#vue/shared/input/drop-target'
 export { duplicateAndDrag } from '#vue/shared/input/duplicate-drag'
-import { AUTO_LAYOUT_BREAK_THRESHOLD } from '@open-pencil/core/constants'
 import type { Editor } from '@open-pencil/core/editor'
+import { getWorldMatrix } from '@open-pencil/scene-graph/coordinate'
+import Matrix from '@open-pencil/scene-graph/matrix'
 
 import { applyMoveSnap } from '#vue/shared/input/move-snap'
+import { worldDeltaToParentLocal } from '#vue/shared/input/snap'
 import type { DragMove } from '#vue/shared/input/types'
 
 const AUTO_LAYOUT_REORDER_CLICK_SLOP = 3
-const AUTO_LAYOUT_CROSS_AXIS_DRAG_TOLERANCE = 96
+const AUTO_LAYOUT_EXIT_SLOP_PX = 8
 export const MOVE_DRAG_START_THRESHOLD_PX = POINTER_DRAG_START_THRESHOLD_PX
 
 function isInsideAutoLayoutDragBounds(parentId: string, cx: number, cy: number, editor: Editor) {
   const parent = editor.graph.getNode(parentId)
   if (!parent) return false
-  const abs = editor.graph.getAbsolutePosition(parentId)
-  const isRow = parent.layoutMode === 'HORIZONTAL'
-  const mainStart = isRow ? abs.x : abs.y
-  const mainSize = isRow ? parent.width : parent.height
-  const crossStart = isRow ? abs.y : abs.x
-  const crossSize = isRow ? parent.height : parent.width
-  const main = isRow ? cx : cy
-  const cross = isRow ? cy : cx
+  const inverse = Matrix.invert(getWorldMatrix(parent, editor.graph))
+  if (!inverse) return false
+  const point = Matrix.mapPoint(inverse, { x: cx, y: cy })
+  const slop = AUTO_LAYOUT_EXIT_SLOP_PX / editor.state.zoom
   return (
-    main >= mainStart - AUTO_LAYOUT_BREAK_THRESHOLD &&
-    main <= mainStart + mainSize + AUTO_LAYOUT_BREAK_THRESHOLD &&
-    cross >= crossStart - AUTO_LAYOUT_CROSS_AXIS_DRAG_TOLERANCE &&
-    cross <= crossStart + crossSize + AUTO_LAYOUT_CROSS_AXIS_DRAG_TOLERANCE
+    point.x >= -slop &&
+    point.x <= parent.width + slop &&
+    point.y >= -slop &&
+    point.y <= parent.height + slop
   )
 }
 
@@ -53,6 +51,21 @@ function isPastDragStartThreshold(d: DragMove, sx: number, sy: number) {
   return isPastPointerDragThreshold(d.startScreenX, d.startScreenY, sx, sy)
 }
 
+function previewMove(d: DragMove, dx: number, dy: number, editor: Editor, round = false) {
+  d.previewPositions = new Map()
+  for (const [id, orig] of d.originals) {
+    const delta = worldDeltaToParentLocal({ x: dx, y: dy }, orig.parentId, editor)
+    const x = round ? Math.round(orig.x + delta.x) : orig.x + delta.x
+    const y = round ? Math.round(orig.y + delta.y) : orig.y + delta.y
+    if (d.previewPositions.size === 0) {
+      d.appliedDx = x - orig.x
+      d.appliedDy = y - orig.y
+    }
+    d.previewPositions.set(id, { x, y })
+    editor.graph.updateNodePositionPreview(id, x, y)
+  }
+}
+
 export function handleMoveMove(
   d: DragMove,
   cx: number,
@@ -62,6 +75,7 @@ export function handleMoveMove(
   editor: Editor,
   disableSnapping = false
 ) {
+  if (d.originals.size === 0) return
   d.currentX = cx
   d.currentY = cy
 
@@ -70,8 +84,8 @@ export function handleMoveMove(
     d.dragStarted = true
   }
 
-  let dx = cx - d.startX
-  let dy = cy - d.startY
+  const dx = cx - d.startX
+  const dy = cy - d.startY
 
   if (d.autoLayoutParentId && !d.brokeFromAutoLayout) {
     if (isInsideAutoLayoutDragBounds(d.autoLayoutParentId, cx, cy, editor)) {
@@ -82,23 +96,20 @@ export function handleMoveMove(
     editor.setLayoutInsertIndicator(null)
   }
 
-  const dropTarget = findMoveDropTarget(cx, cy, editor)
+  const movingIds = new Set(d.originals.keys())
+  const dropTarget = findMoveDropTarget(cx, cy, editor, movingIds)
   const dropParent = dropTarget ? editor.graph.getNode(dropTarget.id) : null
 
-  if (dropParent && dropParent.layoutMode !== 'NONE') {
-    computeAutoLayoutIndicatorForFrame(dropParent, cx, cy, editor)
+  const keepingAbsolutePosition =
+    dropParent &&
+    [...movingIds].every((id) => {
+      const node = editor.graph.getNode(id)
+      return node?.parentId === dropParent.id && node.layoutPositioning === 'ABSOLUTE'
+    })
+  if (dropParent && dropParent.layoutMode !== 'NONE' && !keepingAbsolutePosition) {
+    computeAutoLayoutIndicatorForFrame(dropParent, cx, cy, editor, movingIds)
     editor.setDropTarget(dropParent.id)
-    let firstApplied: { dx: number; dy: number } | null = null
-    for (const [id, orig] of d.originals) {
-      const previewX = Math.round(orig.x + dx)
-      const previewY = Math.round(orig.y + dy)
-      firstApplied ??= { dx: previewX - orig.x, dy: previewY - orig.y }
-      editor.graph.updateNodePositionPreview(id, previewX, previewY)
-    }
-    if (firstApplied) {
-      d.appliedDx = firstApplied.dx
-      d.appliedDy = firstApplied.dy
-    }
+    previewMove(d, dx, dy, editor, !disableSnapping && editor.state.snappingPreferences.pixelGrid)
     editor.requestRepaint()
     return
   }
@@ -106,14 +117,7 @@ export function handleMoveMove(
   editor.setLayoutInsertIndicator(null)
 
   const snapped = applyMoveSnap(d, dx, dy, editor, disableSnapping)
-  dx = snapped.dx
-  dy = snapped.dy
-  d.appliedDx = dx
-  d.appliedDy = dy
-
-  for (const [id, orig] of d.originals) {
-    editor.graph.updateNodePositionPreview(id, orig.x + dx, orig.y + dy)
-  }
+  previewMove(d, snapped.worldDx, snapped.worldDy, editor)
 
   editor.setDropTarget(dropTarget?.id ?? null)
   editor.requestRepaint()
@@ -138,11 +142,71 @@ function restoreOriginalPositions(d: DragMove, editor: Editor) {
 
 function applyFinalPositions(d: DragMove, editor: Editor) {
   for (const [id, orig] of d.originals) {
-    editor.updateNode(id, { x: orig.x + d.appliedDx, y: orig.y + d.appliedDy })
+    // Reparent before running layout; otherwise the old layout snaps the node back.
+    editor.graph.updateNode(
+      id,
+      d.previewPositions?.get(id) ?? { x: orig.x + d.appliedDx, y: orig.y + d.appliedDy }
+    )
   }
 }
 
+export function cancelMove(d: DragMove, editor: Editor) {
+  d.finishInteraction?.()
+  if (d.isCurrentGraph && !d.isCurrentGraph()) return
+  restoreOriginalPositions(d, editor)
+  if (d.duplicated) {
+    for (const id of [...d.originals.keys()].toReversed()) editor.graph.deleteNode(id)
+    editor.select([...(d.duplicatedPreviousSelection ?? [])])
+  }
+  editor.setLayoutInsertIndicator(null)
+  editor.setDropTarget(null)
+  editor.setSnapGuides([])
+  editor.requestRender()
+}
+
+function finishMove(
+  d: DragMove,
+  editor: Editor,
+  indicator: Editor['state']['layoutInsertIndicator']
+) {
+  restoreOriginalPositions(d, editor)
+  applyFinalPositions(d, editor)
+  const dropId = indicator?.parentId ?? editor.state.dropTargetId ?? editor.state.currentPageId
+  const ids = [...d.originals.keys()].sort((a, b) => {
+    const first = d.originals.get(a)
+    const second = d.originals.get(b)
+    return first?.parentId === second?.parentId ? (first?.index ?? 0) - (second?.index ?? 0) : 0
+  })
+  const parents = new Set([...d.originals.values()].map((original) => original.parentId))
+  parents.add(dropId)
+  for (const id of ids) {
+    const node = editor.graph.getNode(id)
+    if (!node) continue
+    if (node.parentId !== dropId) {
+      editor.graph.updateNode(id, {
+        primaryAxisSizing: node.primaryAxisSizing === 'FILL' ? 'FIXED' : node.primaryAxisSizing,
+        counterAxisSizing: node.counterAxisSizing === 'FILL' ? 'FIXED' : node.counterAxisSizing
+      })
+    }
+    editor.graph.reparentNode(id, dropId)
+    if (indicator) editor.graph.updateNode(id, { layoutPositioning: 'AUTO' })
+  }
+  if (indicator) {
+    // The indicator index is relative to the list with all dragged nodes removed.
+    const parent = editor.graph.getNode(dropId)
+    const remaining = parent?.childIds.filter((id) => !d.originals.has(id)) ?? []
+    const order = [
+      ...remaining.slice(0, indicator.index),
+      ...ids,
+      ...remaining.slice(indicator.index)
+    ]
+    order.forEach((id, index) => editor.graph.reorderChild(id, dropId, index))
+  }
+  for (const parentId of parents) editor.runLayoutForNode(parentId)
+}
+
 export function handleMoveUp(d: DragMove, editor: Editor) {
+  d.finishInteraction?.()
   if (!d.dragStarted) {
     editor.setLayoutInsertIndicator(null)
     editor.setSnapGuides([])
@@ -154,38 +218,18 @@ export function handleMoveUp(d: DragMove, editor: Editor) {
   editor.setLayoutInsertIndicator(null)
   editor.setSnapGuides([])
 
-  if (indicator) {
-    if (getMoveDistance(d) < AUTO_LAYOUT_REORDER_CLICK_SLOP) {
-      editor.setDropTarget(null)
-      return
-    }
-    for (const id of d.originals.keys()) {
-      editor.reorderInAutoLayout(id, indicator.parentId, indicator.index)
-    }
-    editor.setDropTarget(null)
+  if (indicator && getMoveDistance(d) < AUTO_LAYOUT_REORDER_CLICK_SLOP) {
+    cancelMove(d, editor)
     return
   }
 
-  const moved = hasMoved(d, editor)
-
-  if (moved) {
-    restoreOriginalPositions(d, editor)
-    applyFinalPositions(d, editor)
-    const dropId = editor.state.dropTargetId
-    if (dropId) {
-      editor.reparentNodes([...editor.state.selectedIds], dropId)
-    } else {
-      reparentOutsideNodes(editor)
-    }
-  }
+  const moved = Boolean(indicator) || hasMoved(d, editor)
+  if (moved) finishMove(d, editor, indicator)
 
   if (d.duplicated) {
     const previousSelection = d.duplicatedPreviousSelection ?? new Set<string>()
     if (!moved) {
-      for (const id of [...d.originals.keys()].toReversed()) editor.graph.deleteNode(id)
-      editor.select([...previousSelection])
-      editor.requestRender()
-      editor.setDropTarget(null)
+      cancelMove(d, editor)
       return
     }
     editor.commitDuplicateMove([...d.originals.keys()], previousSelection)

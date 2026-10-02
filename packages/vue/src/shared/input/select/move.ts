@@ -1,4 +1,4 @@
-import type { Editor } from '@open-pencil/core/editor'
+import { captureMoveState, getNodeEditCapability, type Editor } from '@open-pencil/core/editor'
 
 import type { DragOriginal as MoveOriginal } from '#vue/shared/input/drag-original'
 import { duplicateAndDrag } from '#vue/shared/input/duplicate-drag'
@@ -30,26 +30,39 @@ function autoLayoutMoveTarget(id: string, editor: Editor): string {
 
 function collectMoveOriginals(editor: Editor) {
   const originals = new Map<string, MoveOriginal>()
-  for (const selectedId of editor.state.selectedIds) {
-    const id = autoLayoutMoveTarget(selectedId, editor)
+  const movingIds = new Set(
+    [...editor.state.selectedIds].map((id) => autoLayoutMoveTarget(id, editor))
+  )
+  for (const id of movingIds) {
     const node = editor.graph.getNode(id)
-    if (node) {
-      originals.set(id, {
-        x: node.x,
-        y: node.y,
-        parentId: node.parentId ?? editor.state.currentPageId
-      })
+    if (!node || !getNodeEditCapability(editor.graph, id).editable) continue
+    let ancestor = node
+    let skip = node.locked
+    while (ancestor.parentId) {
+      const parent = editor.graph.getNode(ancestor.parentId)
+      if (!parent) break
+      if (parent.locked || movingIds.has(parent.id)) skip = true
+      ancestor = parent
     }
+    if (!skip) originals.set(id, captureMoveState(editor.graph, node))
   }
   return originals
 }
 
 function detectDragAutoLayoutParent(originals: Map<string, MoveOriginal>, editor: Editor) {
-  if (originals.size !== 1) return undefined
+  if (originals.size === 0) return undefined
   const [id, original] = [...originals][0]
   const node = editor.graph.getNode(id)
   const parent = editor.graph.getNode(original.parentId)
-  if (parent && parent.layoutMode !== 'NONE' && node?.layoutPositioning !== 'ABSOLUTE') {
+  if (
+    parent &&
+    parent.layoutMode !== 'NONE' &&
+    node?.layoutPositioning !== 'ABSOLUTE' &&
+    [...originals].every(
+      ([id, state]) =>
+        state.parentId === parent.id && editor.graph.getNode(id)?.layoutPositioning !== 'ABSOLUTE'
+    )
+  ) {
     return parent.id
   }
   return undefined

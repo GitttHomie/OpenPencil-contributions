@@ -53,13 +53,13 @@ export function applyMoveSnap(
   dy: number,
   editor: Editor,
   disableSnapping = false
-): { dx: number; dy: number } {
+): { dx: number; dy: number; worldDx: number; worldDy: number } {
   const parentId = moveParentId(drag, editor)
   const localDelta = worldDeltaToParentLocal({ x: dx, y: dy }, parentId, editor)
   const selectionBounds = computeSelectionBounds(movingSelection(drag, dx, dy, editor))
   if (!selectionBounds || disableSnapping) {
     editor.setSnapGuides([])
-    return { dx: localDelta.x, dy: localDelta.y }
+    return { dx: localDelta.x, dy: localDelta.y, worldDx: dx, worldDy: dy }
   }
 
   const snap = resolveObjectPixelSnap(
@@ -73,6 +73,8 @@ export function applyMoveSnap(
   const localCorrection = worldDeltaToParentLocal(snap.correction, parentId, editor)
   return {
     dx: localDelta.x + localCorrection.x,
-    dy: localDelta.y + localCorrection.y
+    dy: localDelta.y + localCorrection.y,
+    worldDx: dx + snap.correction.x,
+    worldDy: dy + snap.correction.y
   }
 }

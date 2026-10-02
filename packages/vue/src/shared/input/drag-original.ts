@@ -1,1 +1,1 @@
-export type DragOriginal = { x: number; y: number; parentId: string }
+export type { MoveState as DragOriginal } from '@open-pencil/core/editor'

@@ -8,6 +8,7 @@ import type { UndoEntry } from '@open-pencil/scene-graph/undo'
 
 import { assertNodeEditable } from './capabilities'
 import { restoreSubtree, snapshotSubtree } from './clipboard/subtree-history'
+import { applyMoveStates, captureMoveState, type MoveState } from './history/move'
 import { collectNodePositions, pushPositionUndo } from './history/position'
 import {
   restorePageFromSnapshot as restorePageSnapshot,
@@ -37,31 +38,17 @@ export function createUndoActions(ctx: EditorContext) {
     pushPositionUndo(ctx, 'Move', originals, collectNodePositions(ctx, originals.keys()))
   }
 
-  function commitMoveWithReparent(
-    originals: Map<string, { x: number; y: number; parentId: string }>
-  ) {
+  function commitMoveWithReparent(originals: Map<string, MoveState>) {
     for (const id of originals.keys()) assertNodeEditable(ctx.graph, id)
-    const finals = new Map<string, { x: number; y: number; parentId: string }>()
+    const finals = new Map<string, MoveState>()
     for (const [id] of originals) {
       const n = ctx.graph.getNode(id)
-      if (n) finals.set(id, { x: n.x, y: n.y, parentId: n.parentId ?? ctx.state.currentPageId })
+      if (n) finals.set(id, captureMoveState(ctx.graph, n))
     }
     ctx.undo.push({
       label: 'Move',
-      forward: () => {
-        for (const [id, pos] of finals) {
-          ctx.graph.reparentNode(id, pos.parentId)
-          ctx.graph.updateNode(id, { x: pos.x, y: pos.y })
-          ctx.runLayoutForNode(id)
-        }
-      },
-      inverse: () => {
-        for (const [id, pos] of originals) {
-          ctx.graph.reparentNode(id, pos.parentId)
-          ctx.graph.updateNode(id, { x: pos.x, y: pos.y })
-          ctx.runLayoutForNode(id)
-        }
-      }
+      forward: () => applyMoveStates(ctx, finals),
+      inverse: () => applyMoveStates(ctx, originals)
     })
   }
 

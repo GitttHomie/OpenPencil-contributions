@@ -1,8 +1,20 @@
 import { DEFAULT_TEXT_HEIGHT, DEFAULT_TEXT_WIDTH } from '@open-pencil/core/constants'
 import type { Editor } from '@open-pencil/core/editor'
+import type { SceneNode } from '@open-pencil/scene-graph'
 
+import { computeAutoLayoutIndicatorForFrame } from '#vue/shared/input/auto-layout'
 import { TOOL_TO_NODE } from '#vue/shared/input/types'
 import type { DragDraw, DragState } from '#vue/shared/input/types'
+
+function attachDraw(editor: Editor, nodeId: string, parent: SceneNode, x: number, y: number) {
+  if (parent.layoutMode !== 'NONE') {
+    computeAutoLayoutIndicatorForFrame(parent, x, y, editor, new Set([nodeId]))
+    const index = editor.state.layoutInsertIndicator?.index ?? parent.childIds.length
+    editor.reorderInAutoLayout(nodeId, parent.id, index)
+  } else {
+    editor.reorderChildWithUndo(nodeId, parent.id, parent.childIds.length)
+  }
+}
 
 export function startTextDraw(
   cx: number,
@@ -52,13 +64,23 @@ export function handleDrawMove(d: DragDraw, cx: number, cy: number, shiftKey: bo
 
 function createDraw(editor: Editor, nodeId: string, startX: number, startY: number): DragDraw {
   const graph = editor.graph
+  // Keep the draft in page coordinates until release, so layout cannot fight drawing.
+  let parent = graph.hitTestFrame(startX, startY, new Set([nodeId]), editor.state.currentPageId)
+  if (graph.getNode(nodeId)?.type === 'SECTION') {
+    while (parent && parent.type !== 'SECTION' && parent.type !== 'CANVAS') {
+      parent = parent.parentId ? (graph.getNode(parent.parentId) ?? null) : null
+    }
+  }
   const preview = editor.beginNodePreview('Draw dimensions')
   let finished = false
+  editor.setDropTarget(parent?.id ?? null)
 
   function cancel() {
     if (finished) return
     finished = true
     preview.cancel()
+    editor.setDropTarget(null)
+    editor.setLayoutInsertIndicator(null)
     // Never replay an old document's creation undo against a replacement graph.
     if (editor.graph === graph) editor.undo.rollbackBatch()
   }
@@ -83,6 +105,7 @@ function createDraw(editor: Editor, nodeId: string, startX: number, startY: numb
         preview.update(nodeId, { width: 100, height: 100 })
       }
       preview.commit()
+      if (node && parent) attachDraw(editor, nodeId, parent, startX, startY)
       if (node?.type === 'SECTION') editor.adoptNodesIntoSection(node.id)
       editor.undo.commitBatch()
     } catch (error) {
@@ -90,6 +113,8 @@ function createDraw(editor: Editor, nodeId: string, startX: number, startY: numb
       editor.undo.rollbackBatch()
       throw error
     }
+    editor.setDropTarget(null)
+    editor.setLayoutInsertIndicator(null)
     editor.setTool('SELECT')
     if (node?.type === 'TEXT') editor.startTextEditing(node.id)
   }

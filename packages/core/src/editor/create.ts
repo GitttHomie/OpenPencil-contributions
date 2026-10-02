@@ -64,7 +64,7 @@ export function createEditor(options?: EditorOptions) {
   let _ck: CanvasKit | null = null
   let _renderer: SkiaRenderer | null = null
   const _renderers = new Set<SkiaRenderer>()
-  const interactiveEdits = new Set<symbol>()
+  const interactiveEdits = new Map<symbol, (() => void) | undefined>()
   let _textEditor: TextEditor | null = null
   const events: Emitter<EditorEvents> = createNanoEvents()
   const stopFontResolutionEvents = fontResolver.subscribe((event, snapshot) => {
@@ -114,13 +114,20 @@ export function createEditor(options?: EditorOptions) {
   }
 
   /** Track an actual live edit independently of history batching. Release is idempotent. */
-  function beginInteractiveEdit() {
+  function beginInteractiveEdit(cancel?: () => void) {
     const token = Symbol('interactive-edit')
-    interactiveEdits.add(token)
+    interactiveEdits.set(token, cancel)
     requestRepaint()
     return () => {
       if (interactiveEdits.delete(token)) requestRepaint()
     }
+  }
+
+  function cancelInteractiveEdit(): boolean {
+    const cancel = [...interactiveEdits.values()].findLast((callback) => callback !== undefined)
+    if (!cancel) return false
+    cancel()
+    return true
   }
 
   function setNavigationPhase(phase: EditorState['navigation']['phase'], inputAt = 0) {
@@ -312,6 +319,7 @@ export function createEditor(options?: EditorOptions) {
     // Lifecycle
     beginInteractiveEdit,
     isInteractiveEditing: () => interactiveEdits.size > 0,
+    cancelInteractiveEdit,
     requestRender,
     requestRepaint,
     onEditorEvent,

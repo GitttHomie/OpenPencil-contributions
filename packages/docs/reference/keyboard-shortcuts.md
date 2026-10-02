@@ -127,4 +127,8 @@ Full Figma-compatible shortcut map. ✅ = implemented.
 | <kbd>Ctrl</kbd>+Scroll / Pinch | Zoom | ✅ |
 | Double-click text | Edit text inline | ✅ |
 | Drag onto frame | Reparent into frame | ✅ |
+| Drag outside container | Move to the container under the pointer, or the page | ✅ |
+| Draw inside frame | Create a child in that frame | ✅ |
+| Arrow keys | Nudge 1 px; reorder auto-layout children along the layout direction | ✅ |
+| <kbd>Shift</kbd>+Arrow keys | Nudge 10 px; reorder auto-layout children one slot | ✅ |
 | <kbd>Escape</kbd> | Deselect / Cancel | ✅ |

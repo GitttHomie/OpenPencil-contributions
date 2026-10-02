@@ -57,6 +57,7 @@ export function createKeyboardActions({
   }
 
   function escapeOrDeselect() {
+    if (store.cancelInteractiveEdit()) return
     if (store.state.rotationPreview) {
       store.setRotationPreview(null)
       return

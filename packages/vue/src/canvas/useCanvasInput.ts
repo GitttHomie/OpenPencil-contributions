@@ -19,7 +19,7 @@ import {
 import { resolveAutoLayoutHover } from '#vue/shared/input/auto-layout-hover'
 import { createClickCounter } from '#vue/shared/input/click-count'
 import { handleDrawMove } from '#vue/shared/input/draw'
-import { handleMoveMove, handleMoveUp } from '#vue/shared/input/move'
+import { cancelMove, handleMoveMove, handleMoveUp } from '#vue/shared/input/move'
 import { setupPanZoom } from '#vue/shared/input/pan-zoom'
 import { applyResize, commitResizePreview } from '#vue/shared/input/resize'
 import { updateHoverCursor } from '#vue/shared/input/select'
@@ -120,6 +120,11 @@ export function useCanvasInput(
   function setDrag(d: DragState) {
     editor.setMeasurementMode('off')
     drag.value = d
+    if (d.type === 'move') {
+      const graph = editor.graph
+      d.isCurrentGraph = () => editor.graph === graph
+      d.finishInteraction = editor.beginInteractiveEdit(cancelPointerInteraction)
+    }
   }
 
   const guideInput = createGuideInput({
@@ -358,8 +363,10 @@ export function useCanvasInput(
 
     if (d.type === 'guide') {
       guideInput.finish(d)
-    } else if (d.type === 'move') handleMoveUp(d, editor)
-    else if (d.type === 'text-select') {
+    } else if (d.type === 'move') {
+      drag.value = null
+      handleMoveUp(d, editor)
+    } else if (d.type === 'text-select') {
       drag.value = null
       return
     } else if (d.type === 'resize') commitResizePreview(d, editor)
@@ -397,6 +404,11 @@ export function useCanvasInput(
   }
 
   function cancelPointerInteraction() {
+    if (drag.value?.type === 'move') {
+      const moving = drag.value
+      drag.value = null
+      cancelMove(moving, editor)
+    }
     if (drag.value?.type === 'rotate') {
       const rotation = drag.value
       drag.value = null
@@ -459,7 +471,12 @@ export function useCanvasInput(
     'keydown',
     (event) => {
       if (event.code !== 'Escape' || event.isComposing || !isEnabled()) return
-      if (drag.value?.type !== 'draw' && drag.value?.type !== 'rotate') return
+      if (
+        drag.value?.type !== 'draw' &&
+        drag.value?.type !== 'rotate' &&
+        drag.value?.type !== 'move'
+      )
+        return
       event.preventDefault()
       event.stopImmediatePropagation()
       cancelPointerInteraction()
@@ -501,7 +518,12 @@ export function useCanvasInput(
     ['selection:changed', 'page:changed', 'graph:replaced'] as const
   ).map((event) =>
     editor.onEditorEvent(event, () => {
-      if (drag.value?.type === 'draw' || drag.value?.type === 'rotate') cancelPointerInteraction()
+      if (
+        drag.value?.type === 'draw' ||
+        drag.value?.type === 'rotate' ||
+        drag.value?.type === 'move'
+      )
+        cancelPointerInteraction()
     })
   )
   onScopeDispose(() => {

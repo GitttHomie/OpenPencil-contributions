@@ -63,6 +63,10 @@ Each child in an auto-layout frame can have its own sizing mode:
 
 Within an auto-layout frame, drag a child to reorder it among its siblings. A visual insertion indicator shows where the child will be dropped.
 
+Drag multiple selected children to move them as an ordered block. Move the pointer outside the frame to pull them out, or onto another frame to transfer them. The old and new layouts update on release, and Undo restores the original order and parent.
+
+Arrow keys reorder children in the layout direction: left/right for horizontal layouts and up/down for vertical layouts. Right-to-left rows follow their visual direction. Shift still moves one slot; it moves 10 pixels only for freely positioned objects. In a grid, left/right moves one position and up/down moves by the configured column count. Absolute-positioned children move freely instead of reordering.
+
 ## Properties Panel
 
 When an auto-layout frame is selected, the Layout section in the properties panel shows all auto-layout controls: direction, gap, padding, justify, and align.
