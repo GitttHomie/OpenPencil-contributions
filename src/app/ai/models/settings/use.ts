@@ -3,10 +3,12 @@ import { computed, ref, watch } from 'vue'
 
 import { ACP_AGENTS, AI_PROVIDERS } from '@open-pencil/core/constants'
 
+import { useLocalAgents } from '@/app/ai/agents/use'
 import { aiModelSettings, modelConnection, modelConnectionCredentialStatus } from '@/app/ai/models'
 import type { CredentialStatus } from '@/app/settings/credentials/types'
 
 export function useModelSettings() {
+  const { availableAgents } = useLocalAgents()
   let version = 0
   let disposed = false
 
@@ -36,7 +38,12 @@ export function useModelSettings() {
         ...profile,
         providerID: connection?.providerID ?? '',
         providerName: providerName(connection?.providerID ?? ''),
-        modelName
+        modelName,
+        available: connection?.providerID.startsWith('acp:')
+          ? availableAgents.value.some(
+              (agent) => `acp:${agent.definition.id}` === connection.providerID
+            )
+          : statusByConnection.value[profile.connectionId] === 'configured'
       }
     })
   )

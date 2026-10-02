@@ -14,6 +14,7 @@
 
 ### Added
 
+- Detect installed Claude Code, Codex, Kiro CLI, and Gemini CLI in desktop AI settings and chat, with one-click setup for missing chat adapters and the canvas MCP companion. Show canvas setup failures with a Settings action instead of a generic model error.
 - Jump between pages from the command palette: it lists the pages you visited recently in the tab, **Go to page…** lists every page, and typing a page name finds it.
 - Preview designs progressively on the canvas as direct AI providers stream JSX, without saving partial designs or adding intermediate undo steps. A preview stays with its page: it hides while you view another page and returns when you come back.
 - Write design trees as TSX with `@open-pencil/design-jsx` as the JSX import source, and render them with `renderTree`.
@@ -34,6 +35,8 @@
 
 ### Fixed
 
+- Show successful Codex MCP calls as Done when their response contains `error: null`, and keep real tool errors visible in the transcript.
+- Finish local-agent chat responses when their ACP turn completes, so the composer leaves its generating state.
 - Resize Hug auto-layout frames as their text changes while typing, including line breaks, and restore the layout when undoing or redoing an edit.
 - Place the text cursor on an empty trailing line so clicking, arrow keys, Home/End, and Backspace work there.
 - Render the canvas with the Vue SDK's `CanvasRoot` and `CanvasSurface`; CanvasKit never started there and the canvas stayed blank.

@@ -3,6 +3,23 @@ import { params } from '@nanostores/i18n'
 import { i18n } from '#vue/i18n/create'
 
 export const aiMessageDefaults = {
+  localAgentsTitle: 'Local agents',
+  localAgentsDescription:
+    'Use installed CLIs with their existing login and plan. No separate API key is needed. Detection does not sign in or send prompts.',
+  localAgentsDesktopOnly: 'Open the desktop app to discover installed CLI agents.',
+  localAgentAvailable: 'Installed',
+  localAgentNeedsAdapter: 'CLI detected · chat adapter required',
+  localAgentNotInstalled: 'Not installed',
+  localAgentInstall: 'Install adapter',
+  localAgentInstallHint:
+    'Installs the chat adapter globally with npm. Your CLI login is unchanged.',
+  localAgentSetupGuide: 'Setup guide',
+  localAgentUse: 'Use for chat',
+  localAgentSelected: 'Selected for chat',
+  localAgentsLookupFailed: 'Could not scan for local agents. Try Refresh.',
+  localAgentsInstallFailed:
+    'Could not install the adapter. Check npm permissions and network access, then try again.',
+  localAgentsNpmRequired: 'Install Node.js and npm, then refresh to set up this adapter.',
   jumpToLatest: 'Jump to latest',
   chatSettings: 'Chat',
   maxAgentSteps: 'Maximum steps per message',
@@ -158,6 +175,16 @@ export const aiMessageDefaults = {
   chatNetworkFailed: 'OpenPencil could not reach the provider. Check your connection and endpoint.',
   chatRateLimited: 'The provider rate limit was reached. Wait a moment and try again.',
   chatRequestFailed: 'The model request failed. Check the provider settings and try again.',
+  chatCanvasUnavailable:
+    'The local agent cannot connect to the canvas. Open Settings → AI & agents to set up the canvas connection, or check its status in MCP settings.',
+  localAgentsCanvasRequired: 'Set up the canvas connection',
+  localAgentsCanvasHint:
+    'Local agents need the OpenPencil MCP companion to work with your design. Setup installs the matching package globally with npm and starts it.',
+  localAgentsCanvasInstall: 'Set up canvas connection',
+  localAgentsCanvasInstallFailed:
+    'Could not install the canvas companion. Check npm permissions and your network connection, then retry.',
+  localAgentsCanvasStartFailed:
+    'The canvas companion is installed but could not start. Retry or check MCP settings for details.',
   openProviderSettingsAction: 'Open settings',
   visionModelUnavailable: 'Choose a Vision model in Settings before attaching images.',
   completions: 'Completions',

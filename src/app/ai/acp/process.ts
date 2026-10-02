@@ -1,3 +1,4 @@
+import { lookupAgents } from '@/app/ai/agents/native'
 import { decodeTauriStderr } from '@/app/shell/ui'
 import { resolvePlatformCommand } from '@/app/tauri/command'
 
@@ -22,10 +23,11 @@ export async function spawnACPProcess({
   onUnexpectedClose
 }: ACPProcessOptions) {
   const { Command } = await import('@tauri-apps/plugin-shell')
+  const lookup = await lookupAgents()
   const resolved = resolvePlatformCommand(commandName, args)
   const command = Command.create(resolved.command, resolved.args, {
     encoding: 'raw',
-    env: {}
+    env: { PATH: lookup.searchPath }
   })
 
   const stdoutChunks: Uint8Array[] = []

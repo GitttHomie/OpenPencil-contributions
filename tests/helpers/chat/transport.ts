@@ -1,7 +1,9 @@
 import type { Page } from '@playwright/test'
 
 export async function injectMockChatTransport(page: Page): Promise<void> {
-  await page.evaluate(() => {
+  await page.evaluate(async () => {
+    const failurePath = '/src/app/automation/mcp/failure.ts'
+    const { MCPStartupError } = await import(failurePath)
     const setChatTransport = window.openPencil?.setChatTransport
     if (!setChatTransport) throw new Error('Transport override not available')
     let messageCounter = 0
@@ -34,10 +36,14 @@ export async function injectMockChatTransport(page: Page): Promise<void> {
         if (normalized.includes('missing agent')) {
           throw new Error('Mock agent unavailable')
         }
+        if (normalized.includes('missing canvas')) {
+          throw new MCPStartupError('MCP automation is not installed.', { code: 'not-installed' })
+        }
 
         return new ReadableStream({
           start(controller) {
             controller.enqueue({ type: 'start', messageId })
+            if (normalized.includes('codex tool results')) enqueueCodexTools(controller)
             if (tool) enqueueToolCall(controller, messageId)
             if (reasoning) enqueueReasoning(controller)
             if (multipleParts) {
@@ -57,6 +63,27 @@ export async function injectMockChatTransport(page: Page): Promise<void> {
         return null
       }
     }))
+
+    function enqueueCodexTools(controller: ReadableStreamDefaultController): void {
+      for (const [name, result] of [
+        ['get_selection', { content: [{ type: 'text', text: '{"selection": []}' }] }],
+        ['get_node', { content: [{ type: 'text', text: 'Node not found' }], isError: true }]
+      ] as const) {
+        controller.enqueue({
+          type: 'tool-input-available',
+          toolCallId: name,
+          toolName: `mcp.open-pencil.${name}`,
+          input: {},
+          providerExecuted: true
+        })
+        controller.enqueue({
+          type: 'tool-output-available',
+          toolCallId: name,
+          output: { result, error: null },
+          providerExecuted: true
+        })
+      }
+    }
 
     function enqueueText(controller: ReadableStreamDefaultController, text: string): void {
       controller.enqueue({ type: 'text-start', id: 'text-1' })

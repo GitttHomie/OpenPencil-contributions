@@ -144,13 +144,16 @@ export const TEXT_SELECTION_COLOR = { r: 0.26, g: 0.52, b: 0.96, a: 0.3 }
 export const TEXT_CARET_COLOR = BLACK
 export const TEXT_CARET_WIDTH = 1
 
-export type ACPAgentID = 'claude-code' | 'codex' | 'gemini-cli'
+export type ACPAgentID = 'claude-code' | 'codex' | 'gemini-cli' | 'kiro-cli'
 
 export interface ACPAgentDef {
   id: ACPAgentID
   name: string
   command: string
   args: string[]
+  cliCommand?: string
+  adapterPackage?: string
+  setupURL?: string
   installCommand?: string
 }
 
@@ -160,6 +163,9 @@ export const ACP_AGENTS: ACPAgentDef[] = [
     name: 'Claude Code',
     command: 'claude-agent-acp',
     args: [],
+    cliCommand: 'claude',
+    adapterPackage: '@agentclientprotocol/claude-agent-acp',
+    setupURL: 'https://code.claude.com/docs/en/setup',
     installCommand: 'npm i -g @agentclientprotocol/claude-agent-acp'
   },
   {
@@ -167,14 +173,25 @@ export const ACP_AGENTS: ACPAgentDef[] = [
     name: 'Codex',
     command: 'codex-acp',
     args: [],
-    installCommand: 'npm i -g @zed-industries/codex-acp'
+    cliCommand: 'codex',
+    adapterPackage: '@agentclientprotocol/codex-acp',
+    setupURL: 'https://developers.openai.com/codex/cli',
+    installCommand: 'npm i -g @agentclientprotocol/codex-acp'
   },
   {
     id: 'gemini-cli',
     name: 'Gemini CLI',
     command: 'gemini',
     args: ['--acp'],
+    setupURL: 'https://geminicli.com/docs/get-started/installation/',
     installCommand: 'npm i -g @google/gemini-cli'
+  },
+  {
+    id: 'kiro-cli',
+    name: 'Kiro CLI',
+    command: 'kiro-cli',
+    args: ['acp', '--agent-engine=v3', '--auth-method=cli'],
+    setupURL: 'https://kiro.dev/docs/cli/acp/'
   }
 ]
 

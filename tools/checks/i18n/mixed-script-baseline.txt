@@ -3,6 +3,7 @@ ja:ai.apiType
 ja:ai.baseURL
 ja:ai.baseURLPlaceholder
 ja:ai.chatAuthenticationFailed
+ja:ai.chatCanvasUnavailable
 ja:ai.chatForbidden
 ja:ai.chatNetworkFailed
 ja:ai.connectProvider
@@ -17,6 +18,15 @@ ja:ai.connectionTestModelNotFound
 ja:ai.connectionTestNetworkFailed
 ja:ai.customModelID
 ja:ai.getProviderAPIKey
+ja:ai.localAgentInstallHint
+ja:ai.localAgentNeedsAdapter
+ja:ai.localAgentsCanvasHint
+ja:ai.localAgentsCanvasInstallFailed
+ja:ai.localAgentsCanvasStartFailed
+ja:ai.localAgentsDescription
+ja:ai.localAgentsDesktopOnly
+ja:ai.localAgentsInstallFailed
+ja:ai.localAgentsNpmRequired
 ja:ai.maxAgentStepsHint
 ja:ai.modelID
 ja:ai.modelIDPlaceholder
@@ -139,6 +149,7 @@ zh-cn:ai.apiType
 zh-cn:ai.baseURL
 zh-cn:ai.baseURLPlaceholder
 zh-cn:ai.chatAuthenticationFailed
+zh-cn:ai.chatCanvasUnavailable
 zh-cn:ai.chatForbidden
 zh-cn:ai.chatNetworkFailed
 zh-cn:ai.connectProvider
@@ -153,6 +164,15 @@ zh-cn:ai.connectionTestModelNotFound
 zh-cn:ai.connectionTestNetworkFailed
 zh-cn:ai.customModelID
 zh-cn:ai.getProviderAPIKey
+zh-cn:ai.localAgentInstallHint
+zh-cn:ai.localAgentNeedsAdapter
+zh-cn:ai.localAgentsCanvasHint
+zh-cn:ai.localAgentsCanvasInstallFailed
+zh-cn:ai.localAgentsCanvasStartFailed
+zh-cn:ai.localAgentsDescription
+zh-cn:ai.localAgentsDesktopOnly
+zh-cn:ai.localAgentsInstallFailed
+zh-cn:ai.localAgentsNpmRequired
 zh-cn:ai.maxAgentStepsHint
 zh-cn:ai.modelID
 zh-cn:ai.modelIDPlaceholder

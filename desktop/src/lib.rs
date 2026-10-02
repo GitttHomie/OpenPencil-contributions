@@ -1,3 +1,4 @@
+mod agents;
 mod credentials;
 mod deep_link;
 mod fig_container;
@@ -80,6 +81,7 @@ fn mcp_candidate_dirs() -> Vec<PathBuf> {
     if let Some(home) = std::env::var_os("HOME").map(PathBuf::from) {
         dirs.push(home.join(".bun/bin"));
         dirs.push(home.join(".local/bin"));
+        dirs.push(home.join(".toolbox/bin"));
         dirs.push(home.join(".npm-global/bin"));
         dirs.push(home.join(".volta/bin"));
         dirs.push(home.join("n/bin"));
@@ -294,6 +296,7 @@ pub fn run() {
     builder
         .manage(PendingOpen(Mutex::new(Vec::new())))
         .invoke_handler(tauri::generate_handler![
+            agents::agent_lookup,
             build_fig_file,
             credential_read,
             credential_access_paused,

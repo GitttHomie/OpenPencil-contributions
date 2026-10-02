@@ -18,6 +18,24 @@ You can configure multiple reusable models and separately assign models for desi
 
 The chat composer grows with multiline prompts and can pin the current canvas selection as explicit node context. Assistant messages show provider reasoning in collapsible sections and provide a per-response copy action. Image attachments remain available for visual references when a Vision model is configured. Streaming responses use a hardened Markdown renderer with Shiki-highlighted code blocks; unsafe link protocols and embedded data images are blocked.
 
+## Local CLI agents
+
+The desktop app detects **Claude Code**, **Codex**, **Kiro CLI**, and **Gemini CLI** in **Settings → AI & agents → Local agents**. Sign in through the CLI first; OpenPencil uses its existing authentication without requesting another API key.
+
+- **Installed**: choose **Use for chat**, or select the agent from the chat picker.
+- **CLI detected · chat adapter required**: choose **Install adapter**. This explicitly runs `npm install --global @agentclientprotocol/claude-agent-acp` for Claude Code or `npm install --global @agentclientprotocol/codex-acp` for Codex. Install Node.js and npm first if the action is disabled.
+- **Not installed**: follow the setup guide, then click **Refresh**.
+
+Discovery does not install software automatically. A failed adapter installation can be retried after correcting npm permissions or network connectivity. Choosing an agent creates a reusable model profile and assigns it to the Design role.
+
+All local agents also need the OpenPencil MCP companion to connect to the canvas. If it is missing, choose **Set up canvas connection** in Local agents. This installs the companion version matching the app and reconnects the editor without requiring an app restart. Both companion and adapter setup use the public npm registry, even when your default registry is private. If startup fails after installation, retry or inspect **Settings → MCP**.
+
+Kiro CLI connects through its native ACP v3 mode (`kiro-cli acp --agent-engine=v3 --auth-method=cli`); use a CLI version that supports these options. Gemini CLI connects through `gemini --acp`. Neither needs a separate chat adapter.
+
+In local-agent chat, “build an app” means create editable screens in the open canvas. OpenPencil includes this context on every turn; application source files are only requested when you explicitly ask for implementation outside the canvas. If canvas tools fail, the agent should report the failure rather than fall back to scaffolding a code project.
+
+Local CLI discovery is available only in the desktop app. Browser users can configure the direct model providers described above.
+
 ## Step limit
 
 In **Settings → AI & agents → Chat**, set **Maximum steps per message** to a whole number from 1 to 1,000. The default is 50. Press Enter or leave the field to save a valid value; invalid drafts do not replace the saved preference. Higher limits allow longer tool-driven tasks but can increase latency and provider cost.

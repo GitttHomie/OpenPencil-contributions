@@ -80,6 +80,8 @@ async function renameConversation(id: string, title: string) {
 
 const failureMessage = computed(() => {
   switch (chatFailure.value?.reason) {
+    case 'mcp-unavailable':
+      return ai.value.chatCanvasUnavailable
     case 'authentication':
       return ai.value.chatAuthenticationFailed
     case 'forbidden':
@@ -101,7 +103,9 @@ const failureMessage = computed(() => {
   }
 })
 const failureHasSettingsAction = computed(() =>
-  ['authentication', 'forbidden', 'model-not-found'].includes(chatFailure.value?.reason ?? '')
+  ['authentication', 'forbidden', 'model-not-found', 'mcp-unavailable'].includes(
+    chatFailure.value?.reason ?? ''
+  )
 )
 const status = computed(() => chat.value?.status ?? 'ready')
 const showContinue = computed(() => {

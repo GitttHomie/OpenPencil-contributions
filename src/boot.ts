@@ -4,6 +4,7 @@ import { createApp, nextTick } from 'vue'
 import { createRetainedScopePlugin } from '@open-pencil/vue'
 
 import './app.css'
+import { agentDiscovery } from '@/app/ai/agents/discovery'
 import { preloadFonts } from '@/app/editor/fonts'
 import { observeBootErrors } from '@/app/shell/support/boot'
 import { reportBootFailure } from '@/app/shell/support/gate'
@@ -18,6 +19,7 @@ import router from './router'
  * evaluates the app bundle and can still show the gate's guidance.
  */
 export async function boot(): Promise<void> {
+  void agentDiscovery.refresh()
   preloadFonts()
   const head = createHead()
   const app = createApp(App)

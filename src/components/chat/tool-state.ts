@@ -7,27 +7,32 @@ export type ToolStateInput = {
 }
 
 export function isMCPToolName(toolName: string): boolean {
-  return toolName.startsWith('mcp__')
+  return toolName.startsWith('mcp__') || toolName.startsWith('mcp.')
 }
 
-function hasErrorOutput(output: unknown): boolean {
-  return typeof output === 'object' && output !== null && 'error' in output
-}
-
-export function classifyToolState({ toolName, state, output }: ToolStateInput): ToolDisplayState {
-  if (state === 'output-error' || (state === 'output-available' && hasErrorOutput(output))) {
-    return 'error'
-  }
-
+/** Codex ACP wraps successful MCP results in { result, error: null }. */
+export function toolResultOutput(output: unknown): unknown {
   if (
-    isMCPToolName(toolName) &&
-    state === 'output-available' &&
     typeof output === 'object' &&
     output !== null &&
-    'content' in output &&
-    Array.isArray(output.content)
-  ) {
-    return 'isError' in output && output.isError === true ? 'error' : 'done'
+    'result' in output &&
+    'error' in output &&
+    output.error == null
+  )
+    return output.result
+  return output
+}
+
+export function hasErrorOutput(output: unknown): boolean {
+  const result = toolResultOutput(output)
+  if (typeof result !== 'object' || result === null) return false
+  if ('isError' in result && result.isError === true) return true
+  return 'error' in result && result.error != null && result.error !== false && result.error !== ''
+}
+
+export function classifyToolState({ state, output }: ToolStateInput): ToolDisplayState {
+  if (state === 'output-error' || (state === 'output-available' && hasErrorOutput(output))) {
+    return 'error'
   }
 
   if (state === 'output-available') return 'done'

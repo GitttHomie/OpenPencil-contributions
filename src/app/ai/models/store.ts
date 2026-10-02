@@ -472,6 +472,15 @@ export function setModelRoleAssignment(role: AIModelRole, assignment: AIModelRol
     const profile = modelProfile(assignment)
     if (!profile || !isDesignModelProfile(profile)) return
     aiModelSettings.value.assignments.design = assignment
+    for (const inheritedRole of ['review', 'fast', 'vision'] as const) {
+      if (aiModelSettings.value.assignments[inheritedRole] !== 'design') continue
+      if (
+        isAgentModelProfile(profile) ||
+        (inheritedRole === 'vision' && !profile.capabilities.includes('vision'))
+      ) {
+        aiModelSettings.value.assignments[inheritedRole] = null
+      }
+    }
     return
   }
   if (assignment !== null && assignment !== 'design' && !modelProfile(assignment)) return

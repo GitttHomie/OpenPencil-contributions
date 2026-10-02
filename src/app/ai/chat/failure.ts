@@ -1,5 +1,7 @@
 import { APICallError } from 'ai'
 
+import { MCPStartupError } from '@/app/automation/mcp/failure'
+
 export type AIChatFailureReason =
   | 'authentication'
   | 'forbidden'
@@ -9,6 +11,7 @@ export type AIChatFailureReason =
   | 'output-limit'
   | 'rate-limit'
   | 'request-failed'
+  | 'mcp-unavailable'
 
 export type AIChatFailure = {
   reason: AIChatFailureReason
@@ -81,6 +84,7 @@ function statusFailureReason(status: number | null): AIChatFailureReason | null 
 }
 
 function failureReason(error: unknown): AIChatFailureReason {
+  if (error instanceof MCPStartupError) return 'mcp-unavailable'
   const statusReason = statusFailureReason(providerErrorStatus(error))
   if (statusReason) return statusReason
   if (isInsufficientCreditError(error)) return 'insufficient-credit'

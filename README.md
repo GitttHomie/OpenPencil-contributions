@@ -29,7 +29,7 @@ Requires macOS 13 or later with current Safari updates, Windows 10 or later, or 
 
 - **Opens `.fig` and `.pen` files** — read and write native Figma files, open supported Pencil documents from the app or OS file browser, copy & paste nodes between apps
 - **AI builds designs** — describe what you want in chat, 100+ tools create and modify nodes. Connect OpenRouter, Anthropic, OpenAI, Google AI, DeepSeek, Z.ai, MiniMax, or compatible endpoints
-- **Fully programmable** — headless CLI, XPath queries, Figma Plugin API via `eval`, MCP server for AI agents, and desktop agent integrations for Claude Code, Codex, and Gemini CLI
+- **Fully programmable** — headless CLI, XPath queries, Figma Plugin API via `eval`, MCP server for AI agents, and desktop agent integrations for Claude Code, Codex, Kiro CLI, and Gemini CLI
 - **Lint, convert, and extract tokens** — inspect documents, lint naming/layout/accessibility, convert between supported formats, analyze colors/typography/spacing/clusters, and extract design tokens
 - **Components and variants** — create reusable components, group variants into component sets, insert local assets as instances, and switch variants from the inspector
 - **Image vectorization** — convert image layers into editable vector layers with Recraft or fal.ai
@@ -176,22 +176,20 @@ Not every provider works in the browser, and not every model streams tool calls 
 
 ### Coding agents (desktop)
 
-Use Claude Code, Codex, or Gemini CLI directly in the chat panel. The agent connects to the editor's MCP server and uses all 100+ design tools. Requires the desktop app and the agent CLI installed locally.
+Use Claude Code, Codex, Kiro CLI, or Gemini CLI directly in the desktop chat panel. OpenPencil detects installed CLIs and chat adapters. Agents connect to the editor's MCP server and use its design tools with their existing CLI login.
 
 Pi is also available as an optional AI SDK Harness provider. Install its companion CLI with `npm install -g @open-pencil/harness`, then add a **Pi** model profile in **Settings → AI & agents**. The companion is installed separately so OpenPencil does not bundle a JavaScript runtime for users who do not enable Harness providers.
 
-**Setup (Claude Code):**
+**Setup:**
 
-1. Install the ACP adapter: `npm install -g @agentclientprotocol/claude-agent-acp`
-2. Add MCP permission to `~/.claude/settings.json`:
-   ```json
-   {
-     "permissions": {
-       "allow": ["mcp__open-pencil__*"]
-     }
-   }
-   ```
-3. Open the desktop app → <kbd>⌘</kbd><kbd>J</kbd> → select **Claude Code** from the provider dropdown
+1. Install and sign in to your preferred CLI.
+2. Open **Settings → AI & agents → Local agents**. If Claude Code or Codex needs a chat adapter, click **Install adapter**. This runs a global npm installation of `@agentclientprotocol/claude-agent-acp` or `@agentclientprotocol/codex-acp`; Node.js and npm must be installed.
+3. If **Set up canvas connection** appears, click it to install the matching OpenPencil MCP companion and connect the editor.
+4. Click **Use for chat**, or choose an available agent from the chat picker. No separate API key is needed in OpenPencil.
+
+The setup actions install these public packages from the public npm registry, without changing your npm configuration.
+
+Kiro CLI uses native ACP with `kiro-cli acp --agent-engine=v3 --auth-method=cli`; install a version supporting those options. Gemini CLI also uses native ACP. After installing or removing a CLI outside OpenPencil, click **Refresh** to detect it again. Discovery never installs adapters automatically.
 
 ### MCP server
 

@@ -13,9 +13,10 @@ import {
 } from 'reka-ui'
 import { computed, ref } from 'vue'
 
-import { AI_PROVIDERS } from '@open-pencil/core/constants'
+import { ACP_AGENTS, AI_PROVIDERS, type ACPAgentID } from '@open-pencil/core/constants'
 import { useI18n } from '@open-pencil/vue'
 
+import { useLocalAgents } from '@/app/ai/agents/use'
 import {
   aiModelSettings,
   designModelProfiles,
@@ -30,8 +31,19 @@ import { useSelectUI } from '@/components/ui/select/select'
 import { chatProfileTheme } from '@/theme/chat/profile'
 
 const { ai } = useI18n()
+const { disabled = false } = defineProps<{ disabled?: boolean }>()
 const open = ref(false)
 const profiles = computed(designModelProfiles)
+const { availableAgents, select: selectAgent } = useLocalAgents()
+const unconfiguredAgents = computed(() =>
+  availableAgents.value.filter(
+    (agent) =>
+      !profiles.value.some(
+        (profile) =>
+          modelConnection(profile.connectionId)?.providerID === `acp:${agent.definition.id}`
+      )
+  )
+)
 const ui = chatProfileTheme()
 const selectCls = useSelectUI({
   trigger: ui.trigger(),
@@ -43,12 +55,17 @@ const selectCls = useSelectUI({
 
 const selectedProfileId = computed({
   get: () => aiModelSettings.value.assignments.design,
-  set: (profileId: AIModelProfileId) => setModelRoleAssignment('design', profileId)
+  set: (profileId: string) => {
+    if (profileId.startsWith('agent:')) selectAgent(profileId.slice('agent:'.length) as ACPAgentID)
+    else setModelRoleAssignment('design', profileId as AIModelProfileId)
+  }
 })
 
 function profileMetadata(profile: AIModelProfile): string {
   const connection = modelConnection(profile.connectionId)
   const provider = AI_PROVIDERS.find((candidate) => candidate.id === connection?.providerID)
+  const agent = ACP_AGENTS.find((candidate) => `acp:${candidate.id}` === connection?.providerID)
+  if (agent) return agent.name
   const modelID = profile.customModelID || profile.modelID
   const modelName = provider?.models.find((model) => model.id === modelID)?.name || modelID
   return [modelName, provider?.name ?? connection?.providerID].filter(Boolean).join(' · ')
@@ -61,7 +78,7 @@ function manageModels(): void {
 </script>
 
 <template>
-  <SelectRoot v-model="selectedProfileId" v-model:open="open">
+  <SelectRoot v-model="selectedProfileId" v-model:open="open" :disabled="disabled">
     <SelectTrigger
       data-test-id="chat-profile-selector"
       :aria-label="ai.selectDesignModel"
@@ -100,6 +117,19 @@ function manageModels(): void {
               <SelectItemText as-child>
                 <ChatProfileItem :profile="profile" :metadata="profileMetadata(profile)" />
               </SelectItemText>
+            </SelectItem>
+          </SelectGroup>
+          <SelectGroup v-if="unconfiguredAgents.length">
+            <SelectLabel :class="ui.headerLabel()" class="px-3 py-2">{{
+              ai.localAgentsTitle
+            }}</SelectLabel>
+            <SelectItem
+              v-for="agent in unconfiguredAgents"
+              :key="agent.definition.id"
+              :value="`agent:${agent.definition.id}`"
+              :class="selectCls.item"
+            >
+              <SelectItemText>{{ agent.definition.name }}</SelectItemText>
             </SelectItem>
           </SelectGroup>
           <AppButton class="w-full justify-start" @click="manageModels">

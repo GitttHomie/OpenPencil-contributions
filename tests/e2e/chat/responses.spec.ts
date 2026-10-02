@@ -55,3 +55,32 @@ test('transport errors show a safe localized toast', async ({ configuredChat: ch
     })
   ).toBeVisible()
 })
+
+test('missing canvas setup has its own error and opens local agent settings', async ({
+  configuredChat: chat
+}) => {
+  await chat.submit('Trigger missing canvas error')
+  const toast = chat.page.locator('[data-slot="toast"]').filter({
+    hasText: 'The local agent cannot connect to the canvas.'
+  })
+  await expect(toast).toBeVisible()
+  await expect(toast).not.toContainText('The model request failed.')
+  await toast.getByRole('button', { name: 'Open settings' }).click()
+  await expect(chat.page.getByTestId('settings-ai-panel')).toBeVisible()
+  await expect(chat.page.getByRole('heading', { name: 'Local agents' })).toBeVisible()
+})
+
+test('Codex MCP successes show Done and real errors remain inspectable', async ({
+  configuredChat: chat
+}) => {
+  await chat.submit('Show Codex tool results')
+  const message = chat.assistantMessage()
+  const success = message.getByRole('button', { name: 'Get Selection Done', exact: true })
+  await expect(success).toBeVisible()
+  await success.click()
+  await expect(message.locator('pre').filter({ hasText: 'selection' })).toBeVisible()
+  const failure = message.getByRole('button', { name: 'Get Node Error', exact: true })
+  await expect(failure).toBeVisible()
+  await failure.click()
+  await expect(message.locator('pre').filter({ hasText: 'Node not found' })).toBeVisible()
+})

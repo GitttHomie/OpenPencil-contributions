@@ -7,6 +7,7 @@ import { useI18n } from '@open-pencil/vue'
 import { useModelSettings } from '@/app/ai/models/settings/use'
 import SettingsPage from '@/components/settings/layout/SettingsPage.vue'
 import SettingsSection from '@/components/settings/layout/SettingsSection.vue'
+import LocalAgentsSection from '@/components/settings/models/LocalAgentsSection.vue'
 import ProfileEditor from '@/components/settings/models/ProfileEditor.vue'
 import RoleAssignments from '@/components/settings/models/RoleAssignments.vue'
 import AppButton from '@/components/ui/button/AppButton.vue'
@@ -30,6 +31,8 @@ async function restoreFocus() {
 }
 async function focusEditor() {
   await nextTick()
+  // The user may have already focused a control while the panel was entering.
+  if (document.activeElement !== document.body && document.activeElement !== returnFocus) return
   panel.value
     ?.querySelector<HTMLInputElement>('[data-test-id="settings-model-editor"] input')
     ?.focus({ preventScroll: true })
@@ -50,8 +53,9 @@ function editModel(profileId: string): void {
   editing.value = true
 }
 
-function statusLabel(connectionId: string, providerID: string): string {
-  if (providerID.startsWith('acp:')) return ai.value.modelAgentConnection
+function statusLabel(connectionId: string, providerID: string, available: boolean): string {
+  if (providerID.startsWith('acp:'))
+    return available ? ai.value.localAgentAvailable : common.value.unavailable
   const status = statusByConnection.value[connectionId]
   if (status === 'configured') return collaboration.value.connected
   if (status === 'locked' || status === 'unavailable') return common.value.unavailable
@@ -86,6 +90,7 @@ const { profiles, statusByConnection, refreshStatuses } = useModelSettings()
 
     <SettingsPage v-show="!editing && !editorLeaving">
       <div class="flex flex-col gap-6">
+        <LocalAgentsSection />
         <SettingsSection>
           <template #title>{{ ai.modelsTitle }}</template>
           <template #description>{{ ai.modelsDescription }}</template>
@@ -127,21 +132,13 @@ const { profiles, statusByConnection, refreshStatuses } = useModelSettings()
               <template #trailing>
                 <span
                   class="mr-1 flex items-center gap-1 text-[11px] text-muted"
-                  :data-state="
-                    statusByConnection[profile.connectionId] === 'configured'
-                      ? 'configured'
-                      : 'missing'
-                  "
+                  :data-state="profile.available ? 'configured' : 'missing'"
                 >
                   <span
                     class="size-1.5 rounded-full bg-muted data-[state=configured]:bg-[var(--color-success)]"
-                    :data-state="
-                      statusByConnection[profile.connectionId] === 'configured'
-                        ? 'configured'
-                        : 'missing'
-                    "
+                    :data-state="profile.available ? 'configured' : 'missing'"
                   />
-                  {{ statusLabel(profile.connectionId, profile.providerID) }}
+                  {{ statusLabel(profile.connectionId, profile.providerID, profile.available) }}
                 </span>
                 <span
                   v-for="capability in profile.capabilities"

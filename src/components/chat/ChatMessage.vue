@@ -17,7 +17,7 @@ import ReasoningBlock from '@/components/chat/ReasoningBlock.vue'
 import IconButton from '@/components/ui/button/IconButton.vue'
 import { collapsibleContentMotion } from '@/theme/collapsible/collapsible'
 
-import { classifyToolState } from './tool-state'
+import { classifyToolState, toolResultOutput, hasErrorOutput, isMCPToolName } from './tool-state'
 
 const {
   message,
@@ -53,19 +53,25 @@ async function copyResponse(): Promise<void> {
 type ToolPart = Extract<UIMessagePart<UIDataTypes, UITools>, { toolCallId: string }>
 
 function toolDisplayName(part: ToolPart): string {
-  return getToolName(part)
-    .replace(/^mcp__[^_]+__/, '')
+  const name = getToolName(part)
+  return (isMCPToolName(name) ? name.replace(/^mcp(?:__.+?__|\.[^.]+\.)/, '') : name)
     .replace(/_/g, ' ')
     .replace(/\b\w/g, (c) => c.toUpperCase())
 }
 
-function hasErrorOutput(part: ToolPart): boolean {
-  return (
-    part.state === 'output-available' &&
-    typeof part.output === 'object' &&
-    part.output !== null &&
-    'error' in part.output
-  )
+function toolDetails(part: ToolPart): string | undefined {
+  if (part.state === 'output-error') return part.errorText
+  if (part.state !== 'output-available') return undefined
+  const result = toolResultOutput(part.output)
+  if (
+    hasErrorOutput(result) &&
+    typeof result === 'object' &&
+    result !== null &&
+    'error' in result
+  ) {
+    return typeof result.error === 'string' ? result.error : JSON.stringify(result.error, null, 2)
+  }
+  return JSON.stringify(result, null, 2)
 }
 
 function toolState(part: ToolPart): 'pending' | 'done' | 'error' {
@@ -146,11 +152,7 @@ function partKey(part: UIMessagePart<UIDataTypes, UITools>, index: number): stri
                 :class="[collapsibleContentMotion, 'text-[10px]']"
               >
                 <pre class="mt-1 overflow-x-auto rounded bg-input p-2 text-muted">{{
-                  part.state === 'output-error' && part.errorText
-                    ? part.errorText
-                    : hasErrorOutput(part)
-                      ? (part.output as { error: string }).error
-                      : JSON.stringify(part.output, null, 2)
+                  toolDetails(part)
                 }}</pre>
               </CollapsibleContent>
             </CollapsibleRoot>

@@ -1,40 +1,14 @@
 <script setup lang="ts">
-import { promiseTimeout } from '@vueuse/core'
-import { computed, onMounted, ref } from 'vue'
+import { computed } from 'vue'
 
-import {
-  ACP_AGENTS,
-  AI_PROVIDERS,
-  AUTOMATION_HTTP_PORT,
-  IS_TAURI,
-  type AIProviderID
-} from '@open-pencil/core/constants'
+import { ACP_AGENTS, AI_PROVIDERS, type AIProviderID } from '@open-pencil/core/constants'
+import { useI18n } from '@open-pencil/vue'
 
+import { useLocalAgents } from '@/app/ai/agents/use'
 import AppGroupedSelect from '@/components/ui/select/AppGroupedSelect.vue'
 
-const mcpAvailable = ref(false)
-
-async function checkMCPHealth(retries = 3, delayMs = 1000) {
-  for (let i = 0; i < retries; i++) {
-    try {
-      const res = await fetch(`http://127.0.0.1:${AUTOMATION_HTTP_PORT}/health`, {
-        signal: AbortSignal.timeout(2000)
-      })
-      if (res.ok) {
-        mcpAvailable.value = true
-        return
-      }
-    } catch (e) {
-      console.error(
-        '[MCP] health check failed (attempt',
-        i + 1,
-        '):',
-        e instanceof Error ? e.message : e
-      )
-      if (i < retries - 1) await promiseTimeout(delayMs)
-    }
-  }
-}
+const { availableAgents } = useLocalAgents()
+const { ai } = useI18n()
 
 interface ProviderSelectProps {
   allowAgents?: boolean
@@ -49,13 +23,9 @@ interface ProviderSelectProps {
 
 const { allowAgents = true, ui } = defineProps<ProviderSelectProps>()
 
-if (IS_TAURI) {
-  onMounted(() => {
-    void checkMCPHealth()
-  })
-}
-
-const acpAgents = computed(() => (allowAgents && IS_TAURI && mcpAvailable.value ? ACP_AGENTS : []))
+const acpAgents = computed(() =>
+  allowAgents ? availableAgents.value.map((agent) => agent.definition) : []
+)
 
 const providerID = defineModel<AIProviderID>({ required: true })
 const providerDef = computed(
@@ -76,7 +46,7 @@ const groups = computed(() => {
 
   if (acpAgents.value.length) {
     result.push({
-      label: 'Your agents',
+      label: ai.value.localAgentsTitle,
       items: acpAgents.value.map((agent) => ({
         value: `acp:${agent.id}`,
         label: agent.name
@@ -85,7 +55,7 @@ const groups = computed(() => {
   }
 
   result.push({
-    label: acpAgents.value.length ? 'Providers' : undefined,
+    label: acpAgents.value.length ? ai.value.provider : undefined,
     items: [...AI_PROVIDERS]
       .sort((left, right) => left.name.localeCompare(right.name))
       .map((provider) => ({
