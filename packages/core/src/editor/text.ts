@@ -9,6 +9,7 @@ import { copyDerivedGlyphs, copyGeometryPaths } from '@open-pencil/scene-graph/c
 import { weightToStyle } from '#core/text/fonts'
 import { hasGlyphOutlines } from '#core/text/opentype'
 
+import { textAutoResizeChanges } from './text/auto-resize'
 import { pathTextEditChanges } from './text/path-edit'
 import {
   createTextEditSession,
@@ -106,7 +107,12 @@ export function createTextActions(ctx: EditorContext) {
   function updateTextEditNode(nodeId: string, changes: Partial<SceneNode>) {
     const node = ctx.graph.getNode(nodeId)
     if (!node) return
-    ctx.graph.updateNode(nodeId, { ...changes, ...pathTextEditChanges(node, changes) })
+    ctx.graph.updateNode(nodeId, {
+      ...textAutoResizeChanges(node, changes),
+      ...changes,
+      ...pathTextEditChanges(node, changes)
+    })
+    ctx.runLayoutForNode(nodeId)
   }
 
   function startTextEditing(nodeId: string) {
@@ -148,7 +154,7 @@ export function createTextActions(ctx: EditorContext) {
     after.text = result.text
     const sizeChanges =
       before.text !== after.text ? resizeTextNodeForEdit(node, textState.paragraph) : {}
-    if (Object.keys(sizeChanges).length > 0) after.size = sizeChanges
+    after.size = { ...after.size, ...sizeChanges }
     const changed = textSnapshotChanged(before, after)
     const containingInstances = containingInstanceIds(ctx, result.nodeId)
     const instanceOverridesBefore = snapshotInstanceOverrides(ctx, containingInstances)
@@ -165,7 +171,7 @@ export function createTextActions(ctx: EditorContext) {
     updateTextEditNode(result.nodeId, {
       text: after.text,
       styleRuns: after.styleRuns,
-      ...sizeChanges
+      ...after.size
     })
     const afterPathText = snapshotPathText(
       ctx.graph.getNode(result.nodeId),
@@ -188,6 +194,7 @@ export function createTextActions(ctx: EditorContext) {
           ...afterPathText
         })
         restoreInstanceOverrides(ctx, instanceOverridesAfter)
+        ctx.runLayoutForNode(result.nodeId)
       },
       inverse: () => {
         ctx.graph.updateNode(result.nodeId, {
@@ -197,6 +204,7 @@ export function createTextActions(ctx: EditorContext) {
           ...beforePathText
         })
         restoreInstanceOverrides(ctx, instanceOverridesBefore)
+        ctx.runLayoutForNode(result.nodeId)
       }
     })
   }

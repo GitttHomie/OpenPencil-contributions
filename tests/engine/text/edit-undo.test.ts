@@ -302,6 +302,29 @@ describe('text edit undo', () => {
     expect(getNodeOrThrow(graph, textNode.id).height).toBe(42)
   })
 
+  test('redo restores live width when commit only adjusts paragraph height', () => {
+    const { graph, undo, textEditor, textNode, actions } = setup()
+    graph.updateNode(textNode.id, { textAutoResize: 'WIDTH_AND_HEIGHT', width: 50, height: 20 })
+    actions.startTextEditing(textNode.id)
+    textEditor.insert(' World', textNode)
+    const state = expectDefined(textEditor.state, 'text editor state')
+    graph.updateNode(textNode.id, { text: state.text, width: 120 })
+    state.paragraph = {
+      ...paragraphWithHeight(42),
+      getLongestLine: () => 120
+    } as NonNullable<typeof state.paragraph>
+
+    actions.commitTextEdit()
+    expect(getNodeOrThrow(graph, textNode.id).width).toBe(120)
+    expect(getNodeOrThrow(graph, textNode.id).height).toBe(42)
+    undo.undo()
+    expect(getNodeOrThrow(graph, textNode.id).width).toBe(50)
+    expect(getNodeOrThrow(graph, textNode.id).height).toBe(20)
+    undo.redo()
+    expect(getNodeOrThrow(graph, textNode.id).width).toBe(120)
+    expect(getNodeOrThrow(graph, textNode.id).height).toBe(42)
+  })
+
   test('commitTextEdit does not push undo when text unchanged', () => {
     const { undo, actions, textNode } = setup()
 

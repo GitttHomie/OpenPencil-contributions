@@ -64,10 +64,17 @@ export class TextEditor {
     return s
   }
 
-  private currentLineMetrics() {
+  private lineMetricsAt(cursor: number) {
     const s = this._state
     if (!s?.paragraph) return null
-    const lineNum = s.paragraph.getLineNumberAt(s.cursor)
+    // Skia's glyph lookup excludes the insertion position after the last character.
+    // Its final empty line also starts at the newline, although the caret belongs after it.
+    if (cursor === s.text.length) {
+      const line = s.paragraph.getLineMetrics().at(-1)
+      if (!line) return null
+      return s.text.endsWith('\n') ? { ...line, startIndex: cursor } : line
+    }
+    const lineNum = s.paragraph.getLineNumberAt(cursor)
     return lineNum < 0 ? null : s.paragraph.getLineMetricsAt(lineNum)
   }
 
@@ -195,9 +202,7 @@ export class TextEditor {
   selectLine(pos: number): void {
     const s = this._state
     if (!s?.paragraph) return
-    const lineNum = s.paragraph.getLineNumberAt(pos)
-    if (lineNum < 0) return
-    const metrics = s.paragraph.getLineMetricsAt(lineNum)
+    const metrics = this.lineMetricsAt(pos)
     if (!metrics) return
     s.selectionAnchor = metrics.startIndex
     s.cursor = metrics.endExcludingWhitespaces
@@ -284,7 +289,7 @@ export class TextEditor {
     const s = this._state
     if (!s?.paragraph) return
     this.prepareMove(extend)
-    const metrics = this.currentLineMetrics()
+    const metrics = this.lineMetricsAt(s.cursor)
     if (!metrics) return
     const isRTLStart = s.textDirection === 'RTL' && edge === 'start'
     const isLTREnd = s.textDirection !== 'RTL' && edge === 'end'
@@ -353,6 +358,17 @@ export class TextEditor {
       const line = metrics[0]
       const offsetY = this.paragraphVerticalOffset()
       return { x: line.left, y0: offsetY, y1: offsetY + line.height }
+    }
+
+    if (cursor === text.length && text.endsWith('\n')) {
+      const line = this.lineMetricsAt(cursor)
+      if (!line) return null
+      const offsetY = this.paragraphVerticalOffset()
+      return {
+        x: line.left,
+        y0: line.baseline - line.ascent + offsetY,
+        y1: line.baseline + line.descent + offsetY
+      }
     }
 
     let lo: number

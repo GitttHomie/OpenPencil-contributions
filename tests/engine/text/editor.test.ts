@@ -1,9 +1,12 @@
-import { describe, test, expect } from 'bun:test'
+import { afterEach, beforeAll, describe, test, expect } from 'bun:test'
 
 import type { CanvasKit, Paragraph, RectWithDirection } from 'canvaskit-wasm'
 
 import { TextEditor, type SceneNode } from '@open-pencil/core'
+import { initCanvasKit } from '@open-pencil/core/io'
 import { createDefaultNode } from '@open-pencil/scene-graph/node-defaults'
+
+import { fontManager } from '#core/text/fonts'
 
 import { expectDefined } from '#tests/helpers/assert'
 
@@ -303,5 +306,102 @@ describe('TextEditor', () => {
     editor.moveLeft(true)
     expect(editor.state?.selectionAnchor).toBe(5)
     expect(editor.state?.cursor).toBe(4)
+  })
+})
+
+describe('TextEditor empty lines with Skia paragraphs', () => {
+  let ck: CanvasKit
+  let font: ArrayBuffer
+  const cleanups: Array<() => void> = []
+
+  beforeAll(async () => {
+    ck = await initCanvasKit()
+    font = expectDefined(await fontManager.fetchBundledFont('/Inter-Regular.ttf'), 'Inter font')
+  })
+
+  afterEach(() => {
+    for (const cleanup of cleanups.splice(0)) cleanup()
+  })
+
+  function setup(text: string, textAlignVertical: SceneNode['textAlignVertical'] = 'TOP') {
+    const fonts = ck.TypefaceFontProvider.Make()
+    fonts.registerFont(font, 'Inter')
+    const editor = new TextEditor(ck)
+    const renderer = {
+      fontGeneration: 1,
+      buildParagraph(node: SceneNode) {
+        const builder = ck.ParagraphBuilder.MakeFromFontProvider(
+          new ck.ParagraphStyle({ textStyle: { fontFamilies: ['Inter'], fontSize: 20 } }),
+          fonts
+        )
+        builder.addText(node.text)
+        const paragraph = builder.build()
+        paragraph.layout(200)
+        builder.delete()
+        return paragraph
+      }
+    }
+    editor.setRenderer(renderer as Parameters<TextEditor['setRenderer']>[0])
+    const node = createDefaultNode(() => 'multiline', 'TEXT', {
+      text,
+      width: 200,
+      height: 160,
+      textAlignVertical
+    })
+    editor.start(node)
+    cleanups.push(() => {
+      editor.stop()
+      fonts.delete()
+    })
+    return { editor, node }
+  }
+
+  test.each(['Hello\n', 'Hello\n\n', '\n'])(
+    'places the caret after the final newline in %j and deletes it with Backspace',
+    (text) => {
+      for (const alignment of ['TOP', 'CENTER', 'BOTTOM'] as const) {
+        const { editor, node } = setup(text, alignment)
+        const paragraph = expectDefined(editor.state?.paragraph, 'paragraph')
+        const lastLine = expectDefined(paragraph.getLineMetrics().at(-1), 'last line')
+        const offset =
+          alignment === 'TOP'
+            ? 0
+            : (node.height - paragraph.getHeight()) / (alignment === 'CENTER' ? 2 : 1)
+        const caret = expectDefined(editor.getCaretRect(), 'caret')
+        expect(caret.x).toBeCloseTo(lastLine.left)
+        expect(caret.y0).toBeCloseTo(lastLine.baseline - lastLine.ascent + offset)
+        expect(caret.y1).toBeCloseTo(lastLine.baseline + lastLine.descent + offset)
+
+        editor.moveLeft()
+        editor.setCursorAt(caret.x, (caret.y0 + caret.y1) / 2)
+        expect(editor.caretIndex).toBe(text.length)
+        editor.moveToLineStart()
+        expect(editor.caretIndex).toBe(text.length)
+        editor.moveToLineEnd()
+        expect(editor.caretIndex).toBe(text.length)
+        editor.backspace(node)
+        expect(editor.state?.text).toBe(text.slice(0, -1))
+      }
+    }
+  )
+
+  test('moves between consecutive empty lines and selects a newline for deletion', () => {
+    const { editor, node } = setup('Hello\n\n')
+    const lastCaret = expectDefined(editor.getCaretRect(), 'last caret')
+    editor.moveUp()
+    expect(editor.caretIndex).toBe(6)
+    expect(expectDefined(editor.getCaretRect(), 'previous caret').y0).toBeLessThan(lastCaret.y0)
+    editor.moveDown(true)
+    expect(editor.getSelectedText()).toBe('\n')
+    editor.backspace(node)
+    expect(editor.state?.text).toBe('Hello\n')
+  })
+
+  test('Home and End work at the end of a nonempty final line', () => {
+    const { editor } = setup('Hello\nWorld')
+    editor.moveToLineStart()
+    expect(editor.caretIndex).toBe(6)
+    editor.moveToLineEnd()
+    expect(editor.caretIndex).toBe(11)
   })
 })
