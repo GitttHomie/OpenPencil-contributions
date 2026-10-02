@@ -14,6 +14,7 @@
 
 ### Added
 
+- Exclude children from auto layout in the Position panel to position them freely, with parent-aware position, alignment, sizing, and constraint controls.
 - Detect installed Claude Code, Codex, Kiro CLI, and Gemini CLI in desktop AI settings and chat, with one-click setup for missing chat adapters and the canvas MCP companion. Show canvas setup failures with a Settings action instead of a generic model error.
 - Jump between pages from the command palette: it lists the pages you visited recently in the tab, **Go to page…** lists every page, and typing a page name finds it.
 - Preview designs progressively on the canvas as direct AI providers stream JSX, without saving partial designs or adding intermediate undo steps. A preview stays with its page: it hides while you view another page and returns when you come back.
@@ -35,6 +36,17 @@
 
 ### Fixed
 
+- Preserve native text wrapping, alignment, and automatic line height when reopening saved files, and recover text from older OpenPencil files with approximate saved glyph placement.
+
+- Keep excluded children anchored by their constraints when auto layout resizes a parent, including badges that overhang Hug buttons while their labels change.
+- Recompute auto-sized text and Hug parents when a font finishes loading, keeping layer bounds aligned with text selection after font changes and Redo.
+- Commit font choices immediately, choose available styles from local and online catalogs, and limit weight, Bold, and Italic controls to supported faces. Share local font reads, load online previews on hover, and show font failures after loading finishes.
+- Keep dropdown widths stable during dialog animations, defer font-list and chat measurements, and skip unchanged canvas sizes to avoid resize-observer feedback.
+- Keep text-selection highlights aligned with rendered text and snap dragged numeric values to their configured increments.
+- Drag canvas labels to move their containers, or double-click to rename frames, components, and instances, with filled diamond icons for definitions and outlined diamonds for instances.
+- Paste copied component definitions as linked instances, avoid recursive component nesting, and inherit corner smoothing while preserving instance overrides.
+- Paste objects into the center of the selected container, preserve their internal spacing, and convert canvas coordinates correctly for nested or rotated destinations and Paste to replace.
+- Reflow children when adding auto layout to reopened frames, and keep Hug parents from collapsing when a child switches to Fill. Undo restores the layout and sizing together.
 - Restore child geometry, sibling order, and surrounding layouts when undoing auto-layout changes or wrapping a selection in auto layout.
 - Nest newly drawn objects inside the frame under the pointer, drag objects out of containers without snapping back, and reorder auto-layout children with arrow keys. Preserve sibling order through multi-object moves and undo, and cancel held drags with Escape.
 - Show successful Codex MCP calls as Done when their response contains `error: null`, and keep real tool errors visible in the transcript.

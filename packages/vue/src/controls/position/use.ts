@@ -17,6 +17,28 @@ export function usePosition() {
 
   const { nodes, node, active, isMulti, prop } = useNodeProps()
   const ids = computed(() => nodes.value.map((n) => n.id))
+  const parentLayouts = computed(() => {
+    void editor.state.sceneVersion
+    return nodes.value.map((n) => {
+      const parent = n.parentId ? editor.getNode(n.parentId) : null
+      return !!parent && parent.layoutMode !== 'NONE'
+    })
+  })
+  const canExclude = computed(() => nodes.value.length > 0 && parentLayouts.value.every(Boolean))
+  const canPosition = computed(() =>
+    nodes.value.every(
+      (n, index) => !parentLayouts.value[index] || n.layoutPositioning === 'ABSOLUTE'
+    )
+  )
+  const excluded = computed<boolean | 'indeterminate'>(() => {
+    const count = nodes.value.filter((n) => n.layoutPositioning === 'ABSOLUTE').length
+    if (count === 0) return false
+    return count === nodes.value.length ? true : 'indeterminate'
+  })
+
+  function setExcluded(value: boolean) {
+    if (canExclude.value) editor.setLayoutPositioning(ids.value, value ? 'ABSOLUTE' : 'AUTO')
+  }
 
   const x = computed(() => node.value?.x ?? 0)
   const y = computed(() => node.value?.y ?? 0)
@@ -31,10 +53,12 @@ export function usePosition() {
   } = usePropScrub(editor)
 
   function updateProp(key: NumericNodeProperty, value: number) {
+    if ((key === 'x' || key === 'y') && !canPosition.value) return
     _updateProp(nodes.value, key, value)
   }
 
   function commitProp(key: NumericNodeProperty, value: number, previous: number) {
+    if ((key === 'x' || key === 'y') && !canPosition.value) return
     _commitProp(nodes.value, key, value, previous)
   }
 
@@ -62,6 +86,10 @@ export function usePosition() {
     isMulti,
     prop,
     ids,
+    canPosition,
+    canExclude,
+    excluded,
+    setExcluded,
     x,
     y,
     width,

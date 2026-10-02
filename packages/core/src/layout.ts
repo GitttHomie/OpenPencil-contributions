@@ -14,7 +14,7 @@ import {
 import { resolveNodeLayoutDirection } from '@open-pencil/scene-graph/text-direction'
 
 import { applyYogaLayout } from './layout/apply'
-import { usesDetachedDerivedLayout } from './layout/derived'
+import { hasEditedLayout, usesDetachedDerivedLayout } from './layout/derived'
 import { applyEffectiveGeneratedTextLayout } from './layout/effective-generated-text'
 import { buildGridTree, createGridChildNode } from './layout/grid'
 export {
@@ -265,6 +265,7 @@ function derivedMainAxisFitsParent(
   child: SceneNode,
   axis: 'width' | 'height'
 ): boolean {
+  if (hasEditedLayout(parent) || hasEditedLayout(child)) return false
   const children = graph
     .getChildren(parent.id)
     .filter((candidate) => candidate.visible && candidate.layoutPositioning !== 'ABSOLUTE')
@@ -279,6 +280,8 @@ function derivedMainAxisFitsParent(
 
 function usesAuthoritativeGeneratedStretch(parent: SceneNode, child: SceneNode): boolean {
   if (
+    hasEditedLayout(parent) ||
+    hasEditedLayout(child) ||
     child.layoutAlignSelf !== 'STRETCH' ||
     parent.source.format === 'fig' ||
     !parent.derivedLayout
@@ -372,6 +375,7 @@ function derivedGrowingLeafFitsParent(
   child: SceneNode,
   axis: 'width' | 'height'
 ): boolean {
+  if (hasEditedLayout(parent) || hasEditedLayout(child)) return false
   if (child.type !== 'TEXT' || child.layoutGrow <= 0 || child.derivedLayout?.[axis] === undefined) {
     return false
   }

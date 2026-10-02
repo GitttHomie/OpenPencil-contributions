@@ -31,6 +31,15 @@ function node(overrides: Partial<SceneNode>): SceneNode {
 }
 
 describe('layout sizing controls', () => {
+  test('a frame’s own auto layout does not make Fill valid outside its parent’s flow', () => {
+    const frame = node({ layoutMode: 'HORIZONTAL' })
+    expect(sizingOptionsForNode(frame, false).map((option) => option.value)).toEqual([
+      'FIXED',
+      'HUG'
+    ])
+    expect(sizingOptionsForNode(frame, true).map((option) => option.value)).toContain('FILL')
+  })
+
   test('plain containers with children expose hug contents', () => {
     const frame = node({ childIds: ['child'] })
 

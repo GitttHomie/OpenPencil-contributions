@@ -36,6 +36,7 @@ import { createShapeActions } from './shapes'
 import { createDefaultEditorState } from './state'
 import { createStructureActions } from './structure'
 import { createTextActions } from './text'
+import { refreshTextLayoutForFont } from './text/font-layout'
 import type {
   EditorContext,
   EditorEventName,
@@ -68,6 +69,7 @@ export function createEditor(options?: EditorOptions) {
   let _textEditor: TextEditor | null = null
   const events: Emitter<EditorEvents> = createNanoEvents()
   const stopFontResolutionEvents = fontResolver.subscribe((event, snapshot) => {
+    if (event === 'settled' && _renderer) refreshTextLayoutForFont(ctx, snapshot)
     events.emit('font:resolution-changed', event, snapshot)
   })
 

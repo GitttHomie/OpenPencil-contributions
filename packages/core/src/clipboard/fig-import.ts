@@ -15,12 +15,35 @@ export function prepareClipboardImport(
   parentId: string,
   blobs: Uint8Array[] = [],
   offsetX = 0,
-  offsetY = 0
+  offsetY = 0,
+  options: { componentsAsInstances?: boolean } = {}
 ) {
   const fragment = materializeFigFragment(changes, blobs, { missingComponent: 'detach-empty' })
+  const rootIds = fragment.rootIds.map((id) => {
+    const node = fragment.graph.getNode(id)
+    if (!options.componentsAsInstances || node?.type !== 'COMPONENT' || !node.parentId) return id
+    const instance = fragment.graph.createInstance(id, node.parentId, {
+      x: node.x,
+      y: node.y,
+      rotation: node.rotation,
+      flipX: node.flipX,
+      flipY: node.flipY
+    })
+    if (!instance) return id
+    let dependencyPage = fragment.dependencyPageIds[0]
+    if (!dependencyPage) {
+      dependencyPage = fragment.graph.createNode('CANVAS', fragment.graph.rootId, {
+        name: 'Clipboard components',
+        internalOnly: true
+      }).id
+      fragment.dependencyPageIds.push(dependencyPage)
+    }
+    fragment.graph.reparentNode(id, dependencyPage)
+    return instance.id
+  })
   const plan = prepareGraphTransfer({
     source: fragment.graph,
-    rootIds: fragment.rootIds,
+    rootIds,
     dependencyPageIds: fragment.dependencyPageIds,
     target: graph,
     parentId

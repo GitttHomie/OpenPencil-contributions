@@ -352,5 +352,7 @@
   "strokeDashLength": "虚线",
   "strokeDashGap": "间距",
   "lineHeightMode": "行高模式",
-  "unresolvedVariable": "变量值不可用"
+  "unresolvedVariable": "变量值不可用",
+  "excludeFromAutoLayout": "从自动布局中排除",
+  "positionAutoLayout": "位置由父级的自动布局控制"
 }

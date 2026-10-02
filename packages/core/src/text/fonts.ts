@@ -56,10 +56,12 @@ export class FontManager {
   private registrationGeneration = 0
   private providerRegistrations = new WeakMap<TypefaceFontProvider, Map<string, Set<ArrayBuffer>>>()
   private localFonts: FontInfo[] | null = null
+  private localFontLoads = new Map<string, Promise<ArrayBuffer | null>>()
   private localFontAccessState: LocalFontAccessState = IS_BROWSER ? 'prompt' : 'unsupported'
   private downloadedFontCache: DownloadedFontCache | null = null
   private fallbackUserAgent: string | undefined
   private hostFontLoader: HostFontLoader | null = null
+  private hostStyles = new Map<string, readonly string[]>()
   private webFonts = new WebFontResolver()
   private cjkFallbackFamilies: string[] = []
   private cjkFallbackPromise: Promise<string[]> | null = null
@@ -117,6 +119,29 @@ export class FontManager {
 
   localAccessState(): LocalFontAccessState {
     return this.localFontAccessState
+  }
+
+  localStyles(family: string): string[] {
+    return [
+      ...(this.hostStyles.get(family) ??
+        this.localFonts?.filter((font) => font.family === family).map((font) => font.style) ??
+        [])
+    ]
+  }
+
+  setHostFontCatalog(fonts: readonly { family: string; styles: readonly string[] }[]): void {
+    this.hostStyles = new Map(fonts.map((font) => [font.family, [...font.styles]]))
+  }
+
+  familyStyles(family: string): string[] {
+    const local = this.localStyles(family)
+    return local.length > 0 ? local : this.webFonts.familyStyles(family)
+  }
+
+  async loadFamilyStyles(): Promise<void> {
+    await Promise.all(
+      this.enabledOnlineFontProviders().map((provider) => this.webFonts.listFamilies(provider))
+    )
   }
 
   setDownloadedFontCache(cache: DownloadedFontCache | null): void {
@@ -243,12 +268,24 @@ export class FontManager {
       return loaded
     }
 
+    const pending = this.localFontLoads.get(cacheKey)
+    if (pending) return pending
+    const request = this.readLocalFont(family, style)
+    this.localFontLoads.set(cacheKey, request)
+    try {
+      return await request
+    } finally {
+      this.localFontLoads.delete(cacheKey)
+    }
+  }
+
+  private async readLocalFont(family: string, style: string): Promise<ArrayBuffer | null> {
     const hostBuffer = await this.loadHostFont(family, style)
     if (hostBuffer) return this.registerAndCache(family, style, hostBuffer, 'local')
     const localBuffer = await this.findLocalFont(family, style)
     if (localBuffer) return this.registerAndCache(family, style, localBuffer, 'local')
 
-    const bundledURL = BUNDLED_FONTS[cacheKey]
+    const bundledURL = BUNDLED_FONTS[`${family}|${style}`]
     if (!bundledURL) return null
     try {
       const buffer = await this.fetchBundledFont(bundledURL)

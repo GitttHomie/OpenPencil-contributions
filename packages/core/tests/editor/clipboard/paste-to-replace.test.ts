@@ -145,6 +145,8 @@ describe('paste to replace', () => {
     const pageId = editor.state.currentPageId
     const frame = editor.graph.createNode('FRAME', pageId, {
       name: 'Container',
+      rotation: 31,
+      flipX: true,
       x: 50,
       y: 50,
       width: 300,
@@ -159,6 +161,8 @@ describe('paste to replace', () => {
     const [createdId] = [...editor.state.selectedIds]
 
     expect(editor.graph.getNode(createdId)?.parentId).toBe(frame.id)
+    expect(editor.graph.getNode(createdId)?.x).toBeCloseTo(110, 5)
+    expect(editor.graph.getNode(createdId)?.y).toBeCloseTo(110, 5)
     expect(editor.graph.getNode(frame.id)?.childIds).toEqual([before.id, createdId, after.id])
 
     editor.undo.undo()

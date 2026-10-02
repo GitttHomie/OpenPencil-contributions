@@ -124,6 +124,8 @@ export const panelMessageDefaults = {
   framePresetCategoryFigmaCommunity: 'Figma Community',
   framePresetCategoryArchive: 'Archive',
   position: 'Position',
+  excludeFromAutoLayout: 'Exclude from auto layout',
+  positionAutoLayout: 'Position is controlled by the parent’s auto layout',
   layout: 'Layout',
   autoLayout: 'Auto layout',
   alignment: 'Alignment',

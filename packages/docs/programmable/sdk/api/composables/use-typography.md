@@ -50,6 +50,9 @@ const {
 
 ### Load and switch a font family
 
+The loader receives the family, canonical style (including italic), and the node's text for glyph coverage.
+Family and weight changes commit immediately; loading completion only requests a repaint, so it cannot overwrite a later choice or Undo. Hosts can provide a synchronous `styles(family)` callback with available styles and an optional `loadStyles(family)` callback to populate metadata. Family selection chooses the nearest available weight, preferring the current italic style. The `weights` array and `canToggleBold` / `canToggleItalic` flags follow that catalog and refresh after metadata loads. An empty catalog preserves the requested style.
+
 ```ts
 const typography = useTypography({
   fontLoader: {

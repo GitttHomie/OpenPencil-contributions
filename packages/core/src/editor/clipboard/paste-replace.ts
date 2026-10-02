@@ -1,5 +1,6 @@
 import type { SceneNode } from '@open-pencil/scene-graph'
-import { computeAbsoluteBounds } from '@open-pencil/scene-graph/geometry'
+import { getAxisAlignedWorldBounds } from '@open-pencil/scene-graph/coordinate'
+import { computeBounds } from '@open-pencil/scene-graph/geometry'
 
 import { getNodeEditCapability } from '#core/editor/capabilities'
 import type { EditorContext } from '#core/editor/types'
@@ -93,7 +94,9 @@ export function replaceTargetsWithCreated(
     }
   })
 
-  const targetBounds = computeAbsoluteBounds(targets, (id) => ctx.graph.getAbsolutePosition(id))
+  const targetBounds = computeBounds(
+    targets.map((node) => getAxisAlignedWorldBounds(node, ctx.graph))
+  )
   centerNodesAt(
     created,
     targetBounds.x + targetBounds.width / 2,

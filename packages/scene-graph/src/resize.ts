@@ -61,12 +61,14 @@ function constrainedAxis(
   return { position, size }
 }
 
+/** Layout reflow can disable pixel rounding to preserve fractional anchors across repeated passes. */
 export function constrainedChildRect(
   child: Rect,
   parentBefore: Pick<Rect, 'width' | 'height'>,
   parentAfter: Pick<Rect, 'width' | 'height'>,
   horizontal: ConstraintType,
-  vertical: ConstraintType
+  vertical: ConstraintType,
+  roundToPixels = true
 ): Rect {
   const x = constrainedAxis(child.x, child.width, parentBefore.width, parentAfter.width, horizontal)
   const y = constrainedAxis(
@@ -76,11 +78,13 @@ export function constrainedChildRect(
     parentAfter.height,
     vertical
   )
+  const rect = { x: x.position, y: y.position, width: x.size, height: y.size }
+  if (!roundToPixels) return rect
   return {
-    x: Math.round(x.position),
-    y: Math.round(y.position),
-    width: Math.round(x.size),
-    height: Math.round(y.size)
+    x: Math.round(rect.x),
+    y: Math.round(rect.y),
+    width: Math.round(rect.width),
+    height: Math.round(rect.height)
   }
 }
 

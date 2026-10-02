@@ -352,5 +352,7 @@
   "strokeDashLength": "Tiret",
   "strokeDashGap": "Espacement",
   "lineHeightMode": "Mode de hauteur de ligne",
-  "unresolvedVariable": "Valeur de variable indisponible"
+  "unresolvedVariable": "Valeur de variable indisponible",
+  "excludeFromAutoLayout": "Exclure de la disposition automatique",
+  "positionAutoLayout": "La position est contrôlée par la disposition automatique du parent"
 }

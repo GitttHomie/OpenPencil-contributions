@@ -2,6 +2,7 @@ import type { FontFaceData, RemoteFontSource, ResolveFontResult } from 'unifont'
 
 import { IS_BROWSER } from '#core/constants'
 import { parseFontStyle } from '#core/text/face'
+import { fontCatalogStyles } from '#core/text/web-font/catalog'
 import {
   createProviderUnifont,
   isRemoteFontSource,
@@ -127,6 +128,7 @@ export class WebFontResolver {
   )
   private unifontPromises = new Map<WebFontProviderId, Promise<WebUnifont>>()
   private familiesCache = new Map<WebFontProviderId, string[]>()
+  private catalogStyles = new Map<WebFontProviderId, Map<string, string[]>>()
   private familiesPromises = new Map<WebFontProviderId, Promise<string[]>>()
   private failedFonts = new Set<string>()
   private fontPromises = new Map<string, Promise<ArrayBuffer[]>>()
@@ -143,6 +145,7 @@ export class WebFontResolver {
     this.unifontPromises.clear()
     this.familiesPromises.clear()
     this.familiesCache.clear()
+    this.catalogStyles.clear()
     this.failedFonts.clear()
   }
 
@@ -157,6 +160,14 @@ export class WebFontResolver {
 
   enabledProviders(): WebFontProviderId[] {
     return WEB_FONT_PROVIDER_IDS.filter((provider) => this.enabled.has(provider))
+  }
+
+  familyStyles(family: string): string[] {
+    for (const provider of this.enabledProviders()) {
+      const styles = this.catalogStyles.get(provider)?.get(family)
+      if (styles?.length) return styles
+    }
+    return []
   }
 
   preloadFamilies(): void {
@@ -243,7 +254,11 @@ export class WebFontResolver {
   private async unifont(provider: WebFontProviderId, signal?: AbortSignal): Promise<WebUnifont> {
     let promise = this.unifontPromises.get(provider)
     if (!promise) {
-      promise = this.withFetchProxy(() => createProviderUnifont(provider))
+      promise = this.withFetchProxy(() =>
+        createProviderUnifont(provider, (data) => {
+          this.catalogStyles.set(provider, fontCatalogStyles(provider, data))
+        })
+      )
       this.unifontPromises.set(provider, promise)
     }
     return waitForFontOperation(promise, signal)

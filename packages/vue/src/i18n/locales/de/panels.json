@@ -352,5 +352,7 @@
   "strokeDashLength": "Strich",
   "strokeDashGap": "Lücke",
   "lineHeightMode": "Zeilenhöhenmodus",
-  "unresolvedVariable": "Variablenwert nicht verfügbar"
+  "unresolvedVariable": "Variablenwert nicht verfügbar",
+  "excludeFromAutoLayout": "Vom Auto-Layout ausschließen",
+  "positionAutoLayout": "Die Position wird durch das Auto-Layout des übergeordneten Elements bestimmt"
 }

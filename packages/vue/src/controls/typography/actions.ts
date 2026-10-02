@@ -3,6 +3,7 @@ import type { ComputedRef } from 'vue'
 
 import type { Editor } from '@open-pencil/core/editor'
 import { FONT_WEIGHT_NAMES, weightToStyle } from '@open-pencil/core/text'
+import { parseFontStyle } from '@open-pencil/scene-graph'
 import type { SceneNode, TextDecoration } from '@open-pencil/scene-graph'
 
 import type { UseTypographyOptions } from '#vue/controls/typography/use'
@@ -63,7 +64,6 @@ type TypographyActionOptions = {
 export function createTypographyActions({
   editor,
   node,
-  currentWeightLabel,
   activeFormatting,
   options
 }: TypographyActionOptions) {
@@ -71,22 +71,67 @@ export function createTypographyActions({
     | { key: keyof SceneNode; value: SceneNode[keyof SceneNode]; textStyleId: string | null }
     | undefined
 
-  async function doLoadFont(family: string, style: string) {
-    await options.fontLoader?.load(family, style)
+  async function setFont(
+    changes: Partial<Pick<SceneNode, 'fontFamily' | 'fontWeight' | 'italic'>>,
+    label: string
+  ) {
+    const target = node.value
+    if (!target) return
+    const graph = editor.graph
+    const id = target.id
+    const next = {
+      fontFamily: target.fontFamily,
+      fontWeight: target.fontWeight,
+      italic: target.italic,
+      ...changes
+    }
+    const styles = options.fontLoader?.styles?.(next.fontFamily) ?? []
+    if (
+      styles.length > 0 &&
+      !styles.some((style) => {
+        const face = parseFontStyle(style)
+        return face.weight === next.fontWeight && face.italic === next.italic
+      })
+    )
+      return
+    const loading = options.fontLoader?.load(
+      next.fontFamily,
+      weightToStyle(next.fontWeight, next.italic),
+      target.text
+    )
+    editor.updateNodeWithUndo(id, changes, label)
+    // Completion only repaints. It must not undo a newer choice or target another selection.
+    try {
+      await loading
+    } finally {
+      if (editor.graph === graph && graph.getNode(id) === target) editor.requestRender()
+    }
   }
 
   async function setFamily(family: string) {
-    if (!node.value) return
-    await doLoadFont(family, currentWeightLabel.value)
-    editor.updateNodeWithUndo(node.value.id, { fontFamily: family }, 'Change font')
+    const target = node.value
+    if (!target) return
+    const styles = options.fontLoader?.styles?.(family) ?? []
+    const nearest = styles
+      .map(parseFontStyle)
+      .sort(
+        (a, b) =>
+          Number(a.italic !== target.italic) - Number(b.italic !== target.italic) ||
+          Math.abs(a.weight - target.fontWeight) - Math.abs(b.weight - target.fontWeight) ||
+          a.weight - b.weight
+      )
+      .at(0)
+    if (nearest) {
+      return setFont(
+        { fontFamily: family, fontWeight: nearest.weight, italic: nearest.italic },
+        'Change font'
+      )
+    }
+    return setFont({ fontFamily: family }, 'Change font')
   }
 
-  async function setWeight(weight: number) {
-    if (!node.value) return
-    const { id, fontFamily } = node.value
-    const style = weightToStyle(weight)
-    editor.updateNodeWithUndo(id, { fontWeight: weight }, 'Change font weight')
-    await doLoadFont(fontFamily, style)
+  function setWeight(weight: number) {
+    return setFont({ fontWeight: weight }, 'Change font weight')
   }
 
   function setAlign(align: TextAlign) {
@@ -136,7 +181,7 @@ export function createTypographyActions({
 
   function toggleItalic() {
     if (!node.value) return
-    editor.updateNodeWithUndo(node.value.id, { italic: !node.value.italic }, 'Toggle italic')
+    void setFont({ italic: !node.value.italic }, 'Toggle italic')
   }
 
   function toggleDecoration(deco: 'UNDERLINE' | 'STRIKETHROUGH') {

@@ -17,6 +17,7 @@ export function useCanvasResizeObserver({
 
   function cancelResize() {
     cancelAnimationFrame(resizeRaf)
+    resizeRaf = 0
   }
 
   useResizeObserver(canvasRef, () => {
@@ -24,6 +25,13 @@ export function useCanvasResizeObserver({
     if (!canvas || !getCanvasKitValue() || resizeRaf) return
     resizeRaf = requestAnimationFrame(() => {
       resizeRaf = 0
+      if (canvasRef.value !== canvas) return
+      const dpr = window.devicePixelRatio || 1
+      if (
+        canvas.width === Math.floor(canvas.clientWidth * dpr) &&
+        canvas.height === Math.floor(canvas.clientHeight * dpr)
+      )
+        return
       resizeCanvas(canvas)
     })
   })

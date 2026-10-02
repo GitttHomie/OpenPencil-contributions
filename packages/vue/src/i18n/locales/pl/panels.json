@@ -352,5 +352,7 @@
   "strokeDashLength": "Kreska",
   "strokeDashGap": "Odstęp",
   "lineHeightMode": "Tryb wysokości wiersza",
-  "unresolvedVariable": "Wartość zmiennej jest niedostępna"
+  "unresolvedVariable": "Wartość zmiennej jest niedostępna",
+  "excludeFromAutoLayout": "Wyklucz z automatycznego układu",
+  "positionAutoLayout": "Pozycją steruje automatyczny układ elementu nadrzędnego"
 }

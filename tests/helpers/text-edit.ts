@@ -61,6 +61,30 @@ export function readTextEdit(page: Page) {
   })
 }
 
+export function addTextBadge(page: Page, frameId: string) {
+  return page.evaluate((id) => {
+    const editor = window.openPencil?.getStore?.()
+    const frame = editor?.graph.getNode(id)
+    if (!editor || !frame) throw new Error('Frame unavailable')
+    const badge = editor.graph.createNode('FRAME', frame.id, {
+      name: 'Badge',
+      x: frame.width - 15.75,
+      y: -8.25,
+      width: 24,
+      height: 24,
+      cornerRadius: 12,
+      layoutPositioning: 'ABSOLUTE',
+      horizontalConstraint: 'MAX',
+      verticalConstraint: 'MIN',
+      fills: [
+        { type: 'SOLID', color: { r: 0.9, g: 0.15, b: 0.25, a: 1 }, opacity: 1, visible: true }
+      ]
+    })
+    editor.requestRender()
+    return badge.id
+  }, frameId)
+}
+
 export function holdTextCaretVisible(page: Page) {
   return page.evaluateHandle(() => {
     const store = window.openPencil?.getStore?.()

@@ -1,4 +1,4 @@
-import type { Component } from 'vue'
+import { h, type Component } from 'vue'
 import IconCircle from '~icons/lucide/circle'
 import IconColumns from '~icons/lucide/columns-3'
 import IconComponentSet from '~icons/lucide/component'
@@ -18,6 +18,7 @@ import IconTriangle from '~icons/lucide/triangle'
 import IconType from '~icons/lucide/type'
 
 import type { Tool } from '@/app/editor/session'
+import { componentDefinitionIcon } from '@/theme/editor-icons'
 
 export const toolIcons: Record<Tool, Component> = {
   SELECT: IconMousePointer,
@@ -38,7 +39,12 @@ export const NODE_ICONS: Partial<Record<string, typeof IconSquare>> = {
   ELLIPSE: IconCircle,
   FRAME: IconFrame,
   GROUP: IconGroup,
-  COMPONENT: IconComponent,
+  COMPONENT: (props, { attrs }) =>
+    h(IconComponent, {
+      ...attrs,
+      ...props,
+      class: [props.class, componentDefinitionIcon()]
+    }),
   COMPONENT_SET: IconComponentSet,
   INSTANCE: IconComponent,
   LINE: IconMinus,

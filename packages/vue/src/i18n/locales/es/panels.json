@@ -352,5 +352,7 @@
   "strokeDashLength": "Guion",
   "strokeDashGap": "Espacio",
   "lineHeightMode": "Modo de altura de línea",
-  "unresolvedVariable": "Valor de variable no disponible"
+  "unresolvedVariable": "Valor de variable no disponible",
+  "excludeFromAutoLayout": "Excluir del diseño automático",
+  "positionAutoLayout": "El diseño automático del elemento padre controla la posición"
 }

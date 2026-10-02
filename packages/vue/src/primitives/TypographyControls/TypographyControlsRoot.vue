@@ -40,6 +40,8 @@ const actions = {
   <slot
     :node="ctx.node"
     :weights="ctx.weights"
+    :can-toggle-bold="ctx.canToggleBold"
+    :can-toggle-italic="ctx.canToggleItalic"
     :missing-fonts="ctx.missingFonts"
     :has-missing-fonts="ctx.hasMissingFonts"
     :active-formatting="ctx.activeFormatting"

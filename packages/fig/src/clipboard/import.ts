@@ -6,6 +6,7 @@ import { decodeBinarySchema, compileSchema, ByteBuffer } from '@open-pencil/kiwi
 
 import { parseFigKiwiChunks, decompressFigKiwiDataAsync } from '../node-change'
 import { isFigClipboardVisualType } from '../node-classification'
+import { readFigmaClipboardEnvelope } from './envelope'
 
 interface FigmaClipboardMeta {
   fileKey: string
@@ -16,14 +17,14 @@ interface FigmaClipboardMeta {
 export async function parseFigmaClipboard(
   html: string
 ): Promise<{ nodes: KiwiNodeChange[]; meta: FigmaClipboardMeta; blobs: Uint8Array[] } | null> {
-  const metaMatch = html.match(/\(figmeta\)(.*?)\(\/figmeta\)/)
-  const bufMatch = html.match(/\(figma\)(.*?)\(\/figma\)/s)
-  if (!metaMatch || !bufMatch) return null
+  const envelope = readFigmaClipboardEnvelope(html)
+  if (!envelope) return null
 
   // Clipboard HTML comes from other applications, so its Base64 is checked first.
-  if (!isValid(metaMatch[1]) || !isValid(bufMatch[1])) throw new TypeError('Invalid Base64 string')
-  const meta: FigmaClipboardMeta = JSON.parse(decodeText(metaMatch[1]))
-  const binary = toUint8Array(bufMatch[1])
+  if (!isValid(envelope.metadata) || !isValid(envelope.buffer))
+    throw new TypeError('Invalid Base64 string')
+  const meta: FigmaClipboardMeta = JSON.parse(decodeText(envelope.metadata))
+  const binary = toUint8Array(envelope.buffer)
 
   try {
     const chunks = parseFigKiwiChunks(binary)

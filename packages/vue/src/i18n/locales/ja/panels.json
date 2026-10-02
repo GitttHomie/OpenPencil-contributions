@@ -352,5 +352,7 @@
   "strokeDashLength": "破線の長さ",
   "strokeDashGap": "間隔",
   "lineHeightMode": "行の高さモード",
-  "unresolvedVariable": "変数の値を取得できません"
+  "unresolvedVariable": "変数の値を取得できません",
+  "excludeFromAutoLayout": "オートレイアウトから除外",
+  "positionAutoLayout": "位置は親のオートレイアウトによって制御されます"
 }

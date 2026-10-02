@@ -15,6 +15,10 @@ const {
   rotate,
   isMulti,
   active,
+  canPosition,
+  canExclude,
+  excluded,
+  setExcluded,
   prop: multiProp
 } = usePosition()
 
@@ -30,6 +34,7 @@ const rotationValue = computed(() =>
   isMulti.value ? multiProp('rotation').value : Math.round(node.value?.rotation ?? 0)
 )
 const actions = {
+  setExcluded,
   updateProp,
   commitProp,
   cancelProp,
@@ -42,6 +47,9 @@ const actions = {
 <template>
   <slot
     :active="active"
+    :can-position="canPosition"
+    :can-exclude="canExclude"
+    :excluded="excluded"
     :is-multi="isMulti"
     :ids="ids"
     :x-value="xValue"

@@ -27,6 +27,7 @@ import {
   TEXT_DIRECTION_PLUGIN_KEY
 } from './plugin-data'
 import { importStyleRuns } from './style/runs'
+import { usesParagraphTextLayout } from './text/layout-source'
 import { convertLetterSpacing, convertLineHeight, mapTextDecoration } from './text/values'
 import {
   alignGeometryWindingRules,
@@ -365,7 +366,6 @@ function convertTextProps(nc: NodeChange, blobs: Uint8Array[]): TextProps {
     textCase: (nc.textCase ?? 'ORIGINAL') as TextCase,
     ...convertTextDecorationProps(nc),
     leadingTrim: (nc.leadingTrim ?? 'NONE') as SceneNode['leadingTrim'],
-    lineHeight: importedTextLineHeight(nc),
     letterSpacing: convertLetterSpacing(nc.letterSpacing, nc.fontSize),
     maxLines: (nc.maxLines ?? null) as number | null,
     styleRuns: importStyleRuns(nc),
@@ -376,13 +376,28 @@ function convertTextProps(nc: NodeChange, blobs: Uint8Array[]): TextProps {
       (getOpenPencilPluginValue(nc, TEXT_DIRECTION_PLUGIN_KEY) as
         | SceneNode['textDirection']
         | null) || 'AUTO',
+    ...convertTextLayoutProps(nc, blobs)
+  }
+}
+
+function convertTextLayoutProps(
+  nc: NodeChange,
+  blobs: Uint8Array[]
+): Pick<TextProps, 'lineHeight' | 'derivedLayout' | 'derivedTextGlyphs'> {
+  const paragraphLayout = usesParagraphTextLayout(nc)
+  return {
+    lineHeight: paragraphLayout
+      ? convertLineHeight(nc.lineHeight, nc.fontSize)
+      : importedTextLineHeight(nc),
     derivedLayout: nc.derivedTextData?.layoutSize
       ? {
           width: nc.derivedTextData.layoutSize.x,
           height: nc.derivedTextData.layoutSize.y
         }
       : null,
-    derivedTextGlyphs: convertFigmaDerivedTextGlyphs(nc.derivedTextData, blobs)
+    derivedTextGlyphs: paragraphLayout
+      ? []
+      : convertFigmaDerivedTextGlyphs(nc.derivedTextData, blobs)
   }
 }
 

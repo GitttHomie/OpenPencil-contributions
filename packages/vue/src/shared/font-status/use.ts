@@ -1,7 +1,11 @@
-import { computed } from 'vue'
+import { computed, getCurrentScope, onScopeDispose, ref } from 'vue'
 
-import { DEFAULT_FONT_FAMILY } from '@open-pencil/core/constants'
-import { fontManager } from '@open-pencil/core/text'
+import {
+  collectNodeFontFaces,
+  fontFaceDemand,
+  fontManager,
+  fontResolver
+} from '@open-pencil/core/text'
 import type { SceneNode } from '@open-pencil/scene-graph'
 
 /**
@@ -11,17 +15,26 @@ import type { SceneNode } from '@open-pencil/scene-graph'
  * that are referenced by a node but not yet loaded in the current runtime.
  */
 export function useNodeFontStatus(node: () => SceneNode | null | undefined) {
+  const revision = ref(0)
+  if (getCurrentScope()) {
+    onScopeDispose(fontResolver.subscribe(() => revision.value++))
+  }
   const missingFonts = computed(() => {
+    void revision.value
     const n = node()
     if (n?.type !== 'TEXT') return []
 
-    const families = new Set<string>()
-    families.add(n.fontFamily || DEFAULT_FONT_FAMILY)
-    for (const run of n.styleRuns) {
-      if (run.style.fontFamily) families.add(run.style.fontFamily)
-    }
-
-    return [...families].filter((f) => !fontManager.isLoaded(f))
+    return [
+      ...new Set(
+        collectNodeFontFaces(n)
+          .filter(
+            ({ family, style }) =>
+              !fontManager.isStyleLoaded(family, style) &&
+              fontResolver.state(fontFaceDemand(family, style)).state !== 'loading'
+          )
+          .map(({ family }) => family)
+      )
+    ]
   })
 
   const hasMissingFonts = computed(() => missingFonts.value.length > 0)

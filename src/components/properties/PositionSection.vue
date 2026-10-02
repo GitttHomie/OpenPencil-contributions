@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { computed } from 'vue'
+
 import { PositionControlsRoot, useI18n } from '@open-pencil/vue'
 
 import { useEditorStore } from '@/app/editor/active-store'
@@ -7,9 +9,13 @@ import IconButton from '@/components/ui/button/IconButton.vue'
 import Tip from '@/components/ui/overlay/Tip.vue'
 import PanelGrid from '@/components/ui/panel/PanelGrid.vue'
 import PanelSection from '@/components/ui/panel/PanelSection.vue'
+import AppCheckbox from '@/components/ui/toggle/AppCheckbox.vue'
 
 const { panels } = useI18n()
 const store = useEditorStore()
+const canAlignVertices = computed(
+  () => (store.state.nodeEditState?.selectedVertexIndices.size ?? 0) >= 2
+)
 
 function handleAlign(
   nodeAlign: (axis: 'horizontal' | 'vertical', pos: 'min' | 'center' | 'max') => void,
@@ -27,14 +33,35 @@ function handleAlign(
 
 <template>
   <PositionControlsRoot
-    v-slot="{ active, isMulti, xValue, yValue, wValue, hValue, rotationValue, actions }"
+    v-slot="{
+      active,
+      isMulti,
+      xValue,
+      yValue,
+      wValue,
+      hValue,
+      rotationValue,
+      canPosition,
+      canExclude,
+      excluded,
+      actions
+    }"
   >
     <PanelSection v-if="active" :label="panels.position">
+      <label v-if="canExclude" class="mb-2 flex items-center gap-2 text-xs">
+        <AppCheckbox
+          :model-value="excluded"
+          :aria-label="panels.excludeFromAutoLayout"
+          @update:model-value="actions.setExcluded"
+        />
+        {{ panels.excludeFromAutoLayout }}
+      </label>
       <div role="toolbar" :aria-label="panels.position" class="mb-1.5 flex justify-between">
         <div class="flex gap-0.5">
           <IconButton
             :label="panels.alignLeft"
             size="xs"
+            :disabled="!canPosition && !canAlignVertices"
             @click="handleAlign(actions.align, 'horizontal', 'min')"
           >
             <icon-lucide-align-start-vertical class="size-3.5" />
@@ -42,6 +69,7 @@ function handleAlign(
           <IconButton
             :label="panels.alignCenterHorizontally"
             size="xs"
+            :disabled="!canPosition && !canAlignVertices"
             @click="handleAlign(actions.align, 'horizontal', 'center')"
           >
             <icon-lucide-align-center-vertical class="size-3.5" />
@@ -49,6 +77,7 @@ function handleAlign(
           <IconButton
             :label="panels.alignRight"
             size="xs"
+            :disabled="!canPosition && !canAlignVertices"
             @click="handleAlign(actions.align, 'horizontal', 'max')"
           >
             <icon-lucide-align-end-vertical class="size-3.5" />
@@ -58,6 +87,7 @@ function handleAlign(
           <IconButton
             :label="panels.alignTop"
             size="xs"
+            :disabled="!canPosition && !canAlignVertices"
             @click="handleAlign(actions.align, 'vertical', 'min')"
           >
             <icon-lucide-align-start-horizontal class="size-3.5" />
@@ -65,6 +95,7 @@ function handleAlign(
           <IconButton
             :label="panels.alignCenterVertically"
             size="xs"
+            :disabled="!canPosition && !canAlignVertices"
             @click="handleAlign(actions.align, 'vertical', 'center')"
           >
             <icon-lucide-align-center-horizontal class="size-3.5" />
@@ -72,6 +103,7 @@ function handleAlign(
           <IconButton
             :label="panels.alignBottom"
             size="xs"
+            :disabled="!canPosition && !canAlignVertices"
             @click="handleAlign(actions.align, 'vertical', 'max')"
           >
             <icon-lucide-align-end-horizontal class="size-3.5" />
@@ -80,10 +112,11 @@ function handleAlign(
       </div>
 
       <PanelGrid :columns="2">
-        <Tip :label="panels.xAxis">
+        <Tip :label="canPosition ? panels.xAxis : panels.positionAutoLayout">
           <NumberField
             icon="X"
             data-property="x"
+            :disabled="!canPosition"
             :aria-label="panels.xAxis"
             :model-value="xValue"
             @update:model-value="actions.updateProp('x', $event)"
@@ -91,10 +124,11 @@ function handleAlign(
             @cancel="actions.cancelProp('x')"
           />
         </Tip>
-        <Tip :label="panels.yAxis">
+        <Tip :label="canPosition ? panels.yAxis : panels.positionAutoLayout">
           <NumberField
             icon="Y"
             data-property="y"
+            :disabled="!canPosition"
             :aria-label="panels.yAxis"
             :model-value="yValue"
             @update:model-value="actions.updateProp('y', $event)"

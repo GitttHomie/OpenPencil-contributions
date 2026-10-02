@@ -24,6 +24,14 @@ and actions like:
 
 ## Usage
 
+`canPosition` indicates whether every selected node can be positioned freely.
+`canExclude` indicates whether all selected nodes have auto-layout parents.
+`excluded` is `true`, `false`, or `'indeterminate'` for mixed positioning.
+Call `setExcluded(boolean)` to change the selection's participation in one undo step.
+Position eligibility updates when the parent layout changes; in-flow X/Y updates and manual alignment are ignored.
+
+Excluded children follow their constraints when Hug or Fill changes their parent's size. Custom layout implementations can use `constrainedChildRect` from `@open-pencil/scene-graph/resize`; its optional sixth argument, `roundToPixels`, defaults to `true`. Pass `false` to retain fractional positions and sizes during repeated layout passes.
+
 ```ts
 import { usePosition } from '@open-pencil/vue'
 

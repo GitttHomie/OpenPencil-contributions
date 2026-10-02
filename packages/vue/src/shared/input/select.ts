@@ -1,6 +1,6 @@
 import { getNodeEditState, handleNodeEditDown } from '#vue/shared/input/vector'
 export { resolveHit } from '#vue/shared/input/select/hit'
-import { resolveHit } from '#vue/shared/input/select/hit'
+import { resolveHit, resolveLabelHit } from '#vue/shared/input/select/hit'
 export { updateHoverCursor } from '#vue/shared/input/select/hover'
 import type { Editor } from '@open-pencil/core/editor'
 import type { SceneNode } from '@open-pencil/scene-graph'
@@ -39,15 +39,18 @@ export function handleSelectDown(
 
   if (editor.state.editingTextId) editor.commitTextEdit()
 
-  if (tryStartRotation(cx, cy)) return
+  const labelHit = resolveLabelHit(cx, cy, fns)
+  if (!labelHit) {
+    if (tryStartRotation(cx, cy)) return
 
-  const resizeDrag = tryStartResize(cx, cy, editor)
-  if (resizeDrag) {
-    setDrag(resizeDrag)
-    return
+    const resizeDrag = tryStartResize(cx, cy, editor)
+    if (resizeDrag) {
+      setDrag(resizeDrag)
+      return
+    }
   }
 
-  const hit = resolveHit(cx, cy, editor, fns)
+  const hit = labelHit ?? resolveHit(cx, cy, editor, fns)
   if (!hit) {
     if (!editor.state.enteredContainerId) {
       editor.clearSelection()

@@ -16,6 +16,7 @@ import {
 import { nextTick } from 'vue'
 
 import { useRetainedPopup } from '#vue/lifecycle/retention/popup'
+import { deferFontListMeasurements } from '#vue/primitives/FontPicker/resize'
 import type { FontPickerUI } from '#vue/primitives/FontPicker/types'
 import {
   useFontPicker,
@@ -101,12 +102,14 @@ const { portalActive } = useRetainedPopup(open)
 
         <ComboboxViewport :class="ui?.viewport ?? 'max-h-72 overflow-y-auto'">
           <ComboboxVirtualizer
-            v-slot="{ option }"
+            v-slot="{ option, virtualizer }"
             :options="filtered"
             :text-content="(option: FontFamilyOption) => option.family"
             :estimate-size="36"
           >
             <ComboboxItem
+              @vue:mounted="deferFontListMeasurements(virtualizer)"
+              @vue:updated="deferFontListMeasurements(virtualizer)"
               :value="option.family"
               :class="ui?.item"
               :style="{ fontFamily: `'${option.family}', sans-serif` }"

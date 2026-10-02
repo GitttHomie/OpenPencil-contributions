@@ -41,6 +41,9 @@ accepts numbers, parentheses, and `+ - * /`; it never evaluates JavaScript.
 Arrow keys step by `step`. Shift multiplies the step by 10 and Alt multiplies it by 0.1. Enter
 commits and Escape restores the interaction-start value.
 
+Pointer scrubbing snaps to multiples of `step` (1 by default), including when the starting value
+is fractional. Typed values can retain decimals; cancelling or undoing restores the exact original value.
+
 ## Example
 
 ```vue twoslash

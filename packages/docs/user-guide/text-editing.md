@@ -62,6 +62,12 @@ The **B / I / U / S** toggle buttons in the Typography section of the properties
 
 ## Font Picker
 
+Changing fonts commits your choice immediately while the font loads. OpenPencil keeps the current weight and italic style when available, otherwise it selects the nearest available style. The weight menu uses the installed or online font catalog; a family with only Regular, such as Abril Fatface, has a read-only weight control and disabled Bold and Italic actions. Deselecting the text does not cancel your choice, and Undo restores the family and style together. Online previews download when you hover a font in the picker.
+
+Auto-sized text and its Hug parents update to the font's measured dimensions when loading finishes. Auto-height text keeps its chosen width, and fixed text boxes keep their dimensions.
+
+Drag the font-size value to adjust it in whole-number increments; you can still type a fractional size directly.
+
 Open the font picker in the Typography section of the properties panel to change the font family. The picker features:
 
 - **Search filter** — type to narrow the font list
@@ -95,4 +101,5 @@ Expand the warning to see every affected face and its active substitute. Use **S
 - The font list is preloaded at startup so the picker opens without delay.
 - IME input (Chinese, Japanese, Korean) is fully supported.
 - Rich text formatting is preserved when opening and saving .fig files.
+- Text created in OpenPencil retains its wrapping, alignment, and automatic line height when reopened. Older OpenPencil files with approximate saved text outlines are laid out again using their text settings.
 - See [Components](./components) for how text overrides work in component instances.

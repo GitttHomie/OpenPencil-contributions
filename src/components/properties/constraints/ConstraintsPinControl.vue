@@ -109,9 +109,20 @@ function activate(pin: PinItem, event: MouseEvent) {
         :class="pinStyles(pin).pin()"
         @click="activate(pin, $event)"
       >
-        <span :class="pinStyles(pin).pinMark()" />
+        <span v-if="pin.edge !== 'center'" :class="pinStyles(pin).pinMark()" />
       </button>
     </Tip>
+    <!-- Separate hit areas keep both axes clickable; their marks share one center. -->
+    <template v-for="pin in pins" :key="`mark-${pin.position}`">
+      <span
+        v-if="pin.edge === 'center'"
+        aria-hidden="true"
+        data-slot="center-mark"
+        :data-axis="pin.axis"
+        :data-active="pin.active || undefined"
+        :class="pinStyles(pin).pinMark()"
+      />
+    </template>
     <span
       v-if="horizontalPins.scale || verticalPins.scale"
       data-slot="scale-badge"

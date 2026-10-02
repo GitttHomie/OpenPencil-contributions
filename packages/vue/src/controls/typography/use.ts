@@ -1,20 +1,21 @@
-import {
-  TYPOGRAPHY_WEIGHTS,
-  createTypographyActions,
-  createTypographyState
-} from '#vue/controls/typography/actions'
+import { createTypographyActions, createTypographyState } from '#vue/controls/typography/actions'
+import { useFontStyleOptions } from '#vue/controls/typography/styles'
 import { useEditor } from '#vue/editor/context'
 
 /**
  * Options for {@link useTypography}.
  */
 export interface TypographyFontLoader {
-  load: (family: string, style: string) => Promise<unknown>
+  load: (family: string, style: string, characters?: string) => Promise<unknown>
+  /** Available styles from the host's local or online catalog. */
+  styles?: (family: string) => readonly string[]
+  /** Populate style metadata without downloading font files. */
+  loadStyles?: (family: string) => Promise<void>
 }
 
 export interface UseTypographyOptions {
   /**
-   * Optional font loader invoked before changing family or weight.
+   * Optional font loader started when changing family or weight.
    */
   fontLoader?: TypographyFontLoader
 }
@@ -28,11 +29,20 @@ export function useTypography(options: UseTypographyOptions = {}) {
   const editor = useEditor()
   const typographyState = createTypographyState(editor)
   const actions = createTypographyActions({ editor, ...typographyState, options })
+  const styleOptions = useFontStyleOptions(typographyState.node, options.fontLoader)
 
   return {
     editor,
     ...typographyState,
-    weights: TYPOGRAPHY_WEIGHTS,
+    get weights() {
+      return styleOptions.weights.value
+    },
+    get canToggleBold() {
+      return styleOptions.canToggleBold.value
+    },
+    get canToggleItalic() {
+      return styleOptions.canToggleItalic.value
+    },
     ...actions
   }
 }

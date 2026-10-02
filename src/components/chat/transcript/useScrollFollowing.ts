@@ -20,11 +20,12 @@ export function useScrollFollowing(
   })
 
   function scheduleFollow() {
-    if (!following.value || frame !== undefined) return
+    if (frame !== undefined) return
     frame = requestAnimationFrame(() => {
       frame = undefined
-      if (!following.value || !viewport.value) return
-      viewport.value.scrollTop = viewport.value.scrollHeight
+      if (following.value && viewport.value) {
+        viewport.value.scrollTop = viewport.value.scrollHeight
+      }
       measure()
     })
   }
@@ -64,7 +65,6 @@ export function useScrollFollowing(
 
   useResizeObserver([viewport, content], () => {
     scheduleFollow()
-    measure()
   })
   watch(submitted, (value) => {
     if (value) resumeFollowing()

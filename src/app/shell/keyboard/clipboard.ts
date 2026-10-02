@@ -79,18 +79,18 @@ export function bindEditorClipboard(store: EditorStore) {
 
     const html = e.clipboardData?.getData('text/html') ?? ''
     if (html) {
-      void pasteClipboardHTML(store, html, cursorPos)
+      void pasteClipboardHTML(store, html)
       return
     }
 
     if (isTauri()) {
-      void tauriSystemClipboard.paste(store, cursorPos)
+      void tauriSystemClipboard.paste(store)
       return
     }
 
     const memoryHTML = getInMemoryClipboardHTML()
     if (memoryHTML) {
-      void pasteClipboardHTML(store, memoryHTML, cursorPos)
+      void pasteClipboardHTML(store, memoryHTML)
     }
   })
 }

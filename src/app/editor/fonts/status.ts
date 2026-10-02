@@ -1,7 +1,12 @@
 import { computed, ref } from 'vue'
 
 import { computeAllLayouts } from '@open-pencil/core/layout'
-import { documentFontStatus, fontManager, fontResolver } from '@open-pencil/core/text'
+import {
+  documentFontStatus,
+  fontFaceDemand,
+  fontManager,
+  fontResolver
+} from '@open-pencil/core/text'
 import { useEditorEvent } from '@open-pencil/vue'
 
 import { useEditorStore } from '@/app/editor/active-store'
@@ -25,7 +30,13 @@ export function useDocumentFontStatus() {
 
   const status = computed(() => {
     void revision.value
-    return documentFontStatus(editor.graph, editor.state.currentPageId)
+    const result = documentFontStatus(editor.graph, editor.state.currentPageId)
+    return {
+      ...result,
+      issues: result.issues.filter(
+        (face) => fontResolver.state(fontFaceDemand(face.family, face.style)).state !== 'loading'
+      )
+    }
   })
 
   async function retry() {

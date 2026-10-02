@@ -13,13 +13,16 @@ import {
   SelectViewport
 } from 'reka-ui'
 import { tv } from 'tailwind-variants'
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
+import type { ComponentPublicInstance } from 'vue'
 
 import { useRetainedPopup } from '@open-pencil/vue'
 
 import type { ComponentUI } from '@/components/ui/types'
 import theme from '@/theme/select/app'
 import type { AppSelectTheme } from '@/theme/select/app'
+
+import { useTriggerWidth } from './useTriggerWidth'
 
 interface AppSelectProps<TValue extends string | number> {
   label?: string
@@ -34,6 +37,8 @@ const { options, label, placeholder, ui } = defineProps<AppSelectProps<T>>()
 const modelValue = defineModel<T>({ required: true })
 const styles = tv(theme)()
 const { open: popupOpen, portalActive } = useRetainedPopup()
+const triggerRef = ref<ComponentPublicInstance>()
+const triggerWidth = useTriggerWidth(triggerRef, popupOpen)
 const selectedLabel = computed(
   () => options.find((option) => option.value === modelValue.value)?.label
 )
@@ -41,11 +46,18 @@ const selectedLabel = computed(
 
 <template>
   <SelectRoot v-model="modelValue" v-model:open="popupOpen">
-    <SelectTrigger v-if="$slots.trigger" as-child v-bind="$attrs" :aria-label="label">
+    <SelectTrigger
+      v-if="$slots.trigger"
+      ref="triggerRef"
+      as-child
+      v-bind="$attrs"
+      :aria-label="label"
+    >
       <slot name="trigger" />
     </SelectTrigger>
     <SelectTrigger
       v-else
+      ref="triggerRef"
       v-bind="$attrs"
       :class="styles.trigger({ class: ui?.trigger })"
       :aria-label="label"
@@ -60,6 +72,7 @@ const selectedLabel = computed(
         position="popper"
         :side-offset="2"
         :class="styles.content({ class: ui?.content })"
+        :style="{ minWidth: triggerWidth ? `${triggerWidth}px` : undefined }"
       >
         <SelectScrollUpButton class="flex items-center justify-center py-0.5 text-muted">
           <icon-lucide-chevron-up class="size-3.5" />

@@ -27,8 +27,23 @@ export const providerFactories = {
   fontshare: providers.fontshare
 } satisfies Record<WebFontProviderId, () => WebFontProvider>
 
-export async function createProviderUnifont(provider: WebFontProviderId): Promise<WebUnifont> {
-  return createUnifont([providerFactories[provider]()], { throwOnError: false })
+export async function createProviderUnifont(
+  provider: WebFontProviderId,
+  onCatalog?: (data: unknown) => void
+): Promise<WebUnifont> {
+  const cache = new Map<string, unknown>()
+  return createUnifont([providerFactories[provider]()], {
+    throwOnError: false,
+    storage: {
+      getItem: (key) => cache.get(key) ?? null,
+      setItem(key, value) {
+        cache.set(key, value)
+        if (key.endsWith(`${provider}:meta.json`) && typeof value === 'object') {
+          onCatalog?.(value.data)
+        }
+      }
+    }
+  })
 }
 
 export function isRemoteFontSource(

@@ -22,8 +22,16 @@ const constraintsTheme = {
       horizontalTrailing: { pin: 'top-1/2 right-1 h-7 w-4 -translate-y-1/2', pinMark: 'h-5 w-0.5' },
       verticalLeading: { pin: 'top-1 left-1/2 h-4 w-7 -translate-x-1/2', pinMark: 'h-0.5 w-5' },
       verticalTrailing: { pin: 'bottom-1 left-1/2 h-4 w-7 -translate-x-1/2', pinMark: 'h-0.5 w-5' },
-      horizontalCenter: { pin: 'top-[21px] left-[27px] h-6 w-4', pinMark: 'h-4 w-0.5' },
-      verticalCenter: { pin: 'top-[25px] left-[33px] h-4 w-6', pinMark: 'h-0.5 w-4' }
+      horizontalCenter: {
+        pin: 'bottom-1/2 left-1/2 h-3 w-6 -translate-x-1/2 border-transparent bg-transparent',
+        pinMark:
+          'pointer-events-none absolute top-1/2 left-1/2 z-10 h-4 w-0.5 -translate-x-1/2 -translate-y-1/2 text-muted data-[active]:text-accent'
+      },
+      verticalCenter: {
+        pin: 'top-1/2 left-1/2 h-3 w-6 -translate-x-1/2 border-transparent bg-transparent',
+        pinMark:
+          'pointer-events-none absolute top-1/2 left-1/2 z-10 h-0.5 w-4 -translate-x-1/2 -translate-y-1/2 text-muted data-[active]:text-accent'
+      }
     }
   },
   defaultVariants: {

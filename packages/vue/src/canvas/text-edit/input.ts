@@ -1,4 +1,4 @@
-import type { Editor } from '@open-pencil/core/editor'
+import { getNodeEditCapability, type Editor } from '@open-pencil/core/editor'
 import type { SceneNode } from '@open-pencil/scene-graph'
 
 import type { CanvasLabelKind } from '#vue/canvas/labels/edit'
@@ -15,6 +15,7 @@ type TextEditInputOptions = {
   hitTestInScope: HitTest
   hitTestSectionTitle: (cx: number, cy: number) => SceneNode | null
   hitTestComponentLabel: (cx: number, cy: number) => SceneNode | null
+  hitTestFrameTitle?: (cx: number, cy: number) => SceneNode | null
   getClickCount: () => number
   wasSelectedBeforeClickSequence: (id: string) => boolean
   onEditCanvasLabel?: (kind: CanvasLabelKind, node: SceneNode) => void
@@ -28,6 +29,7 @@ export function createTextEditInput(options: TextEditInputOptions) {
     hitTestInScope,
     hitTestSectionTitle,
     hitTestComponentLabel,
+    hitTestFrameTitle,
     getClickCount,
     wasSelectedBeforeClickSequence,
     onEditCanvasLabel,
@@ -89,12 +91,25 @@ export function createTextEditInput(options: TextEditInputOptions) {
     return null
   }
 
-  function startSectionTitleRename(cx: number, cy: number): boolean {
-    const sectionTitle = hitTestSectionTitle(cx, cy)
-    if (sectionTitle?.type !== 'SECTION') return false
-    editor.select([sectionTitle.id])
-    onEditCanvasLabel?.('section-title', sectionTitle)
-    return true
+  function startLabelRename(cx: number, cy: number): boolean {
+    const labels: [CanvasLabelKind, SceneNode | null][] = [
+      ['section-title', hitTestSectionTitle(cx, cy)],
+      ['component-label', hitTestComponentLabel(cx, cy)],
+      ['frame-title', hitTestFrameTitle?.(cx, cy) ?? null]
+    ]
+    for (const [kind, node] of labels) {
+      if (!node) continue
+      if (
+        !node.locked &&
+        getNodeEditCapability(editor.graph, node.id).editable &&
+        onEditCanvasLabel
+      ) {
+        editor.select([node.id])
+        onEditCanvasLabel(kind, node)
+      }
+      return true
+    }
+    return false
   }
 
   function handleContainerDoubleClick(
@@ -124,7 +139,7 @@ export function createTextEditInput(options: TextEditInputOptions) {
     if (editor.state.editingTextId) return
 
     const { cx, cy } = getCoords(e)
-    if (startSectionTitleRename(cx, cy)) return
+    if (startLabelRename(cx, cy)) return
 
     const selectedId =
       editor.state.selectedIds.size === 1 ? [...editor.state.selectedIds][0] : undefined

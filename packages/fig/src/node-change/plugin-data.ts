@@ -23,6 +23,7 @@ import {
 
 export const OPEN_PENCIL_PLUGIN_ID = 'open-pencil'
 export const TEXT_DIRECTION_PLUGIN_KEY = 'textDirection'
+export const TEXT_LAYOUT_PLUGIN_KEY = 'textLayout'
 export const LAYOUT_DIRECTION_PLUGIN_KEY = 'layoutDirection'
 export const NODE_TYPE_PLUGIN_KEY = 'nodeType'
 export const BOUND_VARIABLES_PLUGIN_KEY = 'boundVariables'

@@ -352,5 +352,7 @@
   "strokeDashLength": "Trattino",
   "strokeDashGap": "Spazio",
   "lineHeightMode": "Modalità altezza riga",
-  "unresolvedVariable": "Valore della variabile non disponibile"
+  "unresolvedVariable": "Valore della variabile non disponibile",
+  "excludeFromAutoLayout": "Escludi dal layout automatico",
+  "positionAutoLayout": "La posizione è controllata dal layout automatico del genitore"
 }

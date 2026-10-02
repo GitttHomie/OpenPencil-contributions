@@ -152,7 +152,13 @@ onMounted(() => {
                 :disabled="busyAction !== null || !canRequestLocalFonts"
                 @click="requestAccess"
               >
-                {{ busyAction === 'access' ? common.requesting : common.allow }}
+                {{
+                  accessState === 'granted'
+                    ? common.enabled
+                    : busyAction === 'access'
+                      ? common.requesting
+                      : common.allow
+                }}
               </AppButton>
             </div>
 

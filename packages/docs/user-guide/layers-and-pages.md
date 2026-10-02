@@ -26,6 +26,10 @@ Click the eye icon next to any layer to hide or show it on the canvas. Hidden no
 
 Double-click a layer name to rename it inline. Press <kbd>Enter</kbd> or click away to commit, <kbd>Escape</kbd> to cancel.
 
+You can also double-click a visible frame, component, instance, or section name on the canvas to rename it. Select a frame to show its canvas name.
+
+Drag a canvas name to move its container and contents together. Names take priority over overlapping resize and rotation handles; locked containers stay in place.
+
 ### Selection Sync
 
 Clicking a layer in the panel selects the corresponding node on the canvas, and vice versa.

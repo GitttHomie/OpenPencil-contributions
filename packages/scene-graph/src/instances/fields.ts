@@ -21,6 +21,7 @@ export const INSTANCE_SYNC_PROPS: (keyof SceneNode)[] = [
   'effects',
   'opacity',
   'cornerRadius',
+  'cornerSmoothing',
   'topLeftRadius',
   'topRightRadius',
   'bottomRightRadius',

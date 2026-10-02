@@ -64,7 +64,7 @@ export async function createLayoutModeScene(page: Page) {
     editor.runLayoutForNode(outer.id)
     editor.select([frame.id])
     editor.requestRender()
-    return { frame: frame.id, first: first.id, second: second.id }
+    return { outer: outer.id, frame: frame.id, first: first.id, second: second.id }
   })
   await canvas.waitForRender()
   return {
@@ -73,6 +73,12 @@ export async function createLayoutModeScene(page: Page) {
     async select(nodeIds: string[]) {
       await page.evaluate((ids) => window.openPencil?.getStore?.().select(ids), nodeIds)
       await page.getByTestId('canvas-element').focus()
+    },
+    async setLayoutMode(id: string, mode: 'NONE' | 'HORIZONTAL' | 'VERTICAL' | 'GRID') {
+      await page.evaluate(
+        ({ id, mode }) => window.openPencil?.getStore?.().setLayoutMode(id, mode),
+        { id, mode }
+      )
     },
     async read() {
       return page.evaluate(() => {
@@ -88,6 +94,9 @@ export async function createLayoutModeScene(page: Page) {
             width: node.width,
             height: node.height,
             layoutMode: node.layoutMode,
+            layoutPositioning: node.layoutPositioning,
+            layoutGrow: node.layoutGrow,
+            layoutAlignSelf: node.layoutAlignSelf,
             primaryAxisSizing: node.primaryAxisSizing,
             counterAxisSizing: node.counterAxisSizing,
             itemSpacing: node.itemSpacing,

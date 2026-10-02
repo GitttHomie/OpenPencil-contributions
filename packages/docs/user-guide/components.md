@@ -19,7 +19,11 @@ Select a frame or group and press <kbd>⌥</kbd><kbd>⌘</kbd><kbd>K</kbd> (<kbd
 
 If you select multiple nodes, they're wrapped in a new component positioned at their bounding box.
 
-Components display a purple label with a diamond icon above them.
+Components display a purple label with a filled diamond icon above them. Instances use an outlined diamond, both on the canvas and in the Layers panel.
+
+Copying and pasting a main component creates a linked instance. If the destination would nest a component inside its own definition, directly or through another component, the instance is pasted into the nearest safe ancestor instead. Pasting into another document imports the definition as a dependency.
+
+Double-click a component or instance label on the canvas to rename it. Press <kbd>Enter</kbd> to commit or <kbd>Escape</kbd> to cancel.
 
 ## Component Sets and Variants
 

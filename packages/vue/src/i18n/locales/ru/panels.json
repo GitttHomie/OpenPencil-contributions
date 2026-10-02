@@ -352,5 +352,7 @@
   "strokeDashLength": "Штрих",
   "strokeDashGap": "Промежуток",
   "lineHeightMode": "Режим межстрочного интервала",
-  "unresolvedVariable": "Значение переменной недоступно"
+  "unresolvedVariable": "Значение переменной недоступно",
+  "excludeFromAutoLayout": "Исключить из автокомпоновки",
+  "positionAutoLayout": "Положение определяется автокомпоновкой родительского элемента"
 }

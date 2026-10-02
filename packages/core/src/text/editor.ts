@@ -5,6 +5,7 @@ import type { Rect } from '@open-pencil/scene-graph/primitives'
 import { resolveNodeTextDirection } from '@open-pencil/scene-graph/text-direction'
 
 import type { SkiaRenderer } from '#core/canvas'
+import { PARAGRAPH_INPUT_KEYS, type ParagraphNode } from '#core/canvas/text/paragraph-inputs'
 
 export interface TextCaret {
   x: number
@@ -27,6 +28,7 @@ export class TextEditor {
   private renderer: SkiaRenderer | null = null
   private _state: TextEditorState | null = null
   private paragraphNode: SceneNode | null = null
+  private paragraphInputs: ParagraphNode[keyof ParagraphNode][] = []
   caretVisible = true
 
   constructor(ck: CanvasKit) {
@@ -93,7 +95,10 @@ export class TextEditor {
       state &&
       this.renderer &&
       this.paragraphNode &&
-      state.paragraphFontGeneration !== this.renderer.fontGeneration
+      (state.paragraphFontGeneration !== this.renderer.fontGeneration ||
+        PARAGRAPH_INPUT_KEYS.some(
+          (key, index) => this.paragraphInputs[index] !== this.paragraphNode?.[key]
+        ))
     ) {
       this.rebuildParagraph(this.paragraphNode)
     }
@@ -131,6 +136,7 @@ export class TextEditor {
     this._state.paragraph?.delete()
     this._state = null
     this.paragraphNode = null
+    this.paragraphInputs = []
     return result
   }
 
@@ -140,8 +146,11 @@ export class TextEditor {
     s.paragraph?.delete()
     this.paragraphNode = node
     s.textDirection = resolveNodeTextDirection(node)
-    s.paragraph = this.renderer.buildParagraph({ ...node, text: s.text })
+    s.paragraph = this.renderer.buildParagraph({ ...node, text: s.text }, undefined, {
+      halfLeading: true
+    })
     s.paragraphFontGeneration = this.renderer.fontGeneration
+    this.paragraphInputs = PARAGRAPH_INPUT_KEYS.map((key) => node[key])
   }
 
   hasSelection(): boolean {
@@ -188,7 +197,7 @@ export class TextEditor {
   }
 
   setCursorAt(x: number, y: number, extend = false): void {
-    const s = this._state
+    const s = this.state
     if (!s?.paragraph) return
     const pos = s.paragraph.getGlyphPositionAtCoordinate(x, this.paragraphY(y)).pos
     if (extend) {
@@ -200,7 +209,7 @@ export class TextEditor {
   }
 
   selectLine(pos: number): void {
-    const s = this._state
+    const s = this.state
     if (!s?.paragraph) return
     const metrics = this.lineMetricsAt(pos)
     if (!metrics) return
@@ -209,14 +218,14 @@ export class TextEditor {
   }
 
   selectWordAt(x: number, y: number): void {
-    const s = this._state
+    const s = this.state
     if (!s?.paragraph) return
     const pos = s.paragraph.getGlyphPositionAtCoordinate(x, this.paragraphY(y)).pos
     this.selectWord(pos)
   }
 
   selectLineAt(x: number, y: number): void {
-    const s = this._state
+    const s = this.state
     if (!s?.paragraph) return
     const pos = s.paragraph.getGlyphPositionAtCoordinate(x, this.paragraphY(y)).pos
     this.selectLine(pos)
@@ -346,7 +355,7 @@ export class TextEditor {
   }
 
   getCaretRect(): TextCaret | null {
-    const s = this._state
+    const s = this.state
     if (!s?.paragraph) return null
 
     const text = s.text
@@ -405,7 +414,7 @@ export class TextEditor {
   }
 
   getSelectionRects(): Rect[] {
-    const s = this._state
+    const s = this.state
     if (!s?.paragraph) return []
     const range = this.getSelectionRange()
     if (!range) return []

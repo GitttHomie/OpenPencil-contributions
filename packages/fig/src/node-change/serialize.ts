@@ -14,6 +14,7 @@ import {
   removePluginData,
   LAYOUT_DIRECTION_PLUGIN_KEY,
   TEXT_DIRECTION_PLUGIN_KEY,
+  TEXT_LAYOUT_PLUGIN_KEY,
   upsertPluginData,
   OPEN_PENCIL_PLUGIN_ID
 } from './plugin-data'
@@ -203,6 +204,11 @@ function serializeTextProps(
   runtime: FigNodeChangeExportRuntime
 ): void {
   upsertPluginData(node, TEXT_DIRECTION_PLUGIN_KEY, node.textDirection)
+  if (!node.derivedTextGlyphs?.length) {
+    // The generated outline fallback is not a paragraph layout: it does not
+    // encode wrapping, alignment or styled runs. Reopen these with live text.
+    upsertPluginData(node, TEXT_LAYOUT_PLUGIN_KEY, 'paragraph')
+  }
   nc.fontSize = node.fontSize
   nc.fontName = {
     family: normalizeFontFamily(node.fontFamily),

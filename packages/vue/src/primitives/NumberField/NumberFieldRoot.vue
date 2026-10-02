@@ -233,7 +233,7 @@ function startScrub(event: PointerEvent) {
     }
     if (!hasMoved) return
     accumulated += dx * stepValue.value * sensitivity
-    updateValue(accumulated)
+    updateValue(Math.round(accumulated / stepValue.value) * stepValue.value)
   })
 
   const finish = (cancelled: boolean) => {

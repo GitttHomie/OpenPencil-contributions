@@ -81,6 +81,7 @@ async function getTauriFonts(): Promise<TauriFontFamily[]> {
       .then(({ invoke }) => invoke<TauriFontFamily[]>('list_system_fonts'))
       .then((fonts) => {
         tauriFontsCache = fonts
+        fontManager.setHostFontCatalog(fonts)
         return fonts
       })
       .catch(() => [])
@@ -99,6 +100,12 @@ export function preloadFonts(): void {
 
 export function localFontAccessState(): LocalFontAccessState {
   return isTauri() ? 'granted' : fontManager.localAccessState()
+}
+
+export function localFontStyles(family: string): string[] {
+  return isTauri()
+    ? (tauriFontsCache?.find((font) => font.family === family)?.styles ?? [])
+    : fontManager.localStyles(family)
 }
 
 export async function requestLocalFontAccess(): Promise<FontFamilyOption[]> {

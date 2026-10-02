@@ -138,7 +138,14 @@ export function drawComponentLabels(
       path.lineTo(iconCx - iconR, iconCy)
       path.close()
       const immutablePath = path.detachAndDelete()
-      canvas.drawPath(immutablePath, r.auxFill)
+      if (node.type === 'INSTANCE') {
+        r.auxStroke.setColor(compColor)
+        r.auxStroke.setStrokeWidth(1.25)
+        r.auxStroke.setPathEffect(null)
+        canvas.drawPath(immutablePath, r.auxStroke)
+      } else {
+        canvas.drawPath(immutablePath, r.auxFill)
+      }
       immutablePath.delete()
     }
 

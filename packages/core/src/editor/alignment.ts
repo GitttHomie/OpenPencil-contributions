@@ -138,7 +138,7 @@ export function createAlignmentActions(ctx: EditorContext) {
     const nodes = nodeIds
       .map((id) => ctx.graph.getNode(id))
       .filter((n): n is SceneNode => n != null)
-    if (nodes.length === 0) return
+    if (nodes.length === 0 || nodes.some((node) => !canPositionNode(ctx, node))) return
 
     const originals = collectNodePositions(
       ctx,

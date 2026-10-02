@@ -28,11 +28,13 @@ The **Copy/Paste as** submenu offers additional clipboard formats for the select
 |--------|----------------|----------------------|
 | Copy | <kbd>⌘</kbd><kbd>C</kbd> | <kbd>Ctrl</kbd> + <kbd>C</kbd> |
 | Cut | <kbd>⌘</kbd><kbd>X</kbd> | <kbd>Ctrl</kbd> + <kbd>X</kbd> |
-| Paste here | <kbd>⌘</kbd><kbd>V</kbd> | <kbd>Ctrl</kbd> + <kbd>V</kbd> |
+| Paste | <kbd>⌘</kbd><kbd>V</kbd> | <kbd>Ctrl</kbd> + <kbd>V</kbd> |
 | Duplicate | <kbd>⌘</kbd><kbd>D</kbd> | <kbd>Ctrl</kbd> + <kbd>D</kbd> |
 | Delete | ⌫ | <kbd>Backspace</kbd> / Delete |
 
 Clipboard actions are disabled when nothing is selected (except Paste, which is available when the clipboard has content).
+
+Keyboard and Edit-menu paste center copied objects inside the selected container, independently of the last mouse position. If the destination has auto layout, it places the pasted objects in its flow. Pasting from the canvas context menu uses the clicked canvas position. Both preserve the copied objects' internal spacing.
 
 ## Z-Order
 

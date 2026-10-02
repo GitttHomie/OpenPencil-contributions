@@ -144,6 +144,7 @@ export function useCanvasInput(
     hitTestSectionTitle,
     hitTestComponentLabel,
     getClickCount,
+    hitTestFrameTitle,
     wasSelectedBeforeClickSequence: (id) => selectedIdsBeforeClickSequence.value.has(id),
     onEditCanvasLabel: canvasLabelEdit.start,
     setDrag

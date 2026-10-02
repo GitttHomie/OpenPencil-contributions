@@ -7,6 +7,7 @@ import { prepareClipboardImport } from '#core/clipboard/fig-import'
 import { computeAllLayouts } from '#core/layout'
 
 import { createClipboardAssetActions } from './clipboard/assets'
+import { createPastedTrees } from './clipboard/component-paste'
 import type { ClipboardSnapshot } from './clipboard/copy'
 import { createClipboardCopyActions } from './clipboard/copy'
 import { importClipboardDependencies } from './clipboard/dependencies'
@@ -128,7 +129,8 @@ export function createClipboardActions(ctx: EditorContext) {
         snapshot.images,
         dependencies.componentDependencies,
         cursorPos,
-        options
+        options,
+        snapshot.sourceRootId === ctx.graph.rootId
       )
     })
     await fontActions.loadFontsForNodes(created)
@@ -137,13 +139,10 @@ export function createClipboardActions(ctx: EditorContext) {
   async function pasteFromHTML(html: string, cursorPos?: Vector, options: PasteOptions = {}) {
     const openPencil = parseOpenPencilClipboard(html)
     if (openPencil) {
-      const created = pasteOpenPencilNodes(
-        openPencil.nodes,
-        openPencil.images,
-        [],
-        cursorPos,
-        options
-      )
+      let created: string[] = []
+      ctx.undo.runBatch('Paste', () => {
+        created = pasteOpenPencilNodes(openPencil.nodes, openPencil.images, [], cursorPos, options)
+      })
       await fontActions.loadFontsForNodes(created)
       return
     }
@@ -153,7 +152,17 @@ export function createClipboardActions(ctx: EditorContext) {
       const prevSelection = new Set(ctx.state.selectedIds)
       const replacementTargets = options.replaceSelection ? selectedReplacementTargets(ctx) : []
       const pasteTarget = replacementTargets[0]?.parentId ?? resolvePasteTarget(ctx)
-      const operation = prepareClipboardImport(figma.nodes, ctx.graph, pasteTarget, figma.blobs)
+      const operation = prepareClipboardImport(
+        figma.nodes,
+        ctx.graph,
+        pasteTarget,
+        figma.blobs,
+        0,
+        0,
+        {
+          componentsAsInstances: true
+        }
+      )
       let deliveryError: CommittedGraphEventError | undefined
       try {
         operation.commit()
@@ -163,6 +172,7 @@ export function createClipboardActions(ctx: EditorContext) {
       }
       const created = operation.plan.rootIds
       if (created.length === 0) return
+      placementActions.preparePastedRoots(created)
 
       if (replacementTargets.length > 0) {
         replaceTargetsWithCreated(
@@ -174,10 +184,8 @@ export function createClipboardActions(ctx: EditorContext) {
           operation
         )
       } else {
-        const { width: viewW, height: viewH } = ctx.getViewportSize()
-        const cx = cursorPos?.x ?? (-ctx.state.panX + viewW / 2) / ctx.state.zoom
-        const cy = cursorPos?.y ?? (-ctx.state.panY + viewH / 2) / ctx.state.zoom
-        placementActions.centerNodesAt(created, cx, cy)
+        const center = placementActions.getPasteCenter(pasteTarget, cursorPos)
+        placementActions.centerNodesAt(created, center.x, center.y)
         computeAllLayouts(ctx.graph, ctx.state.currentPageId)
         ctx.setSelectedIds(new Set(created))
         pushCreatedNodesUndo(created, prevSelection, 'Paste', operation)
@@ -197,47 +205,22 @@ export function createClipboardActions(ctx: EditorContext) {
     images: Map<string, Uint8Array>,
     dependencies: Array<SceneNode & { children?: SceneNode[] }> = [],
     cursorPos?: Vector,
-    options: PasteOptions = {}
+    options: PasteOptions = {},
+    reuseComponents = true
   ) {
     const prevSelection = new Set(ctx.state.selectedIds)
     const replacementTargets = options.replaceSelection ? selectedReplacementTargets(ctx) : []
     for (const [hash, bytes] of images) ctx.graph.images.set(hash, bytes)
 
-    const created: string[] = []
-    const copiedIds = new Map<string, string>()
-    const createNodeTree = (source: SceneNode & { children?: SceneNode[] }, parentId: string) => {
-      const { id: _id, childIds: _childIds, children = [], parentId: _parentId, ...rest } = source
-      const node = ctx.graph.createNode(source.type, parentId, {
-        ...structuredClone(rest),
-        x: source.x + 20,
-        y: source.y + 20,
-        childIds: []
-      })
-      copiedIds.set(source.id, node.id)
-      for (const child of children) createNodeTree(child, node.id)
-      return node.id
-    }
-
-    const pasteTarget = replacementTargets[0]?.parentId ?? resolvePasteTarget(ctx)
-    const dependencyRootIds: string[] = []
-    for (const dependency of dependencies)
-      dependencyRootIds.push(createNodeTree(dependency, ctx.state.currentPageId))
-    for (const node of nodes) created.push(createNodeTree(node, pasteTarget))
-    for (const id of copiedIds.values()) {
-      const node = ctx.graph.getNode(id)
-      if (!node) continue
-      const componentId = node.componentId ? copiedIds.get(node.componentId) : undefined
-      const instanceOverrides = {
-        self: node.instanceOverrides.self,
-        descendants: new Map(
-          [...node.instanceOverrides.descendants].map(([target, fields]) => [
-            copiedIds.get(target) ?? target,
-            fields
-          ])
-        )
-      }
-      ctx.graph.updateNode(id, { componentId: componentId ?? node.componentId, instanceOverrides })
-    }
+    const { created, dependencyRootIds, pasteTarget, canReplace } = createPastedTrees(
+      ctx.graph,
+      nodes,
+      dependencies,
+      ctx.state.currentPageId,
+      replacementTargets[0]?.parentId ?? resolvePasteTarget(ctx),
+      reuseComponents,
+      replacementTargets
+    )
     if (dependencyRootIds.length > 0) {
       const snapshots = collectSubtrees(ctx.graph, dependencyRootIds)
       ctx.undo.push({
@@ -247,8 +230,9 @@ export function createClipboardActions(ctx: EditorContext) {
       })
     }
     if (created.length === 0) return created
+    placementActions.preparePastedRoots(created)
 
-    if (replacementTargets.length > 0) {
+    if (replacementTargets.length > 0 && canReplace) {
       replaceTargetsWithCreated(
         ctx,
         placementActions.centerNodesAt,
@@ -259,7 +243,10 @@ export function createClipboardActions(ctx: EditorContext) {
       return created
     }
 
-    if (cursorPos) placementActions.centerNodesAt(created, cursorPos.x, cursorPos.y)
+    if (cursorPos || pasteTarget !== ctx.state.currentPageId) {
+      const center = placementActions.getPasteCenter(pasteTarget, cursorPos)
+      placementActions.centerNodesAt(created, center.x, center.y)
+    }
     computeAllLayouts(ctx.graph, ctx.state.currentPageId)
     ctx.setSelectedIds(new Set(created))
 

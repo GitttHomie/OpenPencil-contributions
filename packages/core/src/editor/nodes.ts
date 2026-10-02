@@ -76,7 +76,10 @@ export function createNodeActions(ctx: EditorContext) {
     ctx.undo.push({
       label,
       forward: () => {
-        ctx.graph.updateNode(id, nextChanges)
+        ctx.graph.updateNode(id, {
+          ...nextChanges,
+          ...textAutoResizeChanges(ctx.graph.getNode(id), changes)
+        })
         recordInstanceOverride(ctx.graph, id, Object.keys(nextChanges))
         runChangedLayout(id, nextChanges)
       },

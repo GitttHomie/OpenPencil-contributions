@@ -59,6 +59,20 @@ Each child in an auto-layout frame can have its own sizing mode:
 - **Fill** — stretches to fill available space in the parent
 - **Hug** — shrinks to fit the child's content
 
+Choosing Fill on a child switches the parent's corresponding Hug axis to Fixed at its current size. Choosing Hug on a parent switches filling children on that axis to Fixed. This avoids a circular dependency between the parent and child sizes; each sizing change and its automatic adjustments undo together.
+
+When adding auto layout to a reopened or imported frame, children enter the new flow instead of keeping their stored positions. Their free-positioning constraints remain saved and become available again if auto layout is removed or the child is excluded.
+
+## Excluding Children
+
+Select a child and enable **Exclude from auto layout** in the Position section. The child stays inside its parent at its current position and size, but no longer participates in flow spacing or the parent's Hug size. Fill dimensions become Fixed; the child's own Hug layout remains available. Disable the checkbox to return it to the flow at its layer-order position. Each change can be undone in one step.
+
+For children in the flow, X/Y show the calculated position and are disabled, along with manual alignment buttons. Excluded children have editable X/Y, manual alignment, and constraints. Constraints also appear for children of frames without auto layout; they do not appear for top-level canvas objects. These controls depend on the immediate parent, independently of the selected frame's own layout.
+
+Constraints on excluded children also follow layout-driven size changes. For example, a badge with Right and Top constraints keeps its offsets, including overhang outside the frame, when a Hug button grows or shrinks as you edit its label.
+
+For mixed selections, position editing is disabled if any selected child is in the flow. The exclusion checkbox appears when all selected nodes have auto-layout parents, and shows a mixed state when only some are excluded.
+
 ## Drag Reordering
 
 Within an auto-layout frame, drag a child to reorder it among its siblings. A visual insertion indicator shows where the child will be dropped.

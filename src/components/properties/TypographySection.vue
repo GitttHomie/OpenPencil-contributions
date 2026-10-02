@@ -3,7 +3,7 @@ import { computed } from 'vue'
 
 import { TypographyControlsRoot, useI18n } from '@open-pencil/vue'
 
-import { loadFont } from '@/app/editor/fonts'
+import { typographyFontLoader } from '@/app/editor/fonts/selection'
 import { appMenuShortcutLabel } from '@/app/shell/menu/shortcut'
 import FontPicker from '@/components/font-picker/FontPicker.vue'
 import FontSettingsPopover from '@/components/font-settings/FontSettingsPopover.vue'
@@ -21,7 +21,6 @@ import SegmentedControl from '@/components/ui/select/SegmentedControl.vue'
 import AppSwitch from '@/components/ui/toggle/AppSwitch.vue'
 
 const { panels, menu } = useI18n()
-const fontLoader = { load: loadFont }
 const alignmentOptions = computed(() => [
   { value: 'LEFT', label: panels.value.alignLeft },
   { value: 'CENTER', label: panels.value.alignCenterHorizontally },
@@ -55,7 +54,7 @@ function featureEnabled(features: Array<{ tag: string; enabled: boolean }>, tag:
 </script>
 
 <template>
-  <TypographyControlsRoot v-slot="ctx" :font-loader="fontLoader">
+  <TypographyControlsRoot v-slot="ctx" :font-loader="typographyFontLoader">
     <PanelSection v-if="ctx.node.value" :label="panels.typography">
       <SharedStyleField kind="text" :label="panels.textStyle" />
 
@@ -95,6 +94,11 @@ function featureEnabled(features: Array<{ tag: string; enabled: boolean }>, tag:
             :label="panels.fontWeight"
             :model-value="ctx.node.value.fontWeight"
             :options="ctx.weights"
+            :disabled="
+              ctx.weights.length <= 1 &&
+              ctx.weights.every((weight) => weight.value === ctx.node.value.fontWeight)
+            "
+            :placeholder="String(ctx.node.value.fontWeight)"
             @update:model-value="ctx.actions.setWeight(+$event)"
           />
         </PanelFieldGroup>
@@ -204,6 +208,7 @@ function featureEnabled(features: Array<{ tag: string; enabled: boolean }>, tag:
               :label="`${menu.bold} (${appMenuShortcutLabel('text.bold')})`"
               size="xs"
               :active="ctx.activeFormatting.value.includes('bold')"
+              :disabled="!ctx.canToggleBold"
               @click="ctx.actions.toggleBold"
             >
               <icon-lucide-bold class="size-3.5" />
@@ -212,6 +217,7 @@ function featureEnabled(features: Array<{ tag: string; enabled: boolean }>, tag:
               :label="`${menu.italic} (${appMenuShortcutLabel('text.italic')})`"
               size="xs"
               :active="ctx.activeFormatting.value.includes('italic')"
+              :disabled="!ctx.canToggleItalic"
               @click="ctx.actions.toggleItalic"
             >
               <icon-lucide-italic class="size-3.5" />

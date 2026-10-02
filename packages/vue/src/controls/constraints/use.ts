@@ -22,10 +22,12 @@ function mergedConstraint(
 
 export function useConstraints() {
   const { store, nodes, isMulti } = useNodeProps()
-  const active = computed(
-    () =>
+  const active = computed(() => {
+    void store.state.sceneVersion
+    return (
       nodes.value.length > 0 && nodes.value.every((node) => isConstraintEligible(store.graph, node))
-  )
+    )
+  })
   const horizontal = computed(() => mergedConstraint(nodes.value, 'horizontalConstraint'))
   const vertical = computed(() => mergedConstraint(nodes.value, 'verticalConstraint'))
 
