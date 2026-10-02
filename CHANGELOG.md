@@ -35,6 +35,7 @@
 
 ### Fixed
 
+- Restore child geometry, sibling order, and surrounding layouts when undoing auto-layout changes or wrapping a selection in auto layout.
 - Nest newly drawn objects inside the frame under the pointer, drag objects out of containers without snapping back, and reorder auto-layout children with arrow keys. Preserve sibling order through multi-object moves and undo, and cancel held drags with Escape.
 - Show successful Codex MCP calls as Done when their response contains `error: null`, and keep real tool errors visible in the transcript.
 - Finish local-agent chat responses when their ACP turn completes, so the composer leaves its generating state.

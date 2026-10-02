@@ -2,6 +2,7 @@ import type { SceneNode } from '@open-pencil/scene-graph'
 
 import { DEFAULT_FRAME_FILL } from '#core/constants'
 
+import type { NodePreview } from './node-preview'
 import { wrapInAutoLayout as wrapInAutoLayoutImpl } from './structure/auto-layout-wrap'
 import {
   booleanOperationSelected as booleanOperationSelectedImpl,
@@ -22,7 +23,10 @@ import { createStructureReorderActions } from './structure/reorder'
 import { createStructureStateActions } from './structure/state'
 import type { EditorContext } from './types'
 
-export function createStructureActions(ctx: EditorContext) {
+export function createStructureActions(
+  ctx: EditorContext,
+  beginNodePreview: (label: string) => NodePreview
+) {
   const reorderActions = createStructureReorderActions(ctx)
   const stateActions = createStructureStateActions(ctx)
 
@@ -54,7 +58,7 @@ export function createStructureActions(ctx: EditorContext) {
   }
 
   function wrapInAutoLayout(selectedNodes: SceneNode[]) {
-    wrapInAutoLayoutImpl(ctx, selectedNodes)
+    wrapInAutoLayoutImpl(ctx, selectedNodes, beginNodePreview)
   }
 
   function groupSelected(selectedNodes: SceneNode[]) {

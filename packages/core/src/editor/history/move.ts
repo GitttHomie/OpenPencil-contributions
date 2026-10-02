@@ -36,7 +36,11 @@ export function captureMoveState(graph: SceneGraph, node: SceneNode): MoveState 
   }
 }
 
-export function applyMoveStates(ctx: EditorContext, states: ReadonlyMap<string, MoveState>) {
+export function applyMoveStates(
+  ctx: EditorContext,
+  states: ReadonlyMap<string, MoveState>,
+  options: { runLayout?: boolean } = {}
+) {
   const parents = new Set<string>()
   for (const [id, state] of states) {
     const oldParent = ctx.graph.getNode(id)?.parentId
@@ -59,5 +63,7 @@ export function applyMoveStates(ctx: EditorContext, states: ReadonlyMap<string, 
       if (parent?.childIds[index] !== id) ctx.graph.reorderChild(id, parentId, index)
     })
   }
-  for (const parentId of parents) ctx.runLayoutForNode(parentId)
+  if (options.runLayout !== false) {
+    for (const parentId of parents) ctx.runLayoutForNode(parentId)
+  }
 }
