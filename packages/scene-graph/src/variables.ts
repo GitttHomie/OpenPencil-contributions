@@ -382,14 +382,15 @@ function markBoundVariablesOverrideOnInstance(
   const owner = variableBindingOwner(graph, node)
   if (owner.type !== 'INSTANCE') return
   const nearest = findInstanceAncestor(graph, nodeId)
-  if (nearest) setInstanceOverride(nearest.instanceOverrides, nearest.id, nodeId, 'boundVariables')
-  setInstanceOverride(owner.instanceOverrides, owner.id, nodeId, 'boundVariables')
-  if (field)
-    setInstanceOverride(
-      owner.instanceOverrides,
-      owner.id,
-      nodeId,
-      `boundVariables/${field}`,
-      node.boundVariables[field] ?? null
-    )
+  for (const instance of new Set([owner, ...(nearest ? [nearest] : [])])) {
+    setInstanceOverride(instance.instanceOverrides, instance.id, nodeId, 'boundVariables')
+    if (field)
+      setInstanceOverride(
+        instance.instanceOverrides,
+        instance.id,
+        nodeId,
+        `boundVariables/${field}`,
+        node.boundVariables[field] ?? null
+      )
+  }
 }

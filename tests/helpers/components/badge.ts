@@ -151,18 +151,16 @@ export async function createComponentBadgeScene(page: Page) {
           const copy =
             instance && graph.getChildren(instance.id).find((node) => node.componentId === badgeId)
           const descendants = (id: string): BadgeChild[] =>
-            graph
-              .getChildren(id)
-              .flatMap((node) => [
-                {
-                  id: node.id,
-                  parentId: node.parentId,
-                  type: node.type,
-                  text: node.text,
-                  componentId: node.componentId
-                },
-                ...descendants(node.id)
-              ])
+            graph.getChildren(id).flatMap((node) => [
+              {
+                id: node.id,
+                parentId: node.parentId,
+                type: node.type,
+                text: node.text,
+                componentId: node.componentId
+              },
+              ...descendants(node.id)
+            ])
           return [graph.getNode(badgeId), copy].map((badge) => {
             if (!badge) throw new Error('Badge unavailable')
             return { id: badge.id, layoutMode: badge.layoutMode, children: descendants(badge.id) }

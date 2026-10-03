@@ -40,6 +40,7 @@ test('Review design uses its assigned model, returns findings, and leaves the ca
   await page.getByLabel('Model ID', { exact: true }).click()
   await page.getByRole('option', { name: 'Custom model…', exact: true }).click()
   await page.getByLabel('Custom model ID', { exact: true }).fill('review-test')
+  await page.getByRole('switch', { name: 'Image input', exact: true }).setChecked(true)
   await page.getByRole('button', { name: 'Save model', exact: true }).click()
   await page.getByTestId('settings-model-assignment-review').click()
   await page.getByRole('option', { name: 'Separate reviewer', exact: true }).click()

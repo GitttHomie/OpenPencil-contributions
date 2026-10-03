@@ -1,10 +1,21 @@
 import { assertNodeEditable } from '#core/editor/capabilities'
-import { applyMoveStates, captureMoveState } from '#core/editor/history/move'
+import { applyMoveStates, captureMoveState, type MoveState } from '#core/editor/history/move'
 import { snapGeometryChanges } from '#core/editor/pixel-snapping'
 import type { EditorContext } from '#core/editor/types'
 import { computeLayout } from '#core/layout'
 
 export function createStructureReorderActions(ctx: EditorContext) {
+  function recordReorder(nodeId: string, original: MoveState) {
+    const node = ctx.graph.getNode(nodeId)
+    if (!node) return
+    const final = captureMoveState(ctx.graph, node)
+    ctx.undo.push({
+      label: 'Reorder',
+      forward: () => applyMoveStates(ctx, new Map([[nodeId, final]])),
+      inverse: () => applyMoveStates(ctx, new Map([[nodeId, original]]))
+    })
+  }
+
   function doReorderChild(nodeId: string, parentId: string, insertIndex: number) {
     assertNodeEditable(ctx.graph, nodeId)
     assertNodeEditable(ctx.graph, parentId)
@@ -31,13 +42,7 @@ export function createStructureReorderActions(ctx: EditorContext) {
 
     doReorderChild(nodeId, parentId, insertIndex)
     if (origParentId !== parentId) ctx.runLayoutForNode(origParentId)
-    const final = captureMoveState(ctx.graph, node)
-
-    ctx.undo.push({
-      label: 'Reorder',
-      forward: () => applyMoveStates(ctx, new Map([[nodeId, final]])),
-      inverse: () => applyMoveStates(ctx, new Map([[nodeId, original]]))
-    })
+    recordReorder(nodeId, original)
   }
 
   function reorderChildWithUndo(nodeId: string, newParentId: string, insertIndex: number) {
@@ -56,13 +61,7 @@ export function createStructureReorderActions(ctx: EditorContext) {
     ctx.graph.reorderChild(nodeId, newParentId, insertIndex)
     ctx.runLayoutForNode(newParentId)
     if (origParentId !== newParentId) ctx.runLayoutForNode(origParentId)
-    const final = captureMoveState(ctx.graph, node)
-
-    ctx.undo.push({
-      label: 'Reorder',
-      forward: () => applyMoveStates(ctx, new Map([[nodeId, final]])),
-      inverse: () => applyMoveStates(ctx, new Map([[nodeId, original]]))
-    })
+    recordReorder(nodeId, original)
   }
 
   function applyChildOrder(parentId: string, childIds: readonly string[]) {

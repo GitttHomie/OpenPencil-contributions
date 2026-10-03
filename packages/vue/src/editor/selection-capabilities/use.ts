@@ -1,4 +1,4 @@
-import { computed, shallowRef, triggerRef } from 'vue'
+import { computed, ref } from 'vue'
 
 import { canMakeBooleanSourceNode, hasVisibleStrokeSourceNode } from '@open-pencil/core/canvas'
 
@@ -16,8 +16,12 @@ import { useSceneComputed } from '#vue/internal/scene-computed/use'
 export function useSelectionCapabilities() {
   const selection = useSelectionState()
   const { editor, selectedIds, selectedNode, selectedCount, hasSelection } = selection
-  const history = shallowRef(editor.undo)
-  useEditorEvent('history:changed', () => triggerRef(history))
+  const historyVersion = ref(0)
+  useEditorEvent('history:changed', () => historyVersion.value++)
+  const history = computed(() => {
+    void historyVersion.value
+    return { canUndo: editor.undo.canUndo, canRedo: editor.undo.canRedo }
+  })
 
   const selectedNodesCanFlatten = useSceneComputed(() => {
     const nodes = editor.getSelectedNodes()

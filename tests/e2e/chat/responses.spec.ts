@@ -67,7 +67,7 @@ test('missing canvas setup has its own error and opens local agent settings', as
   await expect(toast).not.toContainText('The model request failed.')
   await toast.getByRole('button', { name: 'Open settings' }).click()
   await expect(chat.page.getByTestId('settings-ai-panel')).toBeVisible()
-  await expect(chat.page.getByRole('heading', { name: 'Local agents' })).toBeVisible()
+  await expect(chat.page.getByTestId('settings-add-model')).toBeVisible()
 })
 
 test('Codex MCP successes show Done and real errors remain inspectable', async ({

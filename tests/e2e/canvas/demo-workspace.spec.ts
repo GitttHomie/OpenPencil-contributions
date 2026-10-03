@@ -50,12 +50,22 @@ for (const [name, snapshot] of [
 
 test('demo generation reports canvas preparation until the document is ready', async ({ page }) => {
   const canvas = new CanvasHelper(page)
-  await page.goto('/demo?no-chrome&no-rulers')
+  const release = Promise.withResolvers<undefined>()
+  await page.route('**/Inter-Bold.ttf', async (route) => {
+    await release.promise
+    await route.continue()
+  })
   const loader = page.getByTestId('canvas-loading')
-  await expect(loader).toBeVisible()
-  await expect(loader).toContainText(
-    /Preparing layers|Resolving fonts|Computing layout|Preparing canvas/
-  )
+  try {
+    await page.goto('/demo?no-chrome&no-rulers')
+    await canvas.waitForSurface()
+    await expect(loader).toBeVisible()
+    await expect(loader).toContainText(
+      /Preparing layers|Resolving fonts|Computing layout|Preparing canvas/
+    )
+  } finally {
+    release.resolve(undefined)
+  }
   await canvas.waitForInit()
   await waitForDemo(page)
   await expect(loader).toBeHidden()

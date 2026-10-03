@@ -6,7 +6,7 @@ import {
   useEventListener,
   useTimeoutFn
 } from '@vueuse/core'
-import { Primitive } from 'reka-ui'
+import { Primitive, useForwardExpose } from 'reka-ui'
 import type { ComponentPublicInstance } from 'vue'
 import { computed, nextTick, onDeactivated, ref, watch } from 'vue'
 
@@ -37,9 +37,11 @@ const {
 }>()
 
 const triggerRef = ref<HTMLElement>()
+const { forwardRef } = useForwardExpose()
 function setTrigger(value: Element | ComponentPublicInstance | null) {
   const element = value instanceof Element ? value : unrefElement(value)
   triggerRef.value = element instanceof HTMLElement ? element : undefined
+  forwardRef(triggerRef.value ?? null)
 }
 const contentRef = ref<HTMLElement>()
 const open = ref(false)

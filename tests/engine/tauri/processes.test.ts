@@ -22,11 +22,12 @@ describe('Tauri process helpers', () => {
     const calls: Array<{ cmd: string; args: unknown }> = []
     await mockTauriIPC((cmd, args) => {
       calls.push({ cmd, args })
+      if (cmd === 'agent_lookup') return { executables: {}, searchPath: '/test/bin' }
       if (cmd === 'plugin:shell|spawn') {
         expect(args).toMatchObject({
           program: 'agent-cli',
           args: ['--stdio'],
-          options: { encoding: 'raw', env: {} }
+          options: { encoding: 'raw', env: { PATH: '/test/bin' } }
         })
         onEvent = (args as { onEvent: { onmessage: (event: unknown) => void } }).onEvent.onmessage
         return 42
@@ -51,12 +52,13 @@ describe('Tauri process helpers', () => {
     await process.child.kill()
 
     expect(calls.map((call) => call.cmd)).toEqual([
+      'agent_lookup',
       'plugin:shell|spawn',
       'plugin:shell|stdin_write',
       'plugin:shell|kill'
     ])
-    expect(calls[1]?.args).toEqual({ pid: 42, buffer: [4, 5] })
-    expect(calls[2]?.args).toEqual({ cmd: 'killChild', pid: 42 })
+    expect(calls[2]?.args).toEqual({ pid: 42, buffer: [4, 5] })
+    expect(calls[3]?.args).toEqual({ cmd: 'killChild', pid: 42 })
   })
 
   test('starts Windows ACP command shims through cmd', async () => {
@@ -65,11 +67,12 @@ describe('Tauri process helpers', () => {
       value: { userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
     })
     await mockTauriIPC((cmd, args) => {
+      if (cmd === 'agent_lookup') return { executables: {}, searchPath: 'C:\\test\\bin' }
       if (cmd === 'plugin:shell|spawn') {
         expect(args).toMatchObject({
           program: 'cmd',
           args: ['/c', 'agent-cli', '--stdio'],
-          options: { encoding: 'raw', env: {} }
+          options: { encoding: 'raw', env: { PATH: 'C:\\test\\bin' } }
         })
         return 44
       }
@@ -90,6 +93,7 @@ describe('Tauri process helpers', () => {
     let onEvent: ((event: unknown) => void) | null = null
     const onUnexpectedClose = vi.fn()
     await mockTauriIPC((cmd, args) => {
+      if (cmd === 'agent_lookup') return { executables: {}, searchPath: '/test/bin' }
       if (cmd === 'plugin:shell|spawn') {
         onEvent = (args as { onEvent: { onmessage: (event: unknown) => void } }).onEvent.onmessage
         return 43

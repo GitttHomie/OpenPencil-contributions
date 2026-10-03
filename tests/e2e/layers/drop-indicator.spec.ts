@@ -8,7 +8,8 @@ async function dragLayerAndObserveIndicator(
   page: Page,
   sourceId: string,
   targetId: string,
-  targetPosition: Vector
+  targetPosition: Vector,
+  expectedPosition: 'above' | 'child'
 ) {
   const source = page.locator(`[data-node-id="${sourceId}"]`)
   const target = page.locator(`[data-node-id="${targetId}"]`)
@@ -24,9 +25,8 @@ async function dragLayerAndObserveIndicator(
   })
   const indicator = target.locator('[data-slot="drop-indicator"]')
   await expect(indicator).toBeVisible()
-  const position = await indicator.getAttribute('data-drop-position')
+  await expect(indicator).toHaveAttribute('data-drop-position', expectedPosition)
   await page.mouse.up()
-  return position
 }
 
 test('layer reorder exposes a visible drop indicator before dropping', async ({ page }) => {
@@ -48,12 +48,17 @@ test('layer reorder exposes a visible drop indicator before dropping', async ({ 
   })
   await canvas.waitForRender()
 
-  const positions = await dragLayerAndObserveIndicator(page, ids.third, ids.first, {
-    x: 80,
-    y: 2
-  })
+  await dragLayerAndObserveIndicator(
+    page,
+    ids.third,
+    ids.first,
+    {
+      x: 80,
+      y: 2
+    },
+    'above'
+  )
 
-  expect(positions).toBe('above')
   canvas.assertNoErrors()
 })
 
@@ -79,11 +84,17 @@ test('layer child drop exposes a visible container highlight before dropping', a
   })
   await canvas.waitForRender()
 
-  const positions = await dragLayerAndObserveIndicator(page, ids.rect, ids.frame, {
-    x: 80,
-    y: 12
-  })
+  await dragLayerAndObserveIndicator(
+    page,
+    ids.rect,
+    ids.frame,
+    {
+      x: 80,
+      y: 12
+    },
+    'child'
+  )
 
-  expect(positions).toBe('child')
+  await expect(page.locator(`[data-node-id="${ids.rect}"]`)).toHaveAttribute('aria-level', '2')
   canvas.assertNoErrors()
 })

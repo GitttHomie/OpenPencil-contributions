@@ -26,11 +26,15 @@ export class CanvasHelper {
     await this.page.evaluate(() => new Promise(requestAnimationFrame))
   }
 
-  async waitForInit() {
+  async waitForSurface() {
     await this.page
       .getByTestId('canvas-element')
       .and(this.page.locator('[data-ready="1"]'))
       .waitFor({ timeout: 30000 })
+  }
+
+  async waitForInit() {
+    await this.waitForSurface()
     await this.page.getByTestId('canvas-loading').waitFor({ state: 'hidden', timeout: 30000 })
     await this.page.locator('#loader').waitFor({ state: 'detached', timeout: 30000 })
   }

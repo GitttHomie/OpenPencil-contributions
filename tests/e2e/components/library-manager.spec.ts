@@ -251,6 +251,7 @@ test('library manager scopes populated updates and does not mutate on discovery'
     .toEqual(reviewOrigin)
   await instanceUpdate.click()
   await updateMenuItem.click()
+  await expect(page.getByRole('menu')).toHaveCount(0)
   await expect(instanceUpdate).toBeHidden()
   const mixedComponents = await page.evaluate((ids) => {
     const store = window.openPencil?.getStore?.()

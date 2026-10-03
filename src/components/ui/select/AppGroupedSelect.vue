@@ -12,12 +12,15 @@ import {
   SelectViewport
 } from 'reka-ui'
 import { tv } from 'tailwind-variants'
+import { ref, type ComponentPublicInstance } from 'vue'
 
 import { useRetainedPopup } from '@open-pencil/vue'
 
 import type { ComponentUI } from '@/components/ui/types'
 import theme from '@/theme/select/grouped'
 import type { AppGroupedSelectTheme } from '@/theme/select/grouped'
+
+import { useTriggerWidth } from './useTriggerWidth'
 
 interface SelectOption<TValue extends string | number> {
   value: TValue
@@ -43,11 +46,13 @@ const modelValue = defineModel<T>({ required: true })
 
 const styles = tv(theme)()
 const { open: popupOpen, portalActive } = useRetainedPopup()
+const triggerRef = ref<ComponentPublicInstance>()
+const triggerWidth = useTriggerWidth(triggerRef, popupOpen)
 </script>
 
 <template>
   <SelectRoot v-model="modelValue" v-model:open="popupOpen">
-    <SelectTrigger v-bind="$attrs" :class="styles.trigger({ class: ui?.trigger })">
+    <SelectTrigger ref="triggerRef" v-bind="$attrs" :class="styles.trigger({ class: ui?.trigger })">
       <slot name="value">{{ displayValue }}</slot>
       <icon-lucide-chevron-down class="size-2.5 shrink-0 text-muted" />
     </SelectTrigger>
@@ -56,6 +61,7 @@ const { open: popupOpen, portalActive } = useRetainedPopup()
         position="popper"
         :side-offset="4"
         :class="styles.content({ class: ui?.content })"
+        :style="{ minWidth: triggerWidth ? `${triggerWidth}px` : undefined }"
       >
         <SelectViewport :class="styles.viewport({ class: ui?.viewport })">
           <template v-for="(group, index) in groups" :key="index">

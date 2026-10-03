@@ -1,5 +1,5 @@
 import { unrefElement, useResizeObserver } from '@vueuse/core'
-import { onScopeDispose, ref, watch } from 'vue'
+import { computed, onScopeDispose, ref, watch } from 'vue'
 import type { ComponentPublicInstance, Ref } from 'vue'
 
 /** Layout width excludes ancestor zoom animations that feed back into popper measurements. */
@@ -8,15 +8,20 @@ export function useTriggerWidth(
   open: Ref<boolean>
 ) {
   const width = ref(0)
+  const element = computed(() => {
+    const resolved = unrefElement(trigger)
+    return typeof HTMLElement !== 'undefined' && resolved instanceof HTMLElement
+      ? resolved
+      : undefined
+  })
   let frame: number | undefined
   function measure() {
-    const element = unrefElement(trigger)
-    if (element instanceof HTMLElement) width.value = element.offsetWidth
+    if (element.value) width.value = element.value.offsetWidth
   }
   watch(open, (isOpen) => {
     if (isOpen) measure()
   })
-  useResizeObserver(trigger, () => {
+  useResizeObserver(element, () => {
     if (frame !== undefined) return
     frame = requestAnimationFrame(() => {
       frame = undefined

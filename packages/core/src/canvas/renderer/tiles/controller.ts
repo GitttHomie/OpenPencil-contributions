@@ -36,6 +36,7 @@ export class TiledSceneController {
   private index: RenderChunkIndex | null = null
   private pageId: string | null = null
   private contentGeneration = -1
+  private fontGeneration = -1
   private navigationGeneration = -1
   private navigationActive = false
   private cancelledJobs = 0
@@ -171,6 +172,7 @@ export class TiledSceneController {
     this.index = null
     this.pageId = null
     this.contentGeneration = -1
+    this.fontGeneration = -1
     this.lastCoveredGeneration = ''
     this.pendingInvalidations = []
     this.measuredCosts.clear()
@@ -212,12 +214,15 @@ export class TiledSceneController {
     }
     if (
       this.index &&
-      (this.pageId !== renderer.pageId || this.contentGeneration !== contentGeneration)
+      (this.pageId !== renderer.pageId ||
+        this.contentGeneration !== contentGeneration ||
+        this.fontGeneration !== renderer.fontGeneration)
     ) {
       this.invalidate()
     }
     if (!this.navigationActive && this.index === null && renderer.pageId) {
       this.ensureIndex(graph, renderer.pageId, contentGeneration)
+      this.fontGeneration = renderer.fontGeneration
     }
   }
 

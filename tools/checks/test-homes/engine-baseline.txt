@@ -432,7 +432,6 @@ tests/engine/tauri/document-io.test.ts
 tests/engine/tauri/fig-export.test.ts
 tests/engine/tauri/file-actions.test.ts
 tests/engine/tauri/font-cache.test.ts
-tests/engine/tauri/fonts.test.ts
 tests/engine/tauri/harness-process.test.ts
 tests/engine/tauri/http.test.ts
 tests/engine/tauri/mcp-spawn.test.ts

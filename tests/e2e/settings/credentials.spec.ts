@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test'
 
 import { CanvasHelper } from '#tests/helpers/canvas'
+import { trackResizeErrors } from '#tests/helpers/resize-errors'
 
 test('storage settings keep secrets behind the credential manager', async ({ page }) => {
   await page.goto('/?test')
@@ -154,6 +155,7 @@ test('MCP automation settings filter and persist tool availability', async ({ pa
 })
 
 test('model library keeps reusable profiles and role assignments', async ({ page }) => {
+  const errors = await trackResizeErrors(page)
   await page.goto('/?test')
   const canvas = new CanvasHelper(page)
   await canvas.waitForInit()
@@ -190,6 +192,7 @@ test('model library keeps reusable profiles and role assignments', async ({ page
   await expect(page.getByTestId('settings-model-list')).toContainText('Vision model')
   await expect(page.getByTestId('settings-model-assignment-review')).toContainText('Review model')
   await expect(page.getByTestId('settings-model-assignment-vision')).toContainText('Vision model')
+  expect(errors).toEqual([])
 })
 
 test('remembered browser credentials survive reload and clear centrally', async ({ page }) => {
@@ -238,7 +241,8 @@ test('remembered browser credentials survive reload and clear centrally', async 
 })
 
 test('browser credential preferences live in General, not the footer', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('/?test')
+  await new CanvasHelper(page).waitForInit()
   await page.keyboard.press('ControlOrMeta+,')
   const panel = page.getByTestId('settings-general-panel')
   const remember = panel.getByRole('switch', { name: 'Remember API keys on this device' })

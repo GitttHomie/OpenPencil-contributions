@@ -181,6 +181,7 @@ export function createEditorStore(initialGraph?: SceneGraph) {
       }
       succeeded = true
     } catch (error) {
+      if (ownsPreparation && preparation.signal.aborted) return
       if (preparation.signal.aborted) throw error
       if (ownsPreparation) {
         const presentationTimedOut =

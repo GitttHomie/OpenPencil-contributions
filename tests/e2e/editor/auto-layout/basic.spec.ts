@@ -225,6 +225,19 @@ test('editing a Hug width switches to Fixed in one reversible interaction', asyn
 
 test('editing a Fill height switches to Fixed in one undo step', async () => {
   await selectFrame()
+  await page.evaluate((id) => {
+    const store = window.openPencil?.getStore?.()
+    if (!store) throw new Error('Editor unavailable')
+    const parent = store.graph.createNode('FRAME', store.state.currentPageId, {
+      width: 400,
+      height: 300,
+      layoutMode: 'VERTICAL',
+      primaryAxisSizing: 'FIXED',
+      counterAxisSizing: 'FIXED'
+    })
+    store.graph.reparentNode(id, parent.id)
+    store.requestRender()
+  }, frameId)
   const heightField = propertyField(page, 'height')
 
   await heightField.getByRole('combobox', { name: 'Height' }).click()

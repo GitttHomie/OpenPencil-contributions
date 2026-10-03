@@ -51,6 +51,10 @@
 
 ### Fixed
 
+- Keep Undo and Redo available for the active document after switching tabs.
+- Update layer names immediately in the layer tree and handle superseded page switches without reporting cancellation as an error.
+- Refresh cached canvas tiles when fonts finish loading so text appears without another edit or movement.
+- Preserve individual variable-binding overrides in nested instances while inheriting changes to other bindings.
 - Preserve gradient stop colors independently of other fills' color variables, and honor left-to-right and right-to-left directions in the AI fill tool.
 
 - Remove partial nodes when rendering fails so corrected retries do not leave duplicate components, and preserve replacement placement and fragment results when CLI agents render through MCP.
@@ -60,7 +64,7 @@
 - Recompute auto-sized text and Hug parents when a font finishes loading, keeping layer bounds aligned with text selection after font changes and Redo.
 - Keep manually sized text boxes fixed on the edited axis when changing fonts or weights, with sizing modes restored by Undo.
 - Commit font choices immediately, choose available styles from local and online catalogs, and limit weight, Bold, and Italic controls to supported faces. Share local font reads, load online previews on hover, and show font failures after loading finishes.
-- Keep dropdown widths stable during dialog animations, defer font-list and chat measurements, and skip unchanged canvas sizes to avoid resize-observer feedback.
+- Keep dropdown widths stable during dialog animations, anchor custom triggers to their controls, defer font-list and chat measurements, and skip unchanged canvas sizes to avoid resize-observer feedback.
 - Keep text-selection highlights aligned with rendered text and snap dragged numeric values to their configured increments.
 - Drag canvas labels to move their containers, or double-click to rename frames, components, and instances, with filled diamond icons for definitions and outlined diamonds for instances.
 - Paste copied component definitions as linked instances, avoid recursive component nesting, and inherit positioning, auto-layout exclusion, text styling, and corner smoothing. Reuse instance children and preserve their overrides when component content moves or gains auto-layout wrappers, without leaving duplicate text.

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useForwardExpose } from 'reka-ui'
 import { tv } from 'tailwind-variants'
 import { computed, normalizeClass, useAttrs } from 'vue'
 
@@ -23,6 +24,7 @@ const {
 }>()
 
 const attrs = useAttrs()
+const { forwardRef } = useForwardExpose()
 
 defineOptions({ inheritAttrs: false })
 
@@ -39,6 +41,7 @@ const cls = computed(() =>
 <template>
   <Tip as-child :label="label" :side="side" :disabled="disabled || !label">
     <button
+      :ref="forwardRef"
       v-bind="buttonAttrs"
       data-slot="icon-button"
       :type="type"

@@ -5,10 +5,9 @@ import { ChatHarness } from '#tests/helpers/chat/harness'
 
 const apiKey = process.env.OPENROUTER_API_KEY
 
-if (!apiKey) throw new Error('OPENROUTER_API_KEY is required for real LLM smoke tests')
-
 test.describe('OpenRouter chat', { tag: '@real-llm' }, () => {
   test('streams a Markdown response from the configured Design model', async ({ page }) => {
+    if (!apiKey) throw new Error('OPENROUTER_API_KEY is required for real LLM smoke tests')
     const chat = new ChatHarness(page)
     await chat.open()
     const canvas = new CanvasHelper(page)

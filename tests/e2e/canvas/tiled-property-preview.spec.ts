@@ -188,6 +188,7 @@ test('font arrival invalidates tiled text and matches a fresh direct render', as
     const tiled = await crop(page)
     expectTiledSubmission(await takeRecording(page))
     expect(tiled.equals(await directReference(page))).toBe(true)
+    expect(tiled).toMatchSnapshot('tiled-font-arrival.png')
   } finally {
     release.resolve(undefined)
     await page.unroute('**/Inter-Bold.ttf')

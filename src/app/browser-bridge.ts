@@ -8,8 +8,6 @@ import { appRuntimeConfig } from '@/app/runtime/config'
 import { IS_BROWSER } from '@/constants'
 
 export interface OpenPencilTestHooks {
-  writeCount?: () => number
-  mockHandle?: FileSystemFileHandle
   savedOpen?: Window['open']
   navigation?: NavigationBenchmarkHooks
   collab?: Pick<

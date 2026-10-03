@@ -126,7 +126,7 @@ test('resize corner handle drag increases node dimensions', async () => {
   canvas.assertNoErrors()
 })
 
-test('resize snapping preferences control pixel alignment and Control bypass', async () => {
+test('pixel snapping rounds resize geometry even while Control bypasses object snapping', async () => {
   await canvas.clearCanvas()
   await page.evaluate(() => {
     const store = window.openPencil?.getStore?.()
@@ -154,7 +154,7 @@ test('resize snapping preferences control pixel alignment and Control bypass', a
   await page.mouse.down()
   await page.mouse.move(box.x + 212.25, box.y + 214.25, { steps: 5 })
   await page.mouse.up()
-  expect(await getSelectedNode(page)).toMatchObject({ width: 111.75, height: 113.75 })
+  expect(await getSelectedNode(page)).toMatchObject({ x: 100, y: 100, width: 112, height: 114 })
 
   await page.mouse.move(box.x + 212, box.y + 214)
   await page.mouse.down()
@@ -162,7 +162,7 @@ test('resize snapping preferences control pixel alignment and Control bypass', a
   await page.mouse.move(box.x + 218, box.y + 221, { steps: 5 })
   await page.keyboard.up('Control')
   await page.mouse.up()
-  expect(await getSelectedNode(page)).toMatchObject({ width: 117.75, height: 120.75 })
+  expect(await getSelectedNode(page)).toMatchObject({ x: 100, y: 100, width: 118, height: 121 })
   canvas.assertNoErrors()
 })
 
