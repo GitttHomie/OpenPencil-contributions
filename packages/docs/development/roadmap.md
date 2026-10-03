@@ -58,6 +58,13 @@ See [canvas navigation](../user-guide/canvas-navigation), [components and librar
 - Prevent non-Latin font discovery and rendering crashes across platforms; add Arabic/Persian shaping and RTL layout, then broaden CJK and mixed-script visual fixtures.
 - Build a portable-font strategy for reproducible documents across machines on top of existing substitution visibility and agent-readable font status, including curated redistributable fonts, embedded or linked document fonts, and licensing metadata ([#502](https://github.com/open-pencil/open-pencil/issues/502), [#503](https://github.com/open-pencil/open-pencil/issues/503)).
 
+### Auto-layout badge anchoring
+
+- Investigate a reported bug where a badge with its own auto-layout grows to the right when its text gets longer, despite being excluded from its parent's auto-layout and constrained to the parent's right edge.
+- Reproduce with a Hug-width badge, right-aligned internal content, and a right constraint relative to the parent; lengthen and shorten its text.
+- Preserve the badge's right-edge offset, including intentional overhang: increasing its width should move its left edge left, and decreasing its width should move its left edge right. Keep the internal content alignment intact.
+- Verify live typing, simultaneous parent Hug resizing, component instances, and Undo/Redo without right-edge drift.
+
 ### Component synchronization performance
 
 - Benchmark adding a badge to a main button component with 100 and 1,000 instances, measuring synchronization and layout time separately; include complex nested components and property-only edits.
