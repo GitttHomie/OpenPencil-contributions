@@ -119,6 +119,7 @@ ja:menu.toggleUI
 ja:panels.colorHintHsb
 ja:panels.colorHintHsl
 ja:panels.colorHintOkhcl
+ja:panels.gradientCanvasHint
 ja:panels.libraryId
 ja:panels.localFontsAccessHint
 ja:panels.sizingFillFr
@@ -263,6 +264,7 @@ zh-cn:menu.exportSelectionAsSVG
 zh-cn:panels.colorHintHsb
 zh-cn:panels.colorHintHsl
 zh-cn:panels.colorHintOkhcl
+zh-cn:panels.gradientCanvasHint
 zh-cn:panels.libraryId
 zh-cn:panels.localFontsAccessHint
 zh-cn:panels.sizingFillFr

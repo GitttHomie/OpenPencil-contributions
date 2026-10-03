@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from 'bun:test'
 
-import { ALL_TOOLS, CORE_TOOLS, isToolExposed } from '@open-pencil/core/tools'
+import { ALL_TOOLS, isToolExposed } from '@open-pencil/core/tools'
 
 import { configurableAITools, enabledAIToolDefinitions } from '@/app/ai/tools/catalog'
 import { aiToolOverrides, disabledAITools } from '@/app/ai/tools/preferences'
@@ -18,18 +18,15 @@ afterEach(() => {
   useToolAccessSettings().selectTarget('ai')
 })
 
-test('AI catalog includes exposed extended tools while preserving compact defaults', () => {
+test('AI enables the shared canvas tools by default while preserving explicit overrides', () => {
   expect(configurableAITools.map((tool) => tool.name)).toEqual(
     ALL_TOOLS.filter((tool) => isToolExposed(tool, 'ai')).map((tool) => tool.name)
   )
   const defaults = enabledAIToolDefinitions({}).map((tool) => tool.name)
-  for (const tool of CORE_TOOLS) {
-    if (isToolExposed(tool, 'ai')) expect(defaults).toContain(tool.name)
-  }
-  expect(defaults).toContain('get_components')
-  expect(defaults).toContain('list_libraries')
-  expect(defaults).toContain('insert_library_component')
-  expect(defaults).not.toContain('create_component')
+  expect(defaults).toEqual(
+    ALL_TOOLS.filter((tool) => isToolExposed(tool, 'mcp')).map((tool) => tool.name)
+  )
+  expect(defaults).toContain('create_component')
   expect(enabledAIToolDefinitions({ create_component: true }).map((tool) => tool.name)).toContain(
     'create_component'
   )
@@ -42,7 +39,7 @@ test('AI catalog includes exposed extended tools while preserving compact defaul
 })
 
 test('target switching, bulk changes and reset preserve independent permissions', () => {
-  aiToolOverrides.value = {}
+  aiToolOverrides.value = { create_component: false }
   disabledMCPTools.value = ['create_component']
   const access = useToolAccessSettings()
   access.selectTarget('ai')
@@ -58,7 +55,7 @@ test('target switching, bulk changes and reset preserve independent permissions'
   access.selectTarget('ai')
   access.reset()
   expect(aiToolOverrides.value).toEqual({})
-  expect(disabledAITools.value).toContain('create_component')
+  expect(disabledAITools.value).not.toContain('create_component')
   expect(disabledMCPTools.value).toEqual(['find_nodes'])
 })
 

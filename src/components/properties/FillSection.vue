@@ -72,6 +72,11 @@ function updateSolidColor(
   if (applyPaintMutation(binding, flush, () => update({ ...fill, color })))
     commitPaintMutation(binding)
 }
+
+function startCanvasGesture(binding: BindableValueActions<Color>, flush: () => void) {
+  flush()
+  commitPaintMutation(binding)
+}
 </script>
 
 <template>
@@ -135,7 +140,13 @@ function updateSolidColor(
               <template #preview>
                 <FillPicker
                   :fill="displayFill(fill, binding.resolvedValue)"
+                  :gradient-target="
+                    selectedNodeIds.length === 1 && activeNode
+                      ? { nodeId: activeNode.id, fillIndex: index }
+                      : undefined
+                  "
                   :okhcl="createFillOkhclAdapter(okhcl, activeNode, index)"
+                  @canvas-gesture="startCanvasGesture(binding.actions, flush)"
                   @update="
                     updatePickerFill(binding.actions, flush, $event, (next) =>
                       actions.update(index, next)

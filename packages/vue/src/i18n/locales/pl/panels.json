@@ -354,5 +354,11 @@
   "lineHeightMode": "Tryb wysokości wiersza",
   "unresolvedVariable": "Wartość zmiennej jest niedostępna",
   "excludeFromAutoLayout": "Wyklucz z automatycznego układu",
-  "positionAutoLayout": "Pozycją steruje automatyczny układ elementu nadrzędnego"
+  "positionAutoLayout": "Pozycją steruje automatyczny układ elementu nadrzędnego",
+  "gradientMove": "Przesuń gradient",
+  "gradientStart": "Początek gradientu",
+  "gradientEnd": "Koniec gradientu",
+  "gradientRadius": "Obróć i zmień rozmiar gradientu",
+  "gradientWidth": "Drugi promień gradientu",
+  "gradientCanvasHint": "Uchwyty przyciągają do krawędzi, narożników, środków i kierunków. Shift przyciąga do kątów; Alt/Option pozwala na swobodne pozycjonowanie; Escape anuluje."
 }

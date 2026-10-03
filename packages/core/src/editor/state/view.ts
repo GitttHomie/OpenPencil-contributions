@@ -5,6 +5,7 @@ import type { EditorState, EditorViewState } from '#core/editor/types'
 export function createDefaultEditorViewState(pageId: string): EditorViewState {
   return {
     currentPageId: pageId,
+    showPixelGrid: false,
     selectedIds: new Set<string>(),
     marquee: null,
     snapGuides: [],

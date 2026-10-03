@@ -12,15 +12,15 @@ export interface PixelSnapResult {
   guides: SnapGuide[]
 }
 
-export function computePixelGridSnap(bounds: Rect, threshold: number): PixelSnapResult {
+export function computePixelGridSnap(bounds: Rect): PixelSnapResult {
   const roundedX = Math.round(bounds.x)
   const roundedY = Math.round(bounds.y)
   const dx = roundedX - bounds.x
   const dy = roundedY - bounds.y
   return {
     delta: {
-      x: Math.abs(dx) < threshold ? dx : 0,
-      y: Math.abs(dy) < threshold ? dy : 0
+      x: dx,
+      y: dy
     },
     // Pixel rounding is not alignment with another object or an explicit guide.
     guides: []
@@ -133,7 +133,7 @@ export function resolveObjectPixelSnap(
     ? computeSnap(movingIds, movingBounds, targets, threshold)
     : { dx: 0, dy: 0, guides: [] }
   const pixelSnap = editor.state.snappingPreferences.pixelGrid
-    ? computePixelGridSnap(movingBounds, threshold)
+    ? computePixelGridSnap(movingBounds)
     : { delta: { x: 0, y: 0 }, guides: [] }
   const objectX = objectSnap.guides.some((guide) => guide.axis === 'x')
   const objectY = objectSnap.guides.some((guide) => guide.axis === 'y')
@@ -145,11 +145,16 @@ export function resolveObjectPixelSnap(
   )
   const xBlockedByGeometry = Boolean(geometryX)
   const yBlockedByGeometry = Boolean(geometryY)
+  const correction = {
+    x: winningCorrection(geometryX, explicitX, objectX, objectSnap.dx, pixelSnap.delta.x),
+    y: winningCorrection(geometryY, explicitY, objectY, objectSnap.dy, pixelSnap.delta.y)
+  }
+  if (editor.state.snappingPreferences.pixelGrid) {
+    correction.x = Math.round(movingBounds.x + correction.x) - movingBounds.x
+    correction.y = Math.round(movingBounds.y + correction.y) - movingBounds.y
+  }
   return {
-    correction: {
-      x: winningCorrection(geometryX, explicitX, objectX, objectSnap.dx, pixelSnap.delta.x),
-      y: winningCorrection(geometryY, explicitY, objectY, objectSnap.dy, pixelSnap.delta.y)
-    },
+    correction,
     guides: deduplicateGuides([
       ...geometryGuides,
       ...explicitGuides.filter((guide) =>
@@ -163,7 +168,12 @@ export function resolveObjectPixelSnap(
           ? !xBlockedByGeometry && !explicitX && !objectX
           : !yBlockedByGeometry && !explicitY && !objectY
       )
-    ])
+    ]).filter((guide) => {
+      const anchors = guide.axis === 'x' ? xAnchors : yAnchors
+      return anchors.some(
+        (anchor) => Math.abs(anchor + correction[guide.axis] - guide.position) < 1e-6
+      )
+    })
   }
 }
 

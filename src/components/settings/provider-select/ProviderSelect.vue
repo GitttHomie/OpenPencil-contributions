@@ -7,7 +7,7 @@ import { useI18n } from '@open-pencil/vue'
 import { useLocalAgents } from '@/app/ai/agents/use'
 import AppGroupedSelect from '@/components/ui/select/AppGroupedSelect.vue'
 
-const { availableAgents } = useLocalAgents()
+const { desktop } = useLocalAgents()
 const { ai } = useI18n()
 
 interface ProviderSelectProps {
@@ -23,9 +23,7 @@ interface ProviderSelectProps {
 
 const { allowAgents = true, ui } = defineProps<ProviderSelectProps>()
 
-const acpAgents = computed(() =>
-  allowAgents ? availableAgents.value.map((agent) => agent.definition) : []
-)
+const acpAgents = computed(() => (allowAgents && desktop ? ACP_AGENTS : []))
 
 const providerID = defineModel<AIProviderID>({ required: true })
 const providerDef = computed(

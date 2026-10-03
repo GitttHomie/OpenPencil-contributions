@@ -6,6 +6,6 @@ export {
   exposeInstanceSwap
 } from './create/components'
 export { fetchIconsTool, insertIcon, searchIconsTool } from './create/icons'
-export { render } from './create/render'
+export { render, renderDesignTree } from './create/render'
 export { importSVG } from './create/svg'
 export { createVector } from './create/vector'

@@ -30,6 +30,15 @@ export function useEditorMenu() {
   if (!isTauri()) return
 
   watchRecentFilesMenu()
+  watch(
+    () => (activeTab.value ? (store.state.showPixelGrid ?? false) : false),
+    (checked) => {
+      void import('@tauri-apps/api/core')
+        .then(({ invoke }) => invoke('set_native_menu_checked', { id: 'view-pixel-grid', checked }))
+        .catch((error) => console.warn('[Pixel grid] Failed to update the native menu', error))
+    },
+    { immediate: true }
+  )
 
   const { setTheme } = useAppTheme()
   const { runCommand } = useEditorCommands()
@@ -88,3 +97,4 @@ export function useEditorMenu() {
     actions[id]?.()
   })
 }
+import { watch } from 'vue'

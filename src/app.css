@@ -28,6 +28,13 @@
   }
 }
 
+/* Progressive enhancement: older WebViews retain the shared rounded corners. */
+@utility smooth-corners {
+  @supports (corner-shape: superellipse(1.5)) {
+    corner-shape: superellipse(1.5);
+  }
+}
+
 @utility scrollbar-thin {
   scrollbar-width: thin;
   scrollbar-color: var(--color-border) transparent;

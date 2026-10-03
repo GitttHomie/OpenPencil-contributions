@@ -1,18 +1,12 @@
-import type { SceneNode } from '@open-pencil/scene-graph'
+import type { Fill, SceneNode } from '@open-pencil/scene-graph'
 
 import type { FigmaAPI } from '#core/figma-api'
+import { withImageFill } from '#core/tools/modify/fill-stack'
 
 import type { StockPhotoProvider, StockPhotoResult } from './providers'
 
 const STOCK_PHOTO_TARGET_TYPES: ReadonlySet<SceneNode['type']> = new Set([
   'FRAME',
-  'RECTANGLE',
-  'ROUNDED_RECTANGLE',
-  'ELLIPSE',
-  'STAR',
-  'POLYGON',
-  'VECTOR',
-  'BOOLEAN_OPERATION',
   'COMPONENT',
   'INSTANCE'
 ])
@@ -47,19 +41,8 @@ export async function applyPhoto(
   if (!STOCK_PHOTO_TARGET_TYPES.has(node.type)) {
     return {
       id: req.id,
-      error: `"${node.name}" (${node.type}) is not a suitable stock photo target`
+      error: `"${node.name}" (${node.type}) is not a suitable stock photo target. Use a frame with an image fill.`
     }
-  }
-
-  if (node.type === 'VECTOR' && (node.vectorNetwork.regions?.length ?? 0) === 0) {
-    return {
-      id: req.id,
-      error: `"${node.name}" has no closed vector regions — use closed area geometry`
-    }
-  }
-
-  if (node.type !== 'BOOLEAN_OPERATION' && node.children.length > 0) {
-    return { id: req.id, error: `"${node.name}" has children — use a leaf image placeholder` }
   }
 
   const perPage = Math.min((req.index ?? 0) + 3, 15)
@@ -86,16 +69,15 @@ export async function applyPhoto(
   }
 
   const image = figma.createImage(imageBytes)
-  node.fills = [
-    {
-      type: 'IMAGE',
-      color: { r: 1, g: 1, b: 1, a: 1 },
-      imageHash: image.hash,
-      imageScaleMode: 'FILL',
-      visible: true,
-      opacity: 1
-    }
-  ]
+  const imageFill: Fill = {
+    type: 'IMAGE',
+    color: { r: 1, g: 1, b: 1, a: 1 },
+    imageHash: image.hash,
+    imageScaleMode: 'FILL',
+    visible: true,
+    opacity: 1
+  }
+  node.fills = withImageFill(node.fills, imageFill)
 
   return {
     id: node.id,

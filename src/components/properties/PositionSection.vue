@@ -9,7 +9,7 @@ import IconButton from '@/components/ui/button/IconButton.vue'
 import Tip from '@/components/ui/overlay/Tip.vue'
 import PanelGrid from '@/components/ui/panel/PanelGrid.vue'
 import PanelSection from '@/components/ui/panel/PanelSection.vue'
-import AppCheckbox from '@/components/ui/toggle/AppCheckbox.vue'
+import AppSwitch from '@/components/ui/toggle/AppSwitch.vue'
 
 const { panels } = useI18n()
 const store = useEditorStore()
@@ -48,13 +48,14 @@ function handleAlign(
     }"
   >
     <PanelSection v-if="active" :label="panels.position">
-      <label v-if="canExclude" class="mb-2 flex items-center gap-2 text-xs">
-        <AppCheckbox
-          :model-value="excluded"
-          :aria-label="panels.excludeFromAutoLayout"
+      <label v-if="canExclude" class="mb-2 flex items-center justify-between gap-2 text-xs">
+        {{ panels.excludeFromAutoLayout }}
+        <AppSwitch
+          :model-value="excluded === true"
+          :state="excluded === 'indeterminate' ? 'mixed' : 'idle'"
+          :label="panels.excludeFromAutoLayout"
           @update:model-value="actions.setExcluded"
         />
-        {{ panels.excludeFromAutoLayout }}
       </label>
       <div role="toolbar" :aria-label="panels.position" class="mb-1.5 flex justify-between">
         <div class="flex gap-0.5">

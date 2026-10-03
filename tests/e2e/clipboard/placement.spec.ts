@@ -12,17 +12,15 @@ test('paste event centers inside the selected nested frame regardless of the las
   if (!box) throw new Error('Canvas unavailable')
   await page.mouse.move(box.x + 650, box.y + 500)
   await scene.paste()
-  await expect
-    .poll(scene.read)
-    .toEqual([
-      expect.objectContaining({
-        x: 110,
-        y: 80,
-        width: 80,
-        height: 60,
-        children: [{ x: 7, y: 11, width: 30, height: 20 }]
-      })
-    ])
+  await expect.poll(scene.read).toEqual([
+    expect.objectContaining({
+      x: 110,
+      y: 80,
+      width: 80,
+      height: 60,
+      children: [{ x: 7, y: 11, width: 30, height: 20 }]
+    })
+  ])
   const after = await scene.read()
   await page.mouse.move(10, 10)
   await scene.canvas.waitForRender()

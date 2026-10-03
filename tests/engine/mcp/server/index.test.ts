@@ -308,6 +308,24 @@ describe('MCP server', () => {
     const data = parseResult(result) as { prompt: string }
     expect(data.prompt.length).toBeGreaterThan(100)
   })
+
+  test('retrieves selected design skills over MCP without changing the canvas', async () => {
+    const before = structuredClone([...graph.nodes.values()])
+    const result = await client.callTool({
+      name: 'get_design_guidance',
+      arguments: { topics: ['ux', 'design-system'] }
+    })
+    expect(result.isError).not.toBe(true)
+    expect(parseResult(result)).toMatchObject({
+      version: '1.0.0',
+      workflow: expect.any(String),
+      guidance: [
+        { topic: 'ux', content: expect.any(String) },
+        { topic: 'design-system', content: expect.any(String) }
+      ]
+    })
+    expect([...graph.nodes.values()]).toEqual(before)
+  })
 })
 
 // ---------------------------------------------------------------------------

@@ -8,6 +8,7 @@ import {
   SECTION_DEFAULT_STROKE
 } from '#core/constants'
 
+import { snapGeometryChanges } from './pixel-snapping'
 import { createFramePresetActions } from './shapes/frame-presets'
 import { createPenActions } from './shapes/pen'
 import { adoptNodesIntoSection as adoptNodesIntoSectionImpl } from './shapes/section-adopt'
@@ -45,10 +46,10 @@ export function createShapeActions(ctx: EditorContext) {
     const fill = DEFAULT_FILLS[type] ?? DEFAULT_FILLS.RECTANGLE
     const pid = parentId ?? ctx.state.currentPageId
     const overrides: Partial<SceneNode> = {
-      x,
-      y,
-      width: w,
-      height: h,
+      ...snapGeometryChanges(
+        { x, y, width: w, height: h },
+        ctx.state.snappingPreferences.pixelGrid
+      ),
       fills: [{ ...fill }],
       ...(name ? { name } : {})
     }

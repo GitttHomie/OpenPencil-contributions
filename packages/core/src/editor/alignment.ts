@@ -7,6 +7,7 @@ import type { Vector } from '@open-pencil/scene-graph/primitives'
 import { createFlipRotateActions } from '#core/editor/alignment/flip-rotate'
 
 import { collectNodePositions, pushPositionUndo } from './history/position'
+import { snapGeometryChanges } from './pixel-snapping'
 import type { EditorContext } from './types'
 
 function computeAlignTarget(
@@ -31,9 +32,21 @@ function alignSingleNode(
   const ph = parent?.height ?? 0
 
   if (axis === 'horizontal') {
-    ctx.graph.updateNode(node.id, { x: computeAlignTarget(0, pw, node.width, align) })
+    ctx.graph.updateNode(
+      node.id,
+      snapGeometryChanges(
+        { x: computeAlignTarget(0, pw, node.width, align) },
+        ctx.state.snappingPreferences.pixelGrid
+      )
+    )
   } else {
-    ctx.graph.updateNode(node.id, { y: computeAlignTarget(0, ph, node.height, align) })
+    ctx.graph.updateNode(
+      node.id,
+      snapGeometryChanges(
+        { y: computeAlignTarget(0, ph, node.height, align) },
+        ctx.state.snappingPreferences.pixelGrid
+      )
+    )
   }
 }
 
@@ -60,10 +73,16 @@ function alignMultipleNodes(
 
     if (axis === 'horizontal') {
       const target = computeAlignTarget(minX, maxX, n.width, align)
-      ctx.graph.updateNode(n.id, { x: target - parentAbs.x })
+      ctx.graph.updateNode(
+        n.id,
+        snapGeometryChanges({ x: target - parentAbs.x }, ctx.state.snappingPreferences.pixelGrid)
+      )
     } else {
       const target = computeAlignTarget(minY, maxY, n.height, align)
-      ctx.graph.updateNode(n.id, { y: target - parentAbs.y })
+      ctx.graph.updateNode(
+        n.id,
+        snapGeometryChanges({ y: target - parentAbs.y }, ctx.state.snappingPreferences.pixelGrid)
+      )
     }
   }
 }
@@ -115,7 +134,13 @@ function distributeMultipleNodes(
       axis === 'horizontal' ? { x: distance, y: 0 } : { x: 0, y: distance }
     )
     if (!localDelta) continue
-    ctx.graph.updateNode(node.id, { x: node.x + localDelta.x, y: node.y + localDelta.y })
+    ctx.graph.updateNode(
+      node.id,
+      snapGeometryChanges(
+        { x: node.x + localDelta.x, y: node.y + localDelta.y },
+        ctx.state.snappingPreferences.pixelGrid
+      )
+    )
     cursor += nodeBounds[size] + gap
   }
 }

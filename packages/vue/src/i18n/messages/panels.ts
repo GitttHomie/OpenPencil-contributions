@@ -290,6 +290,13 @@ export const panelMessageDefaults = {
 
   solid: 'Solid',
   linearGradient: 'Linear',
+  gradientMove: 'Move gradient',
+  gradientStart: 'Gradient start',
+  gradientEnd: 'Gradient end',
+  gradientRadius: 'Rotate and resize gradient',
+  gradientWidth: 'Gradient secondary radius',
+  gradientCanvasHint:
+    'Handles snap to edges, corners, centers, and directions. Shift snaps angles; Alt/Option allows free placement; Escape cancels.',
   radialGradient: 'Radial',
   image: 'Image',
   stops: 'Stops',

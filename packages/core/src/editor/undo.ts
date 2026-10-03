@@ -9,7 +9,7 @@ import type { UndoEntry } from '@open-pencil/scene-graph/undo'
 import { assertNodeEditable } from './capabilities'
 import { restoreSubtree, snapshotSubtree } from './clipboard/subtree-history'
 import { applyMoveStates, captureMoveState, type MoveState } from './history/move'
-import { collectNodePositions, pushPositionUndo } from './history/position'
+import { collectNodePositions, pushPositionUndo, recordPositionOverrides } from './history/position'
 import {
   restorePageFromSnapshot as restorePageSnapshot,
   snapshotPage as createPageSnapshot,
@@ -29,6 +29,7 @@ type ResizeOriginal = Rect &
       | 'strokes'
       | 'textPathData'
       | 'textPathBox'
+      | 'textAutoResize'
     >
   >
 
@@ -45,10 +46,17 @@ export function createUndoActions(ctx: EditorContext) {
       const n = ctx.graph.getNode(id)
       if (n) finals.set(id, captureMoveState(ctx.graph, n))
     }
+    const overrides = recordPositionOverrides(ctx, originals, finals)
     ctx.undo.push({
       label: 'Move',
-      forward: () => applyMoveStates(ctx, finals),
-      inverse: () => applyMoveStates(ctx, originals)
+      forward: () => {
+        applyMoveStates(ctx, finals)
+        overrides.redo()
+      },
+      inverse: () => {
+        applyMoveStates(ctx, originals)
+        overrides.undo()
+      }
     })
   }
 
@@ -101,6 +109,7 @@ export function createUndoActions(ctx: EditorContext) {
     const final: ResizeOriginal = hasGeometry
       ? createResizeSnapshot(node)
       : { x: node.x, y: node.y, width: node.width, height: node.height }
+    if (original.textAutoResize !== undefined) final.textAutoResize = node.textAutoResize
     ctx.undo.push({
       label: 'Resize',
       forward: () => {

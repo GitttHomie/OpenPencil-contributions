@@ -71,7 +71,7 @@ const accessibleLabel = computed(() => {
   const ariaLabel = attrs['aria-label']
   return typeof ariaLabel === 'string' ? ariaLabel : (label ?? icon)
 })
-const styles = computed(() => tv(theme)({ suffix: Boolean(slots.suffix) }))
+const styles = computed(() => tv(theme)({ suffix: Boolean(slots.suffix || suffix) }))
 
 const emit = defineEmits<{
   'update:modelValue': [value: number]
@@ -124,7 +124,10 @@ defineOptions({ inheritAttrs: false })
       "
     >
       <span
-        v-if="editing || !slots.bound || rootAttrs['data-bound'] === undefined"
+        v-if="
+          (icon || label || slots.icon) &&
+          (editing || !slots.bound || rootAttrs['data-bound'] === undefined)
+        "
         :class="styles.leading({ class: ui?.leading })"
       >
         <slot name="icon">

@@ -45,6 +45,10 @@ Every shape can have a fill. The fill section supports:
 - **Gradient** — Linear, Radial, Angular, or Diamond with editable gradient stops
 - **Image** — select an image file as the fill
 
+With one layer selected, open a gradient fill to show its handles on the canvas. Drag the middle handle to move the gradient. Linear gradients have two endpoints for rotation and length; radial, angular, and diamond gradients have a center and two radius handles. Handles snap near the object's edges, corners, and center lines, with guides showing the alignment. Direction snapping includes horizontal, vertical, 45° diagonals, and the object's own diagonals. This allows edge-to-edge and corner-to-corner placement on the same or opposite edges, including rotated objects.
+
+Hold Shift for 15° angle steps, or Alt/Option for free placement. Corners and edge midpoints take priority when nearby. Escape cancels the current drag, and Undo restores the previous gradient in one step.
+
 ### Stroke
 
 Add an outline to any shape. Stroke properties include:

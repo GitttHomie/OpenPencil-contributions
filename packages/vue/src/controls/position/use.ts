@@ -21,7 +21,11 @@ export function usePosition() {
     void editor.state.sceneVersion
     return nodes.value.map((n) => {
       const parent = n.parentId ? editor.getNode(n.parentId) : null
-      return !!parent && parent.layoutMode !== 'NONE'
+      return (
+        parent?.layoutMode === 'HORIZONTAL' ||
+        parent?.layoutMode === 'VERTICAL' ||
+        parent?.layoutMode === 'GRID'
+      )
     })
   })
   const canExclude = computed(() => nodes.value.length > 0 && parentLayouts.value.every(Boolean))

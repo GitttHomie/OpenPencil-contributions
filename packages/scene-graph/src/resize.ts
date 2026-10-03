@@ -91,9 +91,10 @@ export function constrainedChildRect(
 export function scaledChildRect(
   child: Rect,
   parentBefore: Pick<Rect, 'width' | 'height'>,
-  parentAfter: Pick<Rect, 'width' | 'height'>
+  parentAfter: Pick<Rect, 'width' | 'height'>,
+  roundToPixels = true
 ): Rect {
-  return constrainedChildRect(child, parentBefore, parentAfter, 'SCALE', 'SCALE')
+  return constrainedChildRect(child, parentBefore, parentAfter, 'SCALE', 'SCALE', roundToPixels)
 }
 
 export function scaleVectorNetworkForResize(
@@ -261,7 +262,8 @@ export function computeConstrainedResizeChanges(
   rootId: string,
   rootBefore: Pick<Rect, 'width' | 'height'>,
   rootAfter: Pick<Rect, 'width' | 'height'>,
-  originals: ReadonlyMap<string, ResizeSnapshot>
+  originals: ReadonlyMap<string, ResizeSnapshot>,
+  options: { layoutResolved?: boolean; roundToPixels?: boolean } = {}
 ): Map<string, Partial<SceneNode>> {
   const changes = new Map<string, Partial<SceneNode>>()
 
@@ -282,15 +284,24 @@ export function computeConstrainedResizeChanges(
         compute(childId, original, child)
         continue
       }
+      const roundToPixels = (options.roundToPixels ?? true) && parent.layoutMode === 'NONE'
       const rect = scalesChildren
-        ? scaledChildRect(original, parentBefore, parentAfter)
+        ? scaledChildRect(original, parentBefore, parentAfter, roundToPixels)
         : constrainedChildRect(
             original,
             parentBefore,
             parentAfter,
             child.horizontalConstraint,
-            child.verticalConstraint
+            child.verticalConstraint,
+            roundToPixels
           )
+      // The reconciliation pass must keep Yoga's settled sizes. Restoring the
+      // provisional stretched size would resize absolute children a second time
+      // when the layout container returns to its Hug size.
+      if (options.layoutResolved && child.layoutMode !== 'NONE') {
+        rect.width = child.width
+        rect.height = child.height
+      }
       const childChanges: Partial<SceneNode> = {
         ...rect,
         ...scaledGeometryChanges(original, original.width, original.height, rect.width, rect.height)

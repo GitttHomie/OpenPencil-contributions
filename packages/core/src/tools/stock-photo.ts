@@ -21,9 +21,11 @@ export const stockPhoto = defineTool({
   name: 'stock_photo',
 
   description:
-    'Search stock photos and apply to leaf image placeholders or closed area geometry. ' +
+    'Search stock photos and apply as image fills to frames, components, or instances. ' +
     'Pass a JSON array; each item is {id, query, index?, orientation?}. ' +
-    'Containers with content, text, lines, and structural nodes are rejected.',
+    'For a full-card photo, target the card frame itself. Children and overlay fills are preserved. ' +
+    'Replaces an existing image fill or the base solid placeholder. Use additional fills for scrims, not overlay rectangles. ' +
+    'Shapes, text, and structural nodes are rejected.',
   execution: { kind: 'async', mutation: 'document' },
   capabilities: ['document:write', 'network:access'],
   input: v.object({

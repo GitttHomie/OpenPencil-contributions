@@ -64,6 +64,7 @@ export function handleDrawMove(d: DragDraw, cx: number, cy: number, shiftKey: bo
 
 function createDraw(editor: Editor, nodeId: string, startX: number, startY: number): DragDraw {
   const graph = editor.graph
+  const start = editor.snapGeometry({ x: startX, y: startY })
   // Keep the draft in page coordinates until release, so layout cannot fight drawing.
   let parent = graph.hitTestFrame(startX, startY, new Set([nodeId]), editor.state.currentPageId)
   if (graph.getNode(nodeId)?.type === 'SECTION') {
@@ -121,7 +122,7 @@ function createDraw(editor: Editor, nodeId: string, startX: number, startY: numb
 
   // Creation itself is already an edit: avoid rebuilding the backing on the first held frame.
   try {
-    preview.update(nodeId, { x: startX, y: startY })
+    preview.update(nodeId, start)
   } catch (error) {
     cancel()
     throw error
@@ -129,11 +130,11 @@ function createDraw(editor: Editor, nodeId: string, startX: number, startY: numb
 
   return {
     type: 'draw',
-    startX,
-    startY,
+    startX: start.x,
+    startY: start.y,
     nodeId,
     update: (changes) => {
-      if (!finished) preview.update(nodeId, changes)
+      if (!finished) preview.update(nodeId, editor.snapGeometry(changes))
     },
     commit,
     cancel

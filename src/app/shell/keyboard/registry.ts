@@ -141,6 +141,11 @@ export function registerKeyboardShortcuts(options: KeyboardShortcutOptions) {
     },
     { id: 'toggle-ai', keys: '$mod+KeyJ', run: ({ actions }) => actions.toggleAI() },
     {
+      id: 'view-pixel-grid',
+      keys: appMenuTinykeysShortcut('view-pixel-grid') ?? '$mod+Shift+KeyP',
+      run: ({ store }) => store.setPixelGridVisible(!store.state.showPixelGrid)
+    },
+    {
       id: 'open-settings',
       keys: appMenuTinykeysShortcut('settings') ?? '$mod+Comma',
       run: () => openSettingsDialog(),

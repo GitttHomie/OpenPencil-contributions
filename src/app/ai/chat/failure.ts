@@ -1,5 +1,6 @@
 import { APICallError } from 'ai'
 
+import { ACPModelSelectionError } from '@/app/ai/acp/models'
 import { MCPStartupError } from '@/app/automation/mcp/failure'
 
 export type AIChatFailureReason =
@@ -85,6 +86,7 @@ function statusFailureReason(status: number | null): AIChatFailureReason | null 
 
 function failureReason(error: unknown): AIChatFailureReason {
   if (error instanceof MCPStartupError) return 'mcp-unavailable'
+  if (error instanceof ACPModelSelectionError) return 'model-not-found'
   const statusReason = statusFailureReason(providerErrorStatus(error))
   if (statusReason) return statusReason
   if (isInsufficientCreditError(error)) return 'insufficient-credit'

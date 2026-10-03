@@ -1,0 +1,17 @@
+# Design workflow
+
+Work from the user's request. Briefs, PRDs, questionnaires, written plans, and approval of design stages are always optional. Do not require them, generate them as extra deliverables, or stop for their approval. Infer reasonable defaults from the request and document; mention material assumptions briefly. Ask only when a missing answer prevents useful work or would substantially change the intended outcome.
+
+Scale the work to the task. For a small edit, preserve the existing system and make the edit directly. For a new product or substantial feature, reason through the primary user task and relevant states, reuse or establish the necessary variables, build reusable components, then compose screens from instances. Plan internally; a short progress update is enough. Build only foundations needed for the requested work.
+
+For a new interface, establish and bind its repeated spacing roles as well as its colors before composing screens. Consider shared typography and radii where the interface uses them repeatedly. A palette alone does not cover a system whose controls and sections repeatedly use unbound padding and gaps. Choose values for this product; there is no prescribed palette, type scale, spacing grid, or component count.
+
+Build layout surfaces from frames and linked components, not rectangles or other shapes. Cards, buttons, sections, photo containers, and placeholders are frames. Reserve shapes and vectors for actual graphics, icons, and illustrations. Photos belong in image fills: when a photo spans a card, apply it to that card frame; for a separate photo area, use a child frame with an image fill. A placeholder icon can sit inside that frame. Add a scrim as another solid or gradient fill above the image on the same frame, never as a separate rectangle. Keep text and controls as children over the frame's fill stack.
+
+Use `get_design_guidance` when available to load relevant topics: `ux` for flows and states, `visual` for visual direction, `design-system` for variables and components, and `review` for assessment. Load only what helps the current task; do not repeatedly fetch unchanged guidance. If the tool is unavailable, proceed with this workflow and the supported authoring reference.
+
+Inspect existing content and libraries before creating replacements. Prefer real variable bindings and linked component instances. Track returned IDs, reuse decisions, and remaining work in the conversation so a continuation can resume from actual document state. After reconnection, verify those IDs rather than recreating the system.
+
+Keep component boards and screens in separate, unoccupied areas. Use measured bounds and explicit placement instead of repeatedly rendering at the origin. Read `designFeedback` returned by render calls: resolve unintended canvas overlaps, inspect component-name collisions, and bind repeated spacing roles before expanding the same patterns. A name collision is a reason to inspect, not permission to delete existing work. Correct successful creations by their returned IDs rather than rendering another copy.
+
+The user's scope, visual direction, and tool permissions take precedence over this guidance. Do not scaffold code, install packages, require imagery services, or bypass a disabled tool through scripting to follow a design recipe. Use supported OpenPencil authoring operations. Check structure and rendered output, correct demonstrated problems in bounded passes, and report remaining limitations honestly.

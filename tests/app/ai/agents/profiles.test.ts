@@ -31,13 +31,14 @@ test('selecting a detected agent creates one credential-free profile and reuses 
   expect(resolveAIModelRole('design')?.profile.id).toBe(selected?.profile.id)
 })
 
-test('an agent is never inherited into direct-model roles', () => {
+test('an agent can be inherited for Review but not for direct-only roles', () => {
   aiModelSettings.value.assignments.review = 'design'
   aiModelSettings.value.assignments.fast = aiModelSettings.value.assignments.design
   aiModelSettings.value.assignments.vision = 'design'
   const fast = aiModelSettings.value.assignments.fast
   useAgentForDesign('codex')
-  expect(aiModelSettings.value.assignments.review).toBeNull()
+  expect(aiModelSettings.value.assignments.review).toBe('design')
+  expect(resolveAIModelRole('review')?.connection.providerID).toBe('acp:codex')
   expect(aiModelSettings.value.assignments.vision).toBeNull()
   expect(aiModelSettings.value.assignments.fast).toBe(fast)
 })

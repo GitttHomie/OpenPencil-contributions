@@ -3,7 +3,9 @@ import { createApp } from 'vue'
 import { createRetainedScopePlugin } from '@open-pencil/vue'
 
 import '@/app.css'
+import type { ACPModelCatalog } from '@/app/ai/acp/models'
 import { createAgentDiscovery } from '@/app/ai/agents/discovery'
+import { agentModelLoaderKey } from '@/app/ai/agents/models'
 import type { AgentLookup } from '@/app/ai/agents/native'
 import { agentDiscoveryKey } from '@/app/ai/agents/use'
 import { MCP_INSTALL_TARGET } from '@/app/automation/mcp/failure'
@@ -39,4 +41,9 @@ const discovery = createAgentDiscovery({
 createApp(AgentSettingsFixture)
   .use(createRetainedScopePlugin())
   .provide(agentDiscoveryKey, discovery)
+  .provide(agentModelLoaderKey, async (id, signal) => {
+    const response = await fetch(`/__test/local-agents/models/${id}`, { signal })
+    if (!response.ok) throw new Error('Model lookup failed')
+    return response.json() as Promise<ACPModelCatalog>
+  })
   .mount('#app')

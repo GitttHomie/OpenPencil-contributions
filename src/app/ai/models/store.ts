@@ -173,7 +173,8 @@ function parseSettings(value: unknown): AIModelSettings | null {
     const profile = models.find((candidate) => candidate.id === profileId)
     const connection = connections.find((candidate) => candidate.id === profile?.connectionId)
     const invalidAgent =
-      connection?.providerID.startsWith('acp:') || connection?.providerID === 'harness:pi'
+      (role !== 'review' && connection?.providerID.startsWith('acp:')) ||
+      connection?.providerID === 'harness:pi'
     const invalidVision = role === 'vision' && !profile?.capabilities.includes('vision')
     if (invalidAgent || invalidVision) assignments[role] = null
   }
@@ -267,6 +268,14 @@ export function isAgentModelProfile(profile: AIModelProfile | null): boolean {
 
 export function isACPModelProfile(profile: AIModelProfile | null): boolean {
   return Boolean(profile && modelConnection(profile.connectionId)?.providerID.startsWith('acp:'))
+}
+
+export function canAssignModelRole(profile: AIModelProfile | null, role: AIModelRole): boolean {
+  if (!profile) return false
+  if (role === 'design') return isDesignModelProfile(profile)
+  if (role === 'review' && isACPModelProfile(profile)) return true
+  if (isAgentModelProfile(profile)) return false
+  return role !== 'vision' || profile.capabilities.includes('vision')
 }
 
 export function resolveAIModelRole(role: AIModelRole): ResolvedAIModelRole | null {
@@ -474,10 +483,7 @@ export function setModelRoleAssignment(role: AIModelRole, assignment: AIModelRol
     aiModelSettings.value.assignments.design = assignment
     for (const inheritedRole of ['review', 'fast', 'vision'] as const) {
       if (aiModelSettings.value.assignments[inheritedRole] !== 'design') continue
-      if (
-        isAgentModelProfile(profile) ||
-        (inheritedRole === 'vision' && !profile.capabilities.includes('vision'))
-      ) {
+      if (!canAssignModelRole(profile, inheritedRole)) {
         aiModelSettings.value.assignments[inheritedRole] = null
       }
     }
@@ -489,8 +495,7 @@ export function setModelRoleAssignment(role: AIModelRole, assignment: AIModelRol
       assignment === 'design'
         ? modelProfile(aiModelSettings.value.assignments.design)
         : modelProfile(assignment)
-    if (isAgentModelProfile(profile)) return
-    if (role === 'vision' && !profile?.capabilities.includes('vision')) return
+    if (!canAssignModelRole(profile, role)) return
   }
   aiModelSettings.value.assignments[role] = assignment
 }

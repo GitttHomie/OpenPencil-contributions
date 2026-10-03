@@ -39,6 +39,7 @@ interface SubmissionOptions {
 
 export function useChatSubmission(options: SubmissionOptions) {
   const isPreparingAttachments = ref(false)
+  const failed = ref(false)
   let operationVersion = 0
 
   async function sendText(currentChat: ChatInstance, submission: ChatSubmission): Promise<void> {
@@ -121,6 +122,7 @@ export function useChatSubmission(options: SubmissionOptions) {
     }
 
     const version = ++operationVersion
+    failed.value = false
     isPreparingAttachments.value = submission.images.length > 0
     options.clearFailure()
     try {
@@ -137,6 +139,7 @@ export function useChatSubmission(options: SubmissionOptions) {
         await sendAttachments(currentChat, submission, version)
       }
     } catch (error) {
+      if (version === operationVersion) failed.value = true
       reportSubmissionError(error)
     } finally {
       await options.flush?.().catch(() => undefined)
@@ -147,12 +150,14 @@ export function useChatSubmission(options: SubmissionOptions) {
   function cancel(): void {
     operationVersion += 1
     isPreparingAttachments.value = false
+    failed.value = false
   }
 
   const busy = computed(() => isPreparingAttachments.value)
 
   return {
     busy,
+    failed,
     cancel,
     stop: () => options.chat.value?.stop(),
     submit

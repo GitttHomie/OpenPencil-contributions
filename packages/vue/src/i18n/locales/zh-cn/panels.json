@@ -354,5 +354,11 @@
   "lineHeightMode": "行高模式",
   "unresolvedVariable": "变量值不可用",
   "excludeFromAutoLayout": "从自动布局中排除",
-  "positionAutoLayout": "位置由父级的自动布局控制"
+  "positionAutoLayout": "位置由父级的自动布局控制",
+  "gradientMove": "移动渐变",
+  "gradientStart": "渐变起点",
+  "gradientEnd": "渐变终点",
+  "gradientRadius": "旋转和缩放渐变",
+  "gradientWidth": "渐变第二半径",
+  "gradientCanvasHint": "控制点吸附到边缘、角点、中心和方向。按住 Shift 吸附角度，Alt/Option 自由放置，Escape 取消。"
 }

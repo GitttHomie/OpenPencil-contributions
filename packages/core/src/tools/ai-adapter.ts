@@ -209,6 +209,7 @@ export function toolsToAI(
 const ARG_TO_NODE_PROP: Record<string, string> = {
   color: 'fills',
   corner_radius: 'cornerRadius',
+  corner_smoothing: 'cornerSmoothing',
   font_size: 'fontSize',
   font_weight: 'fontWeight',
   text: 'text',
@@ -225,7 +226,15 @@ const ARG_TO_NODE_PROP: Record<string, string> = {
 /** Args that are parameters to the tool, not node properties to track */
 const SKIP_ARGS: Partial<Record<string, Set<string>>> = {
   set_effects: new Set(['type', 'color', 'offset_x', 'offset_y', 'radius', 'spread']),
-  set_fill: new Set(['type', 'color']),
+  set_fill: new Set([
+    'type',
+    'color',
+    'opacity',
+    'operation',
+    'fill_index',
+    'gradient',
+    'color_end'
+  ]),
   set_stroke: new Set(['type', 'color']),
   set_layout: new Set([
     'align',

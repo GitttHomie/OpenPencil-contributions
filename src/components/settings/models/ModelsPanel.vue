@@ -7,7 +7,6 @@ import { useI18n } from '@open-pencil/vue'
 import { useModelSettings } from '@/app/ai/models/settings/use'
 import SettingsPage from '@/components/settings/layout/SettingsPage.vue'
 import SettingsSection from '@/components/settings/layout/SettingsSection.vue'
-import LocalAgentsSection from '@/components/settings/models/LocalAgentsSection.vue'
 import ProfileEditor from '@/components/settings/models/ProfileEditor.vue'
 import RoleAssignments from '@/components/settings/models/RoleAssignments.vue'
 import AppButton from '@/components/ui/button/AppButton.vue'
@@ -90,7 +89,6 @@ const { profiles, statusByConnection, refreshStatuses } = useModelSettings()
 
     <SettingsPage v-show="!editing && !editorLeaving">
       <div class="flex flex-col gap-6">
-        <LocalAgentsSection />
         <SettingsSection>
           <template #title>{{ ai.modelsTitle }}</template>
           <template #description>{{ ai.modelsDescription }}</template>

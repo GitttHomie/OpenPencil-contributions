@@ -30,6 +30,8 @@ Run `bun --filter @open-pencil/core build` before unit tests. Files under `tests
 
 ## Test purpose
 
+For changes to agent design guidance, use the [design-guidance evaluation corpus](./design-guidance-evaluation.md) alongside integration tests. It compares visual, UX, document-structure, and interaction-cost outcomes without requiring users to provide planning documents.
+
 - Unit tests cover isolated rules and state transitions.
 - Package integration tests exercise real collaborators owned by that package.
 - Browser integration tests cover browser CSS, WebGL, fonts and DOM behavior where that runtime matters. They need not launch the whole app if the contract can be exercised independently.

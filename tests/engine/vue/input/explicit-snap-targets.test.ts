@@ -14,8 +14,9 @@ function pageWithGuide(offset: number, axis: 'X' | 'Y') {
 }
 
 describe('explicit snap targets', () => {
-  test('canvas guides outrank object and pixel targets', () => {
+  test('canvas guides outrank object targets when pixel snapping is off', () => {
     const editor = pageWithGuide(102.5, 'X')
+    editor.state.snappingPreferences.pixelGrid = false
     const pageId = editor.state.currentPageId
     const target = editor.graph.createNode('RECTANGLE', pageId, {
       x: 103,
@@ -36,8 +37,9 @@ describe('explicit snap targets', () => {
     expect(result.guides[0]).toMatchObject({ kind: 'canvas-guide', position: 102.5 })
   })
 
-  test('geometry targets outrank canvas guides, objects, and pixels', () => {
+  test('geometry targets outrank canvas guides and objects when pixel snapping is off', () => {
     const editor = pageWithGuide(102.5, 'X')
+    editor.state.snappingPreferences.pixelGrid = false
     const pageId = editor.state.currentPageId
     const target = editor.graph.createNode('RECTANGLE', pageId, {
       x: 103,

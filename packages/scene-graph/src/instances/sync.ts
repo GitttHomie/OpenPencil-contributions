@@ -182,6 +182,7 @@ function childBindingProtection(
 ) {
   const fields = enclosingInstanceOverrideFields(graph, child)
   fields.push(new Set(overrides.descendants.get(child.id)?.keys()))
+  if (child.type === 'INSTANCE') fields.push(new Set(child.instanceOverrides.self.keys()))
   return bindingProtection(fields)
 }
 
@@ -320,6 +321,16 @@ export function syncChildren(
   const instParent = graph.nodes.get(instParentId)
   if (!compParent || !instParent) return
 
+  // Remove descendants whose definition was deleted. Unmapped imported extras
+  // remain intact; they are not evidence of an authored structural deletion.
+  for (const childId of instParent.childIds) {
+    const child = graph.nodes.get(childId)
+    if (!child) continue
+    const source = getInstanceOverride(overrides, instParentId, child.id, 'sourceComponentId')
+    const mapped = typeof source === 'string' ? source : child.componentId
+    if (mapped && !graph.nodes.has(mapped)) graph.deleteNode(child.id)
+  }
+
   const instChildMap = new Map<string, SceneNode>()
   const usedInstChildIds = new Set<string>()
   const compChildIdSet = new Set(compParent.childIds)
@@ -380,10 +391,7 @@ export function syncChildren(
     }
     updateSyncedProps(graph, instChild, updates)
 
-    if (
-      compChild.childIds.length > 0 &&
-      !hasNodeInstanceOverride(overrides, instParentId, instChild.id, 'componentId')
-    ) {
+    if (!hasNodeInstanceOverride(overrides, instParentId, instChild.id, 'componentId')) {
       syncChildren(graph, compChildId, instChild.id, overrides)
     }
   }

@@ -52,10 +52,10 @@ describe('resize snapping preferences', () => {
     applyResize(drag, drag.startX + 6.3, drag.startY + 7.4, false, editor)
     commitResizePreview(drag, editor)
 
-    expect(editor.graph.getNode(nodeId)).toMatchObject({ width: 106.75, height: 87.75 })
+    expect(editor.graph.getNode(nodeId)).toMatchObject({ x: 10, y: 20, width: 107, height: 88 })
   })
 
-  test('snaps west edge while preserving the opposite edge', () => {
+  test('snaps west edge and rounds an existing fractional opposite edge', () => {
     const { editor, nodeId, drag } = setup('w')
     editor.state.snappingPreferences = { geometry: true, objects: false, pixelGrid: true }
 
@@ -64,17 +64,17 @@ describe('resize snapping preferences', () => {
 
     const resized = editor.graph.getNode(nodeId)
     expect(resized?.x).toBeCloseTo(15)
-    expect(resized?.width).toBeCloseTo(95.25)
+    expect(resized?.width).toBe(95)
   })
 
-  test('Control bypass preserves fractional resize geometry', () => {
+  test('Control bypasses guides but preserves pixel snapping', () => {
     const { editor, nodeId, drag } = setup()
     editor.state.snappingPreferences = { geometry: true, objects: true, pixelGrid: true }
 
     applyResize(drag, drag.startX + 6.3, drag.startY + 7.4, false, editor, true)
     commitResizePreview(drag, editor)
 
-    expect(editor.graph.getNode(nodeId)).toMatchObject({ width: 106.3, height: 87.4 })
+    expect(editor.graph.getNode(nodeId)).toMatchObject({ x: 10, y: 20, width: 106, height: 87 })
     expect(editor.state.snapGuides).toEqual([])
   })
 
@@ -91,11 +91,11 @@ describe('resize snapping preferences', () => {
     applyResize(drag, 148, drag.startY, false, editor)
     commitResizePreview(drag, editor)
 
-    expect(editor.graph.getNode(nodeId)?.width).toBeCloseTo(137.75)
+    expect(editor.graph.getNode(nodeId)?.width).toBe(138)
     expect(editor.state.snapGuides).toEqual([])
   })
 
-  test('object edges take priority over the pixel grid', () => {
+  test('fractional object edges cannot override the pixel grid', () => {
     const { editor, nodeId, drag } = setup('e')
     const pageId = editor.state.currentPageId
     editor.graph.createNode('RECTANGLE', pageId, { x: 150.4, y: 0, width: 50, height: 50 })
@@ -103,6 +103,7 @@ describe('resize snapping preferences', () => {
     applyResize(drag, 148, drag.startY, false, editor)
     commitResizePreview(drag, editor)
 
-    expect(editor.graph.getNode(nodeId)).toMatchObject({ width: 140.15 })
+    expect(editor.graph.getNode(nodeId)).toMatchObject({ x: 10, y: 20, width: 140, height: 80 })
+    expect(editor.state.snapGuides).toEqual([])
   })
 })

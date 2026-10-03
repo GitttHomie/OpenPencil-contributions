@@ -1,8 +1,11 @@
 import type { Page } from '@playwright/test'
 
 /** Hold reasoning open until the test explicitly completes the turn. */
-export async function installReasoningTransport(page: Page): Promise<void> {
-  await page.evaluate(() => {
+export async function installReasoningTransport(
+  page: Page,
+  finishReason: 'stop' | 'length' | null = 'stop'
+): Promise<void> {
+  await page.evaluate((finishReason) => {
     window.openPencil?.setChatTransport(() => ({
       async sendMessages() {
         return new ReadableStream({
@@ -25,7 +28,7 @@ export async function installReasoningTransport(page: Page): Promise<void> {
                   delta: 'Finished inspecting the layout.'
                 })
                 controller.enqueue({ type: 'text-end', id: 'answer' })
-                controller.enqueue({ type: 'finish', finishReason: 'stop' })
+                if (finishReason) controller.enqueue({ type: 'finish', finishReason })
                 controller.close()
               },
               { once: true }
@@ -37,7 +40,7 @@ export async function installReasoningTransport(page: Page): Promise<void> {
         return null
       }
     }))
-  })
+  }, finishReason)
 }
 
 export async function finishReasoning(page: Page): Promise<void> {

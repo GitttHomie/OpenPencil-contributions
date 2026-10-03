@@ -32,6 +32,7 @@ import type { getActiveEditorStore } from '@/app/editor/active-store'
 
 import { resumableTransport } from './history/continuation'
 import { maxAgentSteps } from './preferences'
+import { createChatRunState } from './run-state'
 
 type EditorStore = ReturnType<typeof getActiveEditorStore>
 
@@ -75,14 +76,14 @@ function mergeProviderOptions(
   return { ...cacheOptions, ...reasoningOptions }
 }
 
-export async function createACPTransport(providerID: AIProviderID) {
+export async function createACPTransport(providerID: AIProviderID, modelId = '') {
   const agentId = providerID.replace('acp:', '') as ACPAgentID
   const agentDef = ACP_AGENTS.find((a) => a.id === agentId)
   if (!agentDef) throw new Error(`Unknown ACP agent: ${agentId}`)
 
   const { ACPChatTransport } = await import('@/app/ai/acp/transport')
   const { homeDir } = await import('@tauri-apps/api/path')
-  return new ACPChatTransport({ agentDef, cwd: await homeDir() })
+  return new ACPChatTransport({ agentDef, cwd: await homeDir(), modelId })
 }
 
 export function createToolLoopTransport({
@@ -178,7 +179,6 @@ export function createChatSessionManager({
   isConfigured,
   isACPProvider,
   isHarnessProvider,
-  providerID,
   credentialsReady,
   getActiveEditorStore
 }: ChatSessionOptions) {
@@ -191,6 +191,7 @@ export function createChatSessionManager({
   let harnessTransportInstance: { stop(): Promise<void> } | null = null
   let overrideTransport: (() => ChatTransport<UIMessage>) | null = null
   let activeProviderError: unknown = null
+  const runs = new WeakMap<Chat<UIMessage>, ReturnType<typeof createChatRunState>>()
 
   function captureProviderError(error: unknown): void {
     activeProviderError ??= error
@@ -238,7 +239,12 @@ export function createChatSessionManager({
 
   async function createActiveACPTransport() {
     await destroyAgentTransports()
-    const transport = await createACPTransport(providerID.value)
+    const runtime = await createAIModelRuntime('design')
+    if (runtime?.kind !== 'acp') throw new Error('The Design model is not a CLI profile')
+    const transport = await createACPTransport(
+      runtime.role.connection.providerID,
+      runtime.role.profile.customModelID || runtime.role.profile.modelID
+    )
     acpTransportInstance = transport
     return transport as ChatTransport<UIMessage>
   }
@@ -313,6 +319,7 @@ export function createChatSessionManager({
     if (!chat || transportDirty || currentChatStore !== store) {
       const messages = initialMessages ?? currentChatMessages.get(store)
       const diagnosticContext: AIDiagnosticContext = { sessionId, runId: crypto.randomUUID() }
+      const run = createChatRunState()
       let transport: ChatTransport<UIMessage>
       if (isACPProvider.value) transport = await createActiveACPTransport()
       else if (isHarnessProvider.value) transport = await createActiveHarnessTransport(sessionId)
@@ -320,6 +327,7 @@ export function createChatSessionManager({
       chat = new Chat<UIMessage>({
         transport: {
           sendMessages: (options) => {
+            run.start()
             diagnosticContext.runId = crypto.randomUUID()
             return transport.sendMessages(options)
           },
@@ -327,6 +335,7 @@ export function createChatSessionManager({
         },
         messages,
         onError: (error) => {
+          run.fail()
           const reportedError = activeProviderError ?? error
           activeProviderError = null
           failure.value = classifyAIChatError(reportedError)
@@ -337,8 +346,12 @@ export function createChatSessionManager({
             diagnosticContext
           )
         },
-        onFinish: (event) => handleChatFinish(diagnosticContext, event)
+        onFinish: (event) => {
+          run.finish(event)
+          handleChatFinish(diagnosticContext, event)
+        }
       })
+      runs.set(chat, run)
       currentChatStore = store
       transportDirty = false
     }
@@ -359,5 +372,15 @@ export function createChatSessionManager({
     markTransportDirty()
   }
 
-  return { ensureChat, resetChat, markTransportDirty, setOverrideTransport, failure, clearFailure }
+  const runStateFor = (current: Chat<UIMessage> | null) =>
+    current ? (runs.get(current)?.state.value ?? null) : null
+  return {
+    ensureChat,
+    resetChat,
+    markTransportDirty,
+    setOverrideTransport,
+    failure,
+    clearFailure,
+    runStateFor
+  }
 }

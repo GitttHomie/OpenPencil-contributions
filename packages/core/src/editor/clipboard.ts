@@ -10,10 +10,11 @@ import { createClipboardAssetActions } from './clipboard/assets'
 import { createPastedTrees } from './clipboard/component-paste'
 import type { ClipboardSnapshot } from './clipboard/copy'
 import { createClipboardCopyActions } from './clipboard/copy'
+import { deleteSelected } from './clipboard/delete'
 import { importClipboardDependencies } from './clipboard/dependencies'
 import { createClipboardExportActions } from './clipboard/export'
 import { createClipboardFontActions } from './clipboard/fonts'
-import { deleteIds, recreateSnapshots, restoreDeletedEntries } from './clipboard/history'
+import { deleteIds, recreateSnapshots } from './clipboard/history'
 import type { PasteHistoryOperation } from './clipboard/paste-replace'
 import { replaceTargetsWithCreated, selectedReplacementTargets } from './clipboard/paste-replace'
 import { resolvePasteTarget } from './clipboard/paste-target'
@@ -297,49 +298,6 @@ export function createClipboardActions(ctx: EditorContext) {
     return missingImageHashes(nodeIds).length > 0
   }
 
-  function deleteSelected() {
-    const entries: Array<{
-      id: string
-      parentId: string
-      index: number
-      subtree: Map<string, SceneNode>
-    }> = []
-    for (const id of ctx.state.selectedIds) {
-      const node = ctx.graph.getNode(id)
-      if (!node || node.locked) continue
-      const parentId = node.parentId ?? ctx.state.currentPageId
-      const parent = ctx.graph.getNode(parentId)
-      const index = parent?.childIds.indexOf(id) ?? -1
-      entries.push({ id, parentId, index, subtree: snapshotSubtree(ctx.graph, id) })
-    }
-    if (entries.length === 0) return
-
-    const relayoutParents = () => {
-      for (const parentId of new Set(entries.map((entry) => entry.parentId))) {
-        ctx.runLayoutForNode(parentId)
-      }
-    }
-
-    const prevSelection = new Set(ctx.state.selectedIds)
-    for (const { id } of entries) ctx.graph.deleteNode(id)
-    relayoutParents()
-
-    ctx.undo.push({
-      label: 'Delete',
-      forward: () => {
-        for (const { id } of entries) ctx.graph.deleteNode(id)
-        relayoutParents()
-        ctx.setSelectedIds(new Set())
-      },
-      inverse: () => {
-        restoreDeletedEntries(ctx, entries)
-        relayoutParents()
-        ctx.setSelectedIds(prevSelection)
-      }
-    })
-    ctx.setSelectedIds(new Set())
-  }
-
   const copyActions = createClipboardCopyActions(ctx)
   const exportActions = createClipboardExportActions(ctx)
   const fontActions = createClipboardFontActions(ctx)
@@ -355,7 +313,7 @@ export function createClipboardActions(ctx: EditorContext) {
     pasteSnapshot,
     pasteFromHTML,
     warnMissingImages,
-    deleteSelected,
+    deleteSelected: () => deleteSelected(ctx),
     ...assetActions,
     ...exportActions
   }

@@ -72,8 +72,8 @@ export async function createAIModelRuntime(role: AIModelRole): Promise<AIModelRu
     return { kind: 'harness', role: resolved }
   }
   if (resolved.connection.providerID.startsWith('acp:')) {
-    if (role !== 'design') {
-      throw new Error('ACP agents can only be assigned to the Design agent role')
+    if (role !== 'design' && role !== 'review') {
+      throw new Error('ACP agents support the Design and Review roles')
     }
     return { kind: 'acp', role: resolved }
   }

@@ -1,4 +1,5 @@
 export { CODEGEN_PROMPT } from './prompts'
+export { DESIGN_WORKFLOW } from './design-guidance'
 
 export { getComponentCatalog, registerComponentCatalog } from './component-catalog'
 export type {
@@ -31,4 +32,4 @@ export {
   parseOverlapSeverity
 } from './analyze/overlaps/params'
 export { setPexelsAPIKey, setUnsplashAccessKey } from './stock-photo'
-export { importSVG } from './create'
+export { importSVG, renderDesignTree } from './create'

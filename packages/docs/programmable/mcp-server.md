@@ -167,6 +167,8 @@ Works with Claude Code, Cursor, Windsurf, Codex, and any agent that supports [sk
 
 OpenPencil currently registers 100+ shared design tools, plus MCP-only document and prompt operations when applicable.
 
+`get_design_guidance` returns the bundled design workflow and optional `ux`, `visual`, `design-system`, and `review` topics. For example, call it with `{"topics":["ux","design-system"]}` for a product flow. Guidance retrieval does not modify the document or require external services. Briefs and PRDs remain optional; see [AI Chat](./ai-chat.md#design-guidance).
+
 ### Document
 
 | Tool | Description |

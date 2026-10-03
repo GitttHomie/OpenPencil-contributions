@@ -70,5 +70,6 @@
   "exportSelectionAsPNG": "将所选内容导出为 PNG",
   "exportSelectionAsSVG": "将所选内容导出为 SVG",
   "exportSelectionAsPPTX": "将所选内容导出为 PPTX",
-  "exportSelectionAsFig": "将所选内容导出为 .fig"
+  "exportSelectionAsFig": "将所选内容导出为 .fig",
+  "pixelGrid": "像素网格"
 }

@@ -71,17 +71,17 @@ describe('selection move drag threshold', () => {
     expect(editor.graph.getNode(nodeId)).toMatchObject({ x: 16, y: 28 })
   })
 
-  test('Control bypasses object and pixel snapping during movement', () => {
+  test('Control bypasses guides but keeps whole-pixel movement', () => {
     const { editor, drag, nodeId } = setupMoveDrag()
 
     handleMoveMove(drag, 16.25, 27.75, 110, 200, editor, true)
     handleMoveUp(drag, editor)
 
-    expect(editor.graph.getNode(nodeId)).toMatchObject({ x: 16.25, y: 27.75 })
+    expect(editor.graph.getNode(nodeId)).toMatchObject({ x: 16, y: 28 })
     expect(editor.state.snapGuides).toEqual([])
   })
 
-  test('Control bypasses object and pixel snapping inside a rotated parent', () => {
+  test('Control keeps whole-pixel local coordinates inside a rotated parent', () => {
     const editor = createEditor()
     const pageId = editor.state.currentPageId
     const frame = editor.graph.createNode('FRAME', pageId, {
@@ -104,8 +104,8 @@ describe('selection move drag threshold', () => {
     handleMoveMove(drag, 74, 43, 100, 100, editor, true)
 
     const angle = (-30 * Math.PI) / 180
-    expect(drag.appliedDx).toBeCloseTo(74 * Math.cos(angle) - 43 * Math.sin(angle), 3)
-    expect(drag.appliedDy).toBeCloseTo(74 * Math.sin(angle) + 43 * Math.cos(angle), 3)
+    expect(drag.appliedDx).toBe(Math.round(74 * Math.cos(angle) - 43 * Math.sin(angle)))
+    expect(drag.appliedDy).toBe(Math.round(74 * Math.sin(angle) + 43 * Math.cos(angle)))
     expect(editor.state.snapGuides).toEqual([])
   })
 

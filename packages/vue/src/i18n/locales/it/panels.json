@@ -354,5 +354,11 @@
   "lineHeightMode": "Modalità altezza riga",
   "unresolvedVariable": "Valore della variabile non disponibile",
   "excludeFromAutoLayout": "Escludi dal layout automatico",
-  "positionAutoLayout": "La posizione è controllata dal layout automatico del genitore"
+  "positionAutoLayout": "La posizione è controllata dal layout automatico del genitore",
+  "gradientMove": "Sposta sfumatura",
+  "gradientStart": "Inizio sfumatura",
+  "gradientEnd": "Fine sfumatura",
+  "gradientRadius": "Ruota e ridimensiona la sfumatura",
+  "gradientWidth": "Raggio secondario della sfumatura",
+  "gradientCanvasHint": "Le maniglie si agganciano a bordi, angoli, centri e direzioni. Maiusc allinea gli angoli; Alt/Opzione consente il posizionamento libero; Esc annulla."
 }

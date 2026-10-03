@@ -49,13 +49,21 @@ Enable **View → Rulers**, then drag from the top ruler for a horizontal guide 
 - Drag a guide back onto a ruler to remove it, or use its context menu's **Remove guide** action.
 - Guide changes support undo/redo and are preserved in `.fig` files.
 
+## Pixel grid
+
+Toggle **Pixel Grid** in the zoom dropdown or **View → Pixel Grid**, or press <kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>P</kbd>. The checkmarks stay synchronized. Grid lines appear at **800% zoom and above**, follow document pixel boundaries while panning, and are hidden again when you zoom out.
+
+This is a view-only overlay: it does not change pixel snapping, enter undo history, or appear in exports. Use the zoom dropdown's percentage field to enter a close-up zoom such as `800`.
+
 ## Snapping
 
 Under **View → Preferences**, toggle **Snap to Geometry**, **Snap to Objects**, and **Snap to Pixel Grid** independently. Preferences are saved between sessions.
 
 Geometry and object snapping help align vector points, moved layers, and resized edges with nearby geometry, objects, guides, and frame bounds. Alignment lines appear for those targets; pixel-grid rounding does not draw an alignment line for every pixel.
 
-Hold <kbd>Control</kbd> during a layer drag to temporarily bypass object and pixel snapping, including on macOS where this is Control, not Command.
+Pixel snapping enforces whole-pixel positions and dimensions when drawing, moving, resizing with handles, and aligning, at every zoom level. You can still type decimal values into numeric fields; the next move or resize snaps the edited geometry back to pixels. Auto-layout can calculate fractional positions and sizes. Existing document geometry is preserved until edited, and undo restores the exact original values.
+
+Hold <kbd>Control</kbd> during a layer drag to temporarily bypass alignment guides. Pixel snapping still applies; turn off **Snap to Pixel Grid** to drag with fractional geometry.
 
 ## Distance Measurements
 

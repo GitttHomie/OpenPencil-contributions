@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { computed } from 'vue'
+
+import type { AIProviderID } from '@open-pencil/core/constants'
 import { useI18n } from '@open-pencil/vue'
 
 import { useLocalAgents } from '@/app/ai/agents/use'
@@ -9,6 +12,7 @@ import AppButton from '@/components/ui/button/AppButton.vue'
 import AppAlert from '@/components/ui/feedback/AppAlert.vue'
 
 const { ai, common } = useI18n()
+const { providerId } = defineProps<{ providerId: AIProviderID }>()
 const {
   agents,
   desktop,
@@ -20,10 +24,11 @@ const {
   setupCanvasBridge,
   busy,
   refresh,
-  install,
-  select,
-  selectedProviderID
+  install
 } = useLocalAgents()
+const selectedAgents = computed(() =>
+  agents.value.filter((agent) => `acp:${agent.definition.id}` === providerId)
+)
 </script>
 
 <template>
@@ -76,7 +81,7 @@ const {
       </AppAlert>
       <SettingsGroup v-if="agents.length">
         <div
-          v-for="agent in agents"
+          v-for="agent in selectedAgents"
           :key="agent.definition.id"
           role="group"
           :aria-label="agent.definition.name"
@@ -99,19 +104,7 @@ const {
             </p>
           </div>
           <AppButton
-            v-if="agent.status === 'available'"
-            size="xs"
-            :disabled="busy || selectedProviderID === `acp:${agent.definition.id}`"
-            @click="select(agent.definition.id)"
-          >
-            {{
-              selectedProviderID === `acp:${agent.definition.id}`
-                ? ai.localAgentSelected
-                : ai.localAgentUse
-            }}
-          </AppButton>
-          <AppButton
-            v-else-if="agent.status === 'needs-adapter'"
+            v-if="agent.status === 'needs-adapter'"
             size="xs"
             :disabled="busy || !npmAvailable"
             :loading="installing === agent.definition.id"

@@ -5,6 +5,7 @@ import { computed, shallowRef, watch } from 'vue'
 
 import { useI18n } from '@open-pencil/vue'
 
+import { currentPermission } from '@/app/ai/acp/permission'
 import { chatDocumentId } from '@/app/ai/chat/history/document'
 import { useChatSubmission } from '@/app/ai/chat/submission/use'
 import { useAIChat } from '@/app/ai/chat/use'
@@ -16,10 +17,13 @@ import { activeTab } from '@/app/tabs'
 import ACPPermissionDialog from '@/components/chat/ACPPermissionDialog.vue'
 import ChatHistory from '@/components/chat/ChatHistory.vue'
 import ChatInput from '@/components/chat/ChatInput.vue'
+import ChatRunStatus from '@/components/chat/ChatRunStatus.vue'
 import ChatTranscript from '@/components/chat/ChatTranscript.vue'
+import DesignReview from '@/components/chat/DesignReview.vue'
 import ProviderSetup from '@/components/chat/ProviderSetup.vue'
 
-const { isConfigured, ensureChat, history, chatFailure, clearChatFailure } = useAIChat()
+const { isConfigured, ensureChat, history, chatFailure, clearChatFailure, runStateFor } =
+  useAIChat()
 const { ai } = useI18n()
 
 const chat = shallowRef<Chat<UIMessage> | null>(null)
@@ -108,10 +112,12 @@ const failureHasSettingsAction = computed(() =>
   )
 )
 const status = computed(() => chat.value?.status ?? 'ready')
+const runState = computed(() => runStateFor(chat.value))
 const showContinue = computed(() => {
   if (history.readOnly.value || agentHistoryReadOnly.value) return false
   if (status.value !== 'ready') return false
   if (messages.value.length === 0) return false
+  if (runState.value) return runState.value.phase === 'limited'
   const last = messages.value[messages.value.length - 1]
   return last.role === 'assistant' && didHitStepLimit()
 })
@@ -176,6 +182,9 @@ function handleStop() {
       @rename="renameConversation"
       @delete="historyAction(() => history.remove($event))"
     />
+    <DesignReview
+      :disabled="status === 'submitted' || status === 'streaming' || submission.busy.value"
+    />
     <p v-if="history.storageError.value" role="alert" class="px-3 py-2 text-xs text-red-400">
       {{ ai.chatStorageFailed }}
     </p>
@@ -216,6 +225,13 @@ function handleStop() {
         @submit="submission.submit"
         @stop="handleStop"
         @error="toast.error"
+      />
+      <ChatRunStatus
+        :run="runState"
+        :working="status === 'submitted' || status === 'streaming' || submission.busy.value"
+        :waiting="currentPermission !== null"
+        :failed="status === 'error' || submission.failed.value"
+        :limited="showContinue"
       />
 
       <ACPPermissionDialog />

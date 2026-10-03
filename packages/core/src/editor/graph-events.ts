@@ -119,9 +119,10 @@ export function createGraphEventSubscription(options: GraphEventOptions) {
         options.emitEditorEvent('node:created', node)
         onNodeStructureChanged(node.id)
       },
-      deleted: (id, _parentId) => {
-        options.emitEditorEvent('node:deleted', id, _parentId)
+      deleted: (id, parentId) => {
+        options.emitEditorEvent('node:deleted', id, parentId)
         onNodeStructureChanged(id)
+        if (parentId) options.scheduleComponentSync(parentId)
       },
       reparented: (nodeId, oldParentId, newParentId) => {
         options.emitEditorEvent('node:reparented', nodeId, oldParentId, newParentId)

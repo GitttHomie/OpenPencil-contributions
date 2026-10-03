@@ -5,6 +5,8 @@ description: Work with Figma .fig design files and the running OpenPencil editor
 
 # OpenPencil
 
+Use frames and components for layout surfaces and photo containers. Full-card photos belong in the card frame's image fill, with scrims as additional fills above the image and text as children. Placeholder icons may sit inside photo frames. Reserve shapes for graphics and illustrations.
+
 OpenPencil provides a CLI and MCP server for `.fig` design files and the running OpenPencil editor.
 
 Use two modes:
@@ -21,6 +23,14 @@ openpencil tree design.fig
 ```
 
 Use `openpencil --help`, per-command help, and the connected MCP server’s tool schemas to check the installed version’s capabilities. See the [CLI reference](https://openpencil.dev/reference/cli) and [MCP guide](https://openpencil.dev/programmable/mcp-server) for current documentation.
+
+## Design guidance
+
+Work directly from the user's request. Briefs, PRDs, questionnaires, and stage approvals are optional; do not require them before designing. Make reasonable assumptions and scale the process to the task.
+
+For substantial design work, use the MCP `get_design_guidance` tool when available. It returns the shared workflow and accepts `topics`, an array containing relevant entries from `ux`, `visual`, `design-system`, and `review`. For example, request `{"topics":["ux","design-system"]}` when creating a product flow. Omit topics to discover the catalog. The guidance is bundled and requires no external skills or scripts.
+
+Inspect and reuse the current document's foundations. For new work, reason through the user task, establish the necessary variables and reusable components, then compose screens from linked instances. Small edits should proceed directly. If guidance retrieval is unavailable, follow this workflow and the authoring reference below using supported tools; do not install another skill or scaffold an app to complete a canvas task.
 
 ## Requirements
 

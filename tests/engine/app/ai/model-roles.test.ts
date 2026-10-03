@@ -172,7 +172,7 @@ describe('AI model profiles and role assignments', () => {
     expect(savedSecond.harnessPermissionMode).toBe('allow-reads')
   })
 
-  test('keeps ACP agents exclusive to the Design role', () => {
+  test('allows ACP agents for Design and Review but not Fast tasks', () => {
     const settings = modelSettingsSnapshot()
     settings.connections.push({
       id: 'connection-acp',
@@ -194,7 +194,7 @@ describe('AI model profiles and role assignments', () => {
 
     setModelRoleAssignment('review', null)
     setModelRoleAssignment('review', 'model-acp')
-    expect(resolveAIModelRole('review')).toBeNull()
+    expect(resolveAIModelRole('review')?.profile.id).toBe('model-acp')
 
     setModelRoleAssignment('design', 'model-acp')
     expect(resolveAIModelRole('design')?.profile.id).toBe('model-acp')

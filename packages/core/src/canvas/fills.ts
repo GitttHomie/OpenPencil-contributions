@@ -3,6 +3,8 @@ import type { Canvas, Paint } from 'canvaskit-wasm'
 import type { SceneNode, SceneGraph, Fill } from '@open-pencil/scene-graph'
 import type { Rect, Vector } from '@open-pencil/scene-graph/primitives'
 
+import { gradientHandles } from '#core/geometry'
+
 import { figmaBlendModeToSkia } from './blend'
 import { makeDiamondGradient } from './gradients/diamond'
 import type { SkiaRenderer } from './renderer'
@@ -302,13 +304,8 @@ export function linearGradientEndpoints(
   height: number,
   transform: NonNullable<Fill['gradientTransform']>
 ) {
-  return {
-    start: {
-      x: (transform.m00 + transform.m02) * width,
-      y: (transform.m10 + transform.m12) * height
-    },
-    end: { x: transform.m02 * width, y: transform.m12 * height }
-  }
+  const { start, end } = gradientHandles('GRADIENT_LINEAR', transform, width, height)
+  return { start, end }
 }
 
 export function applyGradientFill(
@@ -320,7 +317,7 @@ export function applyGradientFill(
   const stops = fill.gradientStops
   const t = fill.gradientTransform
   if (!stops || !t) return
-  const colors = stops.map((s, index) => {
+  const colors = stops.map((s) => {
     const resolved = r.resolveFillColorInfo(
       {
         ...fill,
@@ -329,7 +326,8 @@ export function applyGradientFill(
         opacity: s.color.a,
         visible: true
       },
-      index,
+      // Stop positions are not node fill indices; do not borrow another fill's color binding.
+      -1,
       node,
       graph
     )

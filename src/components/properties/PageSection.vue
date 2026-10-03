@@ -8,7 +8,7 @@ import { useEditorStore } from '@/app/editor/active-store'
 import ColorPicker from '@/components/ColorPicker/ColorPicker.vue'
 import PaintField from '@/components/properties/paint/PaintField.vue'
 import PaintValue from '@/components/properties/paint/PaintValue.vue'
-import FillSwatch from '@/components/ui/paint/FillSwatch.vue'
+import FillSwatchTrigger from '@/components/ui/paint/FillSwatchTrigger.vue'
 import PanelSection from '@/components/ui/panel/PanelSection.vue'
 
 const editor = useEditorStore()
@@ -40,13 +40,7 @@ function updatePageColor(color: Color) {
       <template #preview>
         <ColorPicker :color="pageColor" @update="updatePageColor">
           <template #trigger>
-            <button
-              type="button"
-              :aria-label="panels.pageBackground"
-              class="size-5 shrink-0 cursor-pointer rounded border-0 bg-transparent p-0"
-            >
-              <FillSwatch :fill="pageFill" class="size-full" />
-            </button>
+            <FillSwatchTrigger :fill="pageFill" :label="panels.pageBackground" />
           </template>
         </ColorPicker>
       </template>

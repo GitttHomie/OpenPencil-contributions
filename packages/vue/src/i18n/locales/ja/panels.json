@@ -354,5 +354,11 @@
   "lineHeightMode": "行の高さモード",
   "unresolvedVariable": "変数の値を取得できません",
   "excludeFromAutoLayout": "オートレイアウトから除外",
-  "positionAutoLayout": "位置は親のオートレイアウトによって制御されます"
+  "positionAutoLayout": "位置は親のオートレイアウトによって制御されます",
+  "gradientMove": "グラデーションを移動",
+  "gradientStart": "グラデーションの始点",
+  "gradientEnd": "グラデーションの終点",
+  "gradientRadius": "グラデーションを回転・拡大縮小",
+  "gradientWidth": "グラデーションの第2半径",
+  "gradientCanvasHint": "ハンドルは辺、角、中心、方向にスナップします。Shiftで角度をスナップ、Alt/Optionで自由配置、Escapeでキャンセルします。"
 }

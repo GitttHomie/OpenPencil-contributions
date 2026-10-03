@@ -175,6 +175,12 @@ export const APP_MENU_SCHEMA = [
       { id: 'view-split-down', label: 'Split Down' },
       { type: 'separator' },
       { id: 'view-rulers', label: 'Rulers', checkbox: true },
+      {
+        id: 'view-pixel-grid',
+        label: 'Pixel Grid',
+        checkbox: true,
+        shortcut: 'MOD+SHIFT+P'
+      },
       { id: 'view-multiplayer-cursors', label: 'Multiplayer Cursors', checkbox: true },
       { type: 'separator' },
       {

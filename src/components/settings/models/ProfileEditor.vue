@@ -12,6 +12,8 @@ import { focusInvalidField } from '@/components/settings/layout/focus'
 import SettingsPage from '@/components/settings/layout/SettingsPage.vue'
 import SettingsSaveFeedback from '@/components/settings/layout/SettingsSaveFeedback.vue'
 import SettingsSection from '@/components/settings/layout/SettingsSection.vue'
+import CLIModelSelect from '@/components/settings/models/CLIModelSelect.vue'
+import LocalAgentsSection from '@/components/settings/models/LocalAgentsSection.vue'
 import ProviderSelect from '@/components/settings/provider-select/ProviderSelect.vue'
 import ProviderSettingsField from '@/components/settings/provider/ProviderSettingsField.vue'
 import ProviderSettingsInput from '@/components/settings/provider/ProviderSettingsInput.vue'
@@ -130,6 +132,9 @@ async function remove() {
               @update:model-value="updateProvider"
             />
           </ProviderSettingsField>
+
+          <LocalAgentsSection v-if="isACP" :provider-id="draft.providerID" />
+          <CLIModelSelect v-if="isACP" :draft="draft" />
 
           <template v-if="!isACP">
             <div class="flex items-center gap-2 pt-1">

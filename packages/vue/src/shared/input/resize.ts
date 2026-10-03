@@ -3,6 +3,7 @@ export { tryStartResize } from '#vue/shared/input/resize/start'
 import { toRaw } from 'vue'
 
 import type { Editor } from '@open-pencil/core/editor'
+import { snapGeometryChanges } from '@open-pencil/core/editor'
 import { computeAllLayouts } from '@open-pencil/core/layout'
 import { calibratePathTextLayout, reflowPathTextGlyphs } from '@open-pencil/core/text'
 import { cloneVectorNetwork } from '@open-pencil/scene-graph'
@@ -74,9 +75,13 @@ function resizeChanges(
     cy - d.startY,
     constrain
   )
-  const newRect = constrain
+  const snappedRect = constrain
     ? calculatedRect
     : applyResizeSnap(d, calculatedRect, editor, disableSnapping)
+  const newRect = snapGeometryChanges(
+    snappedRect,
+    optionalEditorState(editor)?.snappingPreferences.pixelGrid ?? false
+  )
 
   const changes: Partial<SceneNode> = {
     ...newRect,
@@ -108,7 +113,8 @@ function resizeChanges(
 function applyConstrainedChildren(
   d: DragResize,
   newRect: Pick<SceneNode, 'width' | 'height'>,
-  editor: Editor
+  editor: Editor,
+  layoutResolved = false
 ) {
   if (!d.origChildren || d.origRect.width <= 0 || d.origRect.height <= 0) return
   const changes = computeConstrainedResizeChanges(
@@ -116,7 +122,11 @@ function applyConstrainedChildren(
     d.nodeId,
     d.origRect,
     newRect,
-    d.origChildren
+    d.origChildren,
+    {
+      layoutResolved,
+      roundToPixels: optionalEditorState(editor)?.snappingPreferences.pixelGrid ?? true
+    }
   )
   for (const [childId, childChanges] of changes) {
     const orig = d.origChildren.get(childId)
@@ -168,7 +178,7 @@ export function applyResize(
   // resolve HUG/FILL, the second re-applies against the settled boxes.
   applyConstrainedChildren(d, newRect, editor)
   editor.graph.runPreviewUpdates(() => computeAllLayouts(editor.graph, d.nodeId))
-  applyConstrainedChildren(d, newRect, editor)
+  applyConstrainedChildren(d, newRect, editor, true)
   editor.graph.runPreviewUpdates(() => computeAllLayouts(editor.graph, d.nodeId))
   editor.requestRepaint()
 }
@@ -232,6 +242,7 @@ export function commitResizePreview(dragState: DragResize, editor: Editor) {
   optionalEditorState(editor)?.snapGuides.splice(0)
   const node = editor.graph.getNode(d.nodeId)
   if (!node) return
+  const originalTextAutoResize = node.textAutoResize
   const finalChanges = snapshotResizeFinal(node)
 
   if (d.origChildren) {
@@ -263,7 +274,13 @@ export function commitResizePreview(dragState: DragResize, editor: Editor) {
     editor.graph.preserveSourceMetadataDuring(() => {
       editor.updateNode(d.nodeId, finalChanges)
       for (const [childId, final] of finalChildren) {
-        editor.updateNode(childId, final)
+        // Descendants follow their parent's resize; this is not an explicit edit
+        // of a text box's sizing mode.
+        const child = editor.graph.getNode(childId)
+        editor.updateNode(childId, {
+          ...final,
+          ...(child?.type === 'TEXT' ? { textAutoResize: child.textAutoResize } : {})
+        })
       }
     })
     clearResizedRawGeometry(editor, d.nodeId)
@@ -278,6 +295,7 @@ export function commitResizePreview(dragState: DragResize, editor: Editor) {
     })
     clearResizedRawGeometry(editor, d.nodeId)
     const original: Parameters<typeof editor.commitResize>[1] = { ...d.origRect }
+    if (node.type === 'TEXT') original.textAutoResize = originalTextAutoResize
     if (d.origVectorNetwork || node.vectorNetwork) original.vectorNetwork = d.origVectorNetwork
     if (d.origFillGeometry.length > 0) original.fillGeometry = d.origFillGeometry
     if (d.origStrokeGeometry.length > 0) original.strokeGeometry = d.origStrokeGeometry

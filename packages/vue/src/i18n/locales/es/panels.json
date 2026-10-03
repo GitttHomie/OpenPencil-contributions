@@ -354,5 +354,11 @@
   "lineHeightMode": "Modo de altura de línea",
   "unresolvedVariable": "Valor de variable no disponible",
   "excludeFromAutoLayout": "Excluir del diseño automático",
-  "positionAutoLayout": "El diseño automático del elemento padre controla la posición"
+  "positionAutoLayout": "El diseño automático del elemento padre controla la posición",
+  "gradientMove": "Mover degradado",
+  "gradientStart": "Inicio del degradado",
+  "gradientEnd": "Final del degradado",
+  "gradientRadius": "Girar y redimensionar el degradado",
+  "gradientWidth": "Radio secundario del degradado",
+  "gradientCanvasHint": "Los controles se ajustan a bordes, esquinas, centros y direcciones. Mayús ajusta ángulos; Alt/Opción permite colocarlos libremente; Escape cancela."
 }

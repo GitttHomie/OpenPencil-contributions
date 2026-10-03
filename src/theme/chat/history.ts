@@ -3,7 +3,7 @@ import { tv } from 'tailwind-variants'
 export const chatHistoryTheme = tv({
   slots: {
     root: 'shrink-0 border-b border-border',
-    header: 'flex min-w-0 items-center gap-1 px-2 py-1.5',
+    header: 'flex min-w-0 items-center gap-1 p-1.5',
     trigger:
       'flex min-w-0 flex-1 items-center gap-1 rounded px-1.5 py-1 text-left text-xs text-surface hover:bg-hover disabled:opacity-50',
     title: 'min-w-0 flex-1 truncate',

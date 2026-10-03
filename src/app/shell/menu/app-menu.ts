@@ -109,6 +109,7 @@ export function useAppMenu() {
     preferences: 'preferences',
     settings: 'settings',
     'view-rulers': 'rulers',
+    'view-pixel-grid': 'pixelGrid',
     'view-multiplayer-cursors': 'multiplayerCursors',
     'snap-geometry': 'snapToGeometry',
     'snap-objects': 'snapToObjects',
@@ -181,6 +182,8 @@ export function useAppMenu() {
         return store.renderer?.profiler.hudVisible ?? false
       case 'view-rulers':
         return store.state.showRulers
+      case 'view-pixel-grid':
+        return store.state.showPixelGrid ?? false
       case 'view-multiplayer-cursors':
         return store.state.showRemoteCursors
       case 'snap-geometry':
@@ -212,6 +215,8 @@ export function useAppMenu() {
         return (value: boolean) => {
           if (store.state.showRulers !== value) itemAction(item)?.()
         }
+      case 'view-pixel-grid':
+        return (value: boolean) => store.setPixelGridVisible(value)
       case 'view-multiplayer-cursors':
         return (value: boolean) => {
           if (store.state.showRemoteCursors !== value) itemAction(item)?.()

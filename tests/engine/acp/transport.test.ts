@@ -6,11 +6,14 @@ import {
   PROTOCOL_VERSION,
   type NewSessionRequest,
   type PromptResponse,
+  type RequestPermissionResponse,
+  type SessionConfigOption,
   type SessionUpdate
 } from '@agentclientprotocol/sdk'
 import type { UIMessageChunk } from 'ai'
 
 import { ACP_AGENTS } from '@open-pencil/core/constants'
+import { DESIGN_WORKFLOW } from '@open-pencil/core/tools'
 
 import { mapUpdate } from '@/app/ai/acp/map-update'
 import { ACPChatTransport, formatConnectionError, buildCrashChunks } from '@/app/ai/acp/transport'
@@ -22,7 +25,17 @@ import { expectDefined } from '#tests/helpers/assert'
 
 const TEXT_ID = 'text-1'
 
-function connectedAgent(waitForCancel = false, beforeSpawn?: Promise<void>) {
+function connectedAgent(
+  waitForCancel = false,
+  beforeSpawn?: Promise<void>,
+  review = false,
+  supportsImages = false,
+  modelOptions: {
+    modelId?: string
+    purpose?: 'catalog'
+    stopReason?: PromptResponse['stopReason']
+  } = {}
+) {
   let toAgent: ReadableStreamDefaultController<Uint8Array> | undefined
   let toClient: ReadableStreamDefaultController<Uint8Array> | undefined
   const agentInput = new ReadableStream<Uint8Array>({
@@ -49,6 +62,24 @@ function connectedAgent(waitForCancel = false, beforeSpawn?: Promise<void>) {
   const started = createDeferred<undefined>()
   const spawning = createDeferred<undefined>()
   const sessions: NewSessionRequest[] = []
+  const prompts: string[] = []
+  const images: string[] = []
+  const permissions: RequestPermissionResponse[] = []
+  const modelEvents: string[] = []
+  let activeModel = 'strong'
+  const configOptions = (): SessionConfigOption[] => [
+    {
+      id: 'model',
+      name: 'Model',
+      category: 'model',
+      type: 'select',
+      currentValue: activeModel,
+      options: [
+        { value: 'strong', name: 'Strong' },
+        { value: 'fast', name: 'Fast' }
+      ]
+    }
+  ]
   let cancelled = 0
   let closed = false
   let unexpectedClose = () => undefined
@@ -66,20 +97,42 @@ function connectedAgent(waitForCancel = false, beforeSpawn?: Promise<void>) {
   }
   const connection = new AgentSideConnection(
     (client) => ({
-      initialize: async () => ({ protocolVersion: PROTOCOL_VERSION, agentCapabilities: {} }),
+      initialize: async () => ({
+        protocolVersion: PROTOCOL_VERSION,
+        agentCapabilities: { promptCapabilities: { image: supportsImages } }
+      }),
       newSession: async (request) => {
         sessions.push(request)
-        return { sessionId: 'session-test' }
+        return { sessionId: 'session-test', configOptions: configOptions() }
+      },
+      setSessionConfigOption: async (request) => {
+        activeModel = request.value
+        modelEvents.push(`select:${activeModel}`)
+        return { configOptions: configOptions() }
       },
       authenticate: async () => ({}),
-      prompt: async ({ sessionId }) => {
+      prompt: async ({ sessionId, prompt }) => {
+        modelEvents.push(`prompt:${activeModel}`)
+        prompts.push(prompt.flatMap((part) => (part.type === 'text' ? [part.text] : [])).join('\n'))
+        images.push(...prompt.flatMap((part) => (part.type === 'image' ? [part.data] : [])))
+        if (review) {
+          permissions.push(
+            await client.requestPermission({
+              sessionId,
+              toolCall: { toolCallId: 'edit', title: 'Edit design' },
+              options: [{ optionId: 'allow', name: 'Allow', kind: 'allow_once' }]
+            })
+          )
+        }
         await client.extNotification('_kiro/mcp/status', { sessionId, servers: [] })
         await client.sessionUpdate({
           sessionId,
           update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'Done' } }
         })
         started.resolve(undefined)
-        return waitForCancel ? completion.promise : { stopReason: 'end_turn' }
+        return waitForCancel
+          ? completion.promise
+          : { stopReason: modelOptions.stopReason ?? 'end_turn' }
       },
       cancel: async () => {
         cancelled++
@@ -94,7 +147,10 @@ function connectedAgent(waitForCancel = false, beforeSpawn?: Promise<void>) {
         ACP_AGENTS.find((agent) => agent.id === 'kiro-cli'),
         'Kiro'
       ),
-      cwd: '/workspace'
+      cwd: '/workspace',
+      purpose: modelOptions.purpose ?? (review ? 'review' : 'design'),
+      modelId: modelOptions.modelId,
+      image: review ? 'AQID' : undefined
     },
     {
       spawn: async (options) => {
@@ -116,6 +172,10 @@ function connectedAgent(waitForCancel = false, beforeSpawn?: Promise<void>) {
   return {
     transport,
     sessions,
+    prompts,
+    images,
+    permissions,
+    modelEvents,
     started: started.promise,
     spawning: spawning.promise,
     cancelled: () => cancelled,
@@ -147,6 +207,70 @@ async function collect(stream: ReadableStream<UIMessageChunk>): Promise<UIMessag
 }
 
 describe('ACP chat sessions', () => {
+  for (const stopReason of ['max_tokens', 'max_turn_requests', 'cancelled', 'refusal'] as const) {
+    test(`${stopReason} does not report successful completion`, async () => {
+      const agent = connectedAgent(false, undefined, false, false, { stopReason })
+      try {
+        const chunks = await collect(await send(agent.transport))
+        expect(chunks.at(-1)).toEqual({
+          type: 'finish',
+          finishReason:
+            stopReason === 'max_tokens' || stopReason === 'max_turn_requests' ? 'length' : 'other'
+        })
+      } finally {
+        await agent.dispose()
+      }
+    })
+  }
+  for (const reviewing of [false, true]) {
+    test(`applies the saved model before ${reviewing ? 'review' : 'chat'} prompts`, async () => {
+      const agent = connectedAgent(false, undefined, reviewing, false, { modelId: 'fast' })
+      try {
+        await collect(await send(agent.transport))
+        expect(agent.modelEvents).toEqual(['select:fast', 'prompt:fast'])
+      } finally {
+        await agent.dispose()
+      }
+    })
+  }
+  test('model discovery neither connects MCP nor sends prompts', async () => {
+    const agent = connectedAgent(false, undefined, false, false, { purpose: 'catalog' })
+    try {
+      const models = await agent.transport.listModels()
+      expect(models.models.map((model) => model.id)).toEqual(['strong', 'fast'])
+      expect(agent.sessions[0].mcpServers).toEqual([])
+      expect(agent.modelEvents).toEqual([])
+      await expect(send(agent.transport)).rejects.toThrow('cannot send prompts')
+    } finally {
+      await agent.dispose()
+    }
+  })
+  test('a missing saved model stops before any prompt instead of using the default', async () => {
+    const agent = connectedAgent(false, undefined, false, false, { modelId: 'retired' })
+    try {
+      await expect(send(agent.transport)).rejects.toThrow('Model not found')
+      expect(agent.modelEvents).toEqual([])
+      expect(agent.closed()).toBe(true)
+    } finally {
+      await agent.dispose()
+    }
+  })
+  for (const supportsImages of [true, false]) {
+    test(`review sessions omit MCP, deny permissions, and respect image capability ${supportsImages}`, async () => {
+      const agent = connectedAgent(false, undefined, true, supportsImages)
+      try {
+        await collect(await send(agent.transport))
+        expect(agent.sessions[0].mcpServers).toEqual([])
+        expect(agent.permissions).toEqual([{ outcome: { outcome: 'cancelled' } }])
+        expect(agent.prompts[0]).not.toContain(DESIGN_WORKFLOW)
+        expect(agent.images).toEqual(supportsImages ? ['AQID'] : [])
+        expect(agent.transport.imageIncluded).toBe(supportsImages)
+        if (!supportsImages) expect(agent.prompts[0]).toContain('No screenshot is available')
+      } finally {
+        await agent.dispose()
+      }
+    })
+  }
   test('cleans up a process that spawns after its transport is destroyed', async () => {
     const spawning = createDeferred<undefined>()
     const agent = connectedAgent(false, spawning.promise)
@@ -191,6 +315,7 @@ describe('ACP chat sessions', () => {
     const errors = spyOn(console, 'error').mockImplementation(() => undefined)
     try {
       const chunks = await collect(await send(agent.transport))
+      expect(agent.prompts[0]).toContain(DESIGN_WORKFLOW)
       expect(chunks).toContainEqual({ type: 'text-delta', id: expect.any(String), delta: 'Done' })
       expect(chunks.at(-1)).toEqual({ type: 'finish', finishReason: 'stop' })
       expect(agent.sessions[0]).toMatchObject({
@@ -200,6 +325,7 @@ describe('ACP chat sessions', () => {
         ]
       })
       const second = await collect(await send(agent.transport))
+      expect(agent.prompts[1]).toContain(DESIGN_WORKFLOW)
       expect(second.at(-1)).toEqual({ type: 'finish', finishReason: 'stop' })
       expect(agent.sessions).toHaveLength(1)
       expect(errors).not.toHaveBeenCalled()
@@ -277,22 +403,6 @@ describe('mapUpdate', () => {
     expect(result.chunks).toEqual([{ type: 'text-delta', id: TEXT_ID, delta: 'world' }])
   })
 
-  test('agent_thought_chunk emits reasoning start/delta/end', () => {
-    const update: SessionUpdate = {
-      sessionUpdate: 'agent_thought_chunk',
-      content: { type: 'text', text: 'thinking...' }
-    }
-    const result = mapUpdate(update, TEXT_ID, false)
-    expect(result.chunks).toHaveLength(3)
-    expect(result.chunks[0].type).toBe('reasoning-start')
-    expect(result.chunks[1]).toEqual({
-      type: 'reasoning-delta',
-      id: `reasoning-${TEXT_ID}`,
-      delta: 'thinking...'
-    })
-    expect(result.chunks[2].type).toBe('reasoning-end')
-  })
-
   test('tool_call emits tool-input-start', () => {
     const update: SessionUpdate = {
       sessionUpdate: 'tool_call',
@@ -354,14 +464,12 @@ describe('mapUpdate', () => {
       rawOutput: { id: '1:5', type: 'RECTANGLE' }
     }
     const result = mapUpdate(update, TEXT_ID, false)
-    expect(result.chunks).toEqual([
-      {
-        type: 'tool-output-available',
-        toolCallId: 'tc-1',
-        output: { id: '1:5', type: 'RECTANGLE' },
-        providerExecuted: true
-      }
-    ])
+    expect(result.chunks.at(-1)).toEqual({
+      type: 'tool-output-available',
+      toolCallId: 'tc-1',
+      output: { id: '1:5', type: 'RECTANGLE' },
+      providerExecuted: true
+    })
   })
 
   test('tool_call_update failed emits tool-output-error', () => {
@@ -372,14 +480,12 @@ describe('mapUpdate', () => {
       content: [{ type: 'content', content: { type: 'text', text: 'Node not found' } }]
     }
     const result = mapUpdate(update, TEXT_ID, false)
-    expect(result.chunks).toEqual([
-      {
-        type: 'tool-output-error',
-        toolCallId: 'tc-1',
-        errorText: 'Node not found',
-        providerExecuted: true
-      }
-    ])
+    expect(result.chunks.at(-1)).toEqual({
+      type: 'tool-output-error',
+      toolCallId: 'tc-1',
+      errorText: 'Node not found',
+      providerExecuted: true
+    })
   })
 
   test('agent_message_chunk with non-text content produces no chunks', () => {

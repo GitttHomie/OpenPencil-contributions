@@ -6,6 +6,8 @@ import Matrix from '@open-pencil/scene-graph/matrix'
 
 import { getNodeEditCapability } from './capabilities'
 import { applyMoveStates, captureMoveState, type MoveState } from './history/move'
+import { recordPositionOverrides } from './history/position'
+import { snapGeometryChanges } from './pixel-snapping'
 import type { EditorContext } from './types'
 
 const NUDGE_COMMIT_DELAY = 300
@@ -20,10 +22,16 @@ function nudgePosition(
   const inverse = parent ? Matrix.invert(getWorldMatrix(parent, ctx.graph)) : null
   const origin = inverse ? Matrix.mapPoint(inverse, { x: 0, y: 0 }) : { x: 0, y: 0 }
   const target = inverse ? Matrix.mapPoint(inverse, { x: dx, y: dy }) : { x: dx, y: dy }
-  ctx.graph.updateNode(node.id, {
-    x: node.x + target.x - origin.x,
-    y: node.y + target.y - origin.y
-  })
+  ctx.graph.updateNode(
+    node.id,
+    snapGeometryChanges(
+      {
+        x: node.x + target.x - origin.x,
+        y: node.y + target.y - origin.y
+      },
+      ctx.state.snappingPreferences.pixelGrid
+    )
+  )
 }
 
 function layoutDirection(ctx: EditorContext, node: SceneNode): 'LTR' | 'RTL' {
@@ -140,12 +148,19 @@ export function createNudgeActions(ctx: EditorContext) {
     if (now - previousTime > NUDGE_COMMIT_DELAY || selection !== previousSelection) sequence++
     previousTime = now
     previousSelection = selection
+    const overrides = recordPositionOverrides(ctx, before, after)
     // Record immediately so Undo works even before the key-repeat sequence settles.
     ctx.undo.push({
       label: layoutParents.size ? 'Reorder' : 'Nudge',
       coalesceKey: `nudge-${sequence}`,
-      forward: () => applyMoveStates(ctx, after),
-      inverse: () => applyMoveStates(ctx, before)
+      forward: () => {
+        applyMoveStates(ctx, after)
+        overrides.redo()
+      },
+      inverse: () => {
+        applyMoveStates(ctx, before)
+        overrides.undo()
+      }
     })
     ctx.requestRender()
   }

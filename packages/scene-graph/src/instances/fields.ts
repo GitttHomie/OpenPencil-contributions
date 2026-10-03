@@ -1,12 +1,20 @@
 import type { SceneNode } from '../'
+import { TEXT_SHAPING_FIELDS } from '../fields/text'
 
 export const INSTANCE_SYNC_TEXT_PROPS = [
   'name',
-  'text',
-  'fontSize',
-  'fontWeight',
-  'fontFamily',
-  'textDirection'
+  ...TEXT_SHAPING_FIELDS,
+  'textAutoResize',
+  'textLanguage',
+  'maxLines',
+  'textTruncation',
+  'leadingTrim',
+  'textDecoration',
+  'textDecorationStyle',
+  'textDecorationThickness',
+  'textDecorationFills',
+  'textDecorationSkipInk',
+  'textUnderlineOffset'
 ] as const
 
 export const INSTANCE_SYNC_PROPS: (keyof SceneNode)[] = [
@@ -64,5 +72,14 @@ export const INSTANCE_SYNC_PROPS: (keyof SceneNode)[] = [
 export const INSTANCE_SYNC_FIELDS = [
   ...INSTANCE_SYNC_PROPS,
   ...INSTANCE_SYNC_TEXT_PROPS,
+  // Descendant placement follows the definition; an instance root's placement
+  // belongs to its own parent and is deliberately absent from INSTANCE_SYNC_PROPS.
+  'x',
+  'y',
+  'layoutPositioning',
+  'layoutGrow',
+  'layoutAlignSelf',
+  'horizontalConstraint',
+  'verticalConstraint',
   'visible'
 ] as const

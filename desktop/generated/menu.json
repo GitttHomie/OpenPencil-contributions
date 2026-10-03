@@ -185,6 +185,12 @@
         "checkbox": true
       },
       {
+        "id": "view-pixel-grid",
+        "label": "Pixel Grid",
+        "accelerator": "CmdOrCtrl+Shift+P",
+        "checkbox": true
+      },
+      {
         "id": "view-multiplayer-cursors",
         "label": "Multiplayer Cursors",
         "checkbox": true

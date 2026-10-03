@@ -51,6 +51,8 @@ export interface EditorSharedState {
 
 export interface EditorViewState {
   currentPageId: string
+  /** View-only overlay, drawn at pixel-inspection zoom levels. */
+  showPixelGrid?: boolean
   selectedIds: Set<string>
   marquee: Rect | null
   snapGuides: SnapGuide[]

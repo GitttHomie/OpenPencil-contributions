@@ -4,6 +4,8 @@
 
 ### Breaking changes
 
+- Stock photos apply to frames, components, and instances; shape targets are rejected. Existing frame content and overlay fills are preserved when replacing a photo.
+
 - `VariableBinding` and the `colorVariableBinding` paint field are gone from `@open-pencil/core`, `@open-pencil/core/kiwi`, and the Kiwi `Paint` type. `fig.kiwi` never defined the field, so only `.fig` files OpenPencil itself wrote before `colorVar` contain one; reopening such a file leaves the paint's colour unbound, and binding it again records it the way Figma does.
 - `encodeNodeChangeWithVariables`, `encodePaintWithVariableBinding`, and `encodeVarint` are removed from `@open-pencil/core` and `@open-pencil/core/kiwi`. They spliced a colour-variable binding into encoded bytes because the field had no schema entry; exports now write `colorVar`, which `fig.kiwi` defines, so nothing needs them. `parseVariableId` is unchanged.
 - The desktop app now requires macOS 13 or later; the web app supports Chrome 111, Edge 111, Firefox 128, and Safari 16.4 or later.
@@ -14,8 +16,14 @@
 
 ### Added
 
-- Exclude children from auto layout in the Position panel to position them freely, with parent-aware position, alignment, sizing, and constraint controls.
-- Detect installed Claude Code, Codex, Kiro CLI, and Gemini CLI in desktop AI settings and chat, with one-click setup for missing chat adapters and the canvas MCP companion. Show canvas setup failures with a Settings action instead of a generic model error.
+- Toggle a visible pixel grid from the zoom dropdown, View menu, or Cmd/Ctrl+Shift+P; lines appear at 800% zoom and above without affecting snapping or exports.
+- Move, rotate, and resize gradients with canvas handles while the fill picker is open, with snapping to object edges, corners, centers, and directions, free placement with Alt/Option, drag cancellation, and undo.
+- Show a persistent AI run status that distinguishes working, waiting for approval, finished, stopped, failed, interrupted, and paused at a limit.
+
+- Guide AI design work with visual, UX, design-system, and review skills shared across chat and MCP, variable tools enabled by default, and feedback on unbound spacing, component-name collisions, and overlapping screens, without requiring briefs or PRDs. Use frames for layout and photos, card image fills for full-card photos, and additional fills for scrims.
+- Exclude children from auto layout with a Position-panel switch shown only for children of auto-layout parents, with parent-aware position, alignment, sizing, and constraint controls.
+- Add installed Claude Code, Codex, Kiro CLI, and Gemini CLI through the model editor, with per-profile model selection from the CLI's available models and one-click setup for missing chat adapters and the canvas MCP companion. Apply the selected model to chat and Review sessions, stream Kiro reasoning and tool activity correctly, and offer explicit approval of OpenPencil canvas tools for a Kiro chat session.
+- Review the selection or current page on request with an assigned API or CLI model, with findings in a separate dialog and screenshots when supported.
 - Jump between pages from the command palette: it lists the pages you visited recently in the tab, **Go to page…** lists every page, and typing a page name finds it.
 - Preview designs progressively on the canvas as direct AI providers stream JSX, without saving partial designs or adding intermediate undo steps. A preview stays with its page: it hides while you view another page and returns when you come back.
 - Write design trees as TSX with `@open-pencil/design-jsx` as the JSX import source, and render them with `renderTree`.
@@ -28,6 +36,13 @@
 
 ### Changed
 
+- Snap drawn, moved, and resized objects to whole pixels at every zoom level when pixel snapping is enabled, even when bypassing alignment guides; typed numeric values and auto-layout can still use decimals.
+- Align numeric field values and prefixes, soften shared control corners with progressive smoothing where supported, slim constraint indicators without shrinking their click targets, and balance swatch and chat-control insets.
+- Expose corner smoothing in the AI corner tool and guide agents to choose corner treatments that suit each design.
+
+- Add solid and gradient overlays with `set_fill` append mode, revise individual fills by index, and preserve scrims when `set_image_fill` replaces a photo. Fill-tool results include the resulting stack for verification.
+
+- Enable all shared canvas tools by default for built-in AI while preserving explicit tool overrides, and hide the unused Fast tasks assignment.
 - Show Flatten, Outline text, and Outline stroke in the canvas context menu without icons, like every other item there.
 - Keep an AI chat working on the page where it started when you switch to another page, instead of sending its next edits to whichever page is on screen. When the AI switches pages itself, your view follows.
 - `openpencil://` and web `?node=` links select the layer on another page when the current page has none, switching to that page.
@@ -36,15 +51,20 @@
 
 ### Fixed
 
+- Preserve gradient stop colors independently of other fills' color variables, and honor left-to-right and right-to-left directions in the AI fill tool.
+
+- Remove partial nodes when rendering fails so corrected retries do not leave duplicate components, and preserve replacement placement and fragment results when CLI agents render through MCP.
 - Preserve native text wrapping, alignment, and automatic line height when reopening saved files, and recover text from older OpenPencil files with approximate saved glyph placement.
 
-- Keep excluded children anchored by their constraints when auto layout resizes a parent, including badges that overhang Hug buttons while their labels change.
+- Keep excluded children anchored by their constraints when auto layout resizes a parent, including badges that overhang Hug buttons while their labels change or an enclosing frame is resized with handles or presets.
 - Recompute auto-sized text and Hug parents when a font finishes loading, keeping layer bounds aligned with text selection after font changes and Redo.
+- Keep manually sized text boxes fixed on the edited axis when changing fonts or weights, with sizing modes restored by Undo.
 - Commit font choices immediately, choose available styles from local and online catalogs, and limit weight, Bold, and Italic controls to supported faces. Share local font reads, load online previews on hover, and show font failures after loading finishes.
 - Keep dropdown widths stable during dialog animations, defer font-list and chat measurements, and skip unchanged canvas sizes to avoid resize-observer feedback.
 - Keep text-selection highlights aligned with rendered text and snap dragged numeric values to their configured increments.
 - Drag canvas labels to move their containers, or double-click to rename frames, components, and instances, with filled diamond icons for definitions and outlined diamonds for instances.
-- Paste copied component definitions as linked instances, avoid recursive component nesting, and inherit corner smoothing while preserving instance overrides.
+- Paste copied component definitions as linked instances, avoid recursive component nesting, and inherit positioning, auto-layout exclusion, text styling, and corner smoothing while preserving instance overrides.
+- Hide instance children when deleting them without removing their structure, and propagate layer deletions from the main component to its instances.
 - Paste objects into the center of the selected container, preserve their internal spacing, and convert canvas coordinates correctly for nested or rotated destinations and Paste to replace.
 - Reflow children when adding auto layout to reopened frames, and keep Hug parents from collapsing when a child switches to Fill. Undo restores the layout and sizing together.
 - Restore child geometry, sibling order, and surrounding layouts when undoing auto-layout changes or wrapping a selection in auto layout.

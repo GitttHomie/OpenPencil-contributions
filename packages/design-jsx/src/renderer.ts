@@ -86,14 +86,19 @@ export async function renderRoots<Artwork>(
   const parentId = options.parentId ?? graph.getPages()[0].id
 
   const nodes: SceneNode[] = []
-  for (const root of roots) {
-    const node = await renderNode(services, graph, root, parentId)
-    if (options.x !== undefined) graph.updateNode(node.id, { x: options.x })
-    if (options.y !== undefined) graph.updateNode(node.id, { y: options.y })
-    nodes.push(node)
+  try {
+    for (const root of roots) {
+      const node = await renderNode(services, graph, root, parentId)
+      nodes.push(node)
+      if (options.x !== undefined) graph.updateNode(node.id, { x: options.x })
+      if (options.y !== undefined) graph.updateNode(node.id, { y: options.y })
+    }
+    services.layout(graph)
+  } catch (error) {
+    // Only remove this call's roots: other edits may have happened while artwork loaded.
+    for (const node of nodes.toReversed()) graph.deleteNode(node.id)
+    throw error
   }
-
-  services.layout(graph)
 
   return nodes.map((node) => ({
     id: node.id,
@@ -507,8 +512,13 @@ async function renderArtworkNode<Artwork>(
     tree.type === 'icon'
       ? await renderIconNode(services, graph, tree, parentId)
       : renderSVGNode(services, graph, tree, parentId)
-  if (Object.keys(metadata).length > 0) graph.updateNode(node.id, metadata)
-  return node
+  try {
+    if (Object.keys(metadata).length > 0) graph.updateNode(node.id, metadata)
+    return node
+  } catch (error) {
+    graph.deleteNode(node.id)
+    throw error
+  }
 }
 
 async function renderNode<Artwork>(
@@ -543,16 +553,18 @@ async function renderNode<Artwork>(
   }
 
   const node = graph.createNode(nodeType, parentId, overrides)
-  applyBindings(graph, node.id, bindings)
-
-  for (const child of tree.children) {
-    if (typeof child === 'string') continue
-    if (isTreeNode(child)) {
-      await renderNode(services, graph, child, node.id)
+  try {
+    applyBindings(graph, node.id, bindings)
+    for (const child of tree.children) {
+      if (typeof child === 'string') continue
+      if (isTreeNode(child)) {
+        await renderNode(services, graph, child, node.id)
+      }
     }
+    if (node.type === 'COMPONENT_SET') inferComponentSetProperties(graph, node.id)
+    return node
+  } catch (error) {
+    graph.deleteNode(node.id)
+    throw error
   }
-
-  if (node.type === 'COMPONENT_SET') inferComponentSetProperties(graph, node.id)
-
-  return node
 }

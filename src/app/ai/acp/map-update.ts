@@ -8,7 +8,18 @@ export interface MapResult {
   textStarted: boolean
 }
 
-export function mapUpdate(update: SessionUpdate, textId: string, textStarted: boolean): MapResult {
+export interface ACPToolState {
+  name: string
+  title?: string
+  inputAvailable: boolean
+}
+
+export function mapUpdate(
+  update: SessionUpdate,
+  textId: string,
+  textStarted: boolean,
+  tools = new Map<string, ACPToolState>()
+): MapResult {
   const chunks: UIMessageChunk[] = []
 
   switch (update.sessionUpdate) {
@@ -28,64 +39,64 @@ export function mapUpdate(update: SessionUpdate, textId: string, textStarted: bo
       }
       break
     }
-    case 'agent_thought_chunk': {
-      if (update.content.type === 'text') {
-        const rid = `reasoning-${textId}`
-        chunks.push({ type: 'reasoning-start', id: rid })
-        chunks.push({
-          type: 'reasoning-delta',
-          id: rid,
-          delta: update.content.text
-        })
-        chunks.push({ type: 'reasoning-end', id: rid })
-      }
+    case 'tool_call':
+    case 'tool_call_update':
+      chunks.push(...mapToolUpdate(update, tools))
       break
-    }
-    case 'tool_call': {
-      if (!update.title) {
-        console.warn('[ACP] Tool call without title:', update.toolCallId)
-      }
-      const toolName = update.title || 'unknown'
-      chunks.push({
-        type: 'tool-input-start',
-        toolCallId: update.toolCallId,
-        toolName,
-        providerExecuted: true,
-        title: update.title
-      })
-      if (update.rawInput) {
-        chunks.push({
-          type: 'tool-input-available',
-          toolCallId: update.toolCallId,
-          toolName,
-          input: update.rawInput,
-          providerExecuted: true,
-          title: update.title
-        })
-      }
-      break
-    }
-    case 'tool_call_update': {
-      if (update.status === 'completed') {
-        chunks.push({
-          type: 'tool-output-available',
-          toolCallId: update.toolCallId,
-          output: update.rawOutput ?? textFromContent(update.content ?? undefined),
-          providerExecuted: true
-        })
-      } else if (update.status === 'failed') {
-        chunks.push({
-          type: 'tool-output-error',
-          toolCallId: update.toolCallId,
-          errorText: textFromContent(update.content ?? undefined) ?? 'Tool call failed',
-          providerExecuted: true
-        })
-      }
-      break
-    }
   }
 
   return { chunks, textStarted }
+}
+
+function mapToolUpdate(
+  update: Extract<SessionUpdate, { sessionUpdate: 'tool_call' | 'tool_call_update' }>,
+  tools: Map<string, ACPToolState>
+): UIMessageChunk[] {
+  const chunks: UIMessageChunk[] = []
+  let tool = tools.get(update.toolCallId)
+  if (!tool) {
+    tool = {
+      name: update.title || 'unknown',
+      title: update.title ?? undefined,
+      inputAvailable: false
+    }
+    tools.set(update.toolCallId, tool)
+    chunks.push({
+      type: 'tool-input-start',
+      toolCallId: update.toolCallId,
+      toolName: tool.name,
+      providerExecuted: true,
+      title: tool.title
+    })
+  }
+  const terminal = update.status === 'completed' || update.status === 'failed'
+  if (update.rawInput !== undefined || (terminal && !tool.inputAvailable)) {
+    chunks.push({
+      type: 'tool-input-available',
+      toolCallId: update.toolCallId,
+      toolName: tool.name,
+      input: update.rawInput ?? {},
+      providerExecuted: true,
+      title: update.title ?? tool.title
+    })
+    tool.inputAvailable = true
+  }
+  if (update.status === 'completed') {
+    chunks.push({
+      type: 'tool-output-available',
+      toolCallId: update.toolCallId,
+      output: update.rawOutput ?? textFromContent(update.content ?? undefined),
+      providerExecuted: true
+    })
+  } else if (update.status === 'failed') {
+    chunks.push({
+      type: 'tool-output-error',
+      toolCallId: update.toolCallId,
+      errorText: textFromContent(update.content ?? undefined) ?? 'Tool call failed',
+      providerExecuted: true
+    })
+  }
+  return chunks
 }
 
 export function textFromContent(content: JSONObject[] | undefined): string | undefined {

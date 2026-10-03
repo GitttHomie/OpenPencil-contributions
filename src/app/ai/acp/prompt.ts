@@ -6,10 +6,11 @@ import canvasInstructions from './canvas-instructions.md?raw'
 export function buildACPUserPrompt(text: string, includeReference: boolean): string {
   return [
     canvasInstructions.trim(),
-    includeReference ? SYSTEM_PROMPT : '',
+    includeReference ? SYSTEM_PROMPT : DESIGN_WORKFLOW,
     '# Current user request',
     text
   ]
     .filter(Boolean)
     .join('\n\n')
 }
+import { DESIGN_WORKFLOW } from '@open-pencil/core/tools'

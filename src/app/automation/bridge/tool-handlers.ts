@@ -1,11 +1,13 @@
-import { renderTree } from '@open-pencil/core/design-jsx'
+import type { RenderPlacementInput } from '@open-pencil/core/design-jsx'
 import type { FigmaAPI } from '@open-pencil/core/figma-api'
 import {
   ALL_TOOLS,
   registerComponentCatalog,
   isAtomicTool,
-  isToolExposed
+  isToolExposed,
+  renderDesignTree
 } from '@open-pencil/core/tools'
+import type { TreeNode } from '@open-pencil/design-jsx'
 import type { JSONObject } from '@open-pencil/scene-graph/primitives'
 
 import type { AutomationTarget } from '@/app/automation/bridge/target'
@@ -21,24 +23,24 @@ export function createAutomationToolHandler(makeFigma: FigmaFactory) {
     toolArgs: Record<string, unknown>
   ): Promise<unknown> {
     const store = target.store
-    const tree = toolArgs.tree as Parameters<typeof renderTree>[1]
+    const tree = toolArgs.tree as TreeNode
+    const figma = makeFigma(store, target.pageId)
     const result = await store.runMutationWithLayout(
-      () =>
-        renderTree(store.graph, tree, {
-          parentId: (toolArgs.parent_id as string | undefined) ?? target.pageId,
-          x: toolArgs.x as number | undefined,
-          y: toolArgs.y as number | undefined
-        }),
+      () => renderDesignTree(figma, tree, toolArgs as RenderPlacementInput),
       target.pageId,
       async (node) => {
-        await ensureGraphFonts(store.graph, [node.id], store.renderer)
+        await ensureGraphFonts(
+          store.graph,
+          [node.id, ...(node.siblings?.map((sibling) => sibling.id) ?? [])],
+          store.renderer
+        )
       }
     )
     store.requestRender()
     store.flashNodes([result.id])
     return {
       ok: true,
-      result: { id: result.id, name: result.name, type: result.type, children: result.childIds }
+      result
     }
   }
 

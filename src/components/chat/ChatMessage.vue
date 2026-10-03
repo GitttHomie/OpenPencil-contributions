@@ -10,7 +10,7 @@ import { useI18n, vTestId } from '@open-pencil/vue'
 import { attachmentsForMessage } from '@/app/ai/attachment/presentation/store'
 import type { AttachmentPresentation } from '@/app/ai/attachment/presentation/types'
 import { reasoningDisplay } from '@/app/ai/chat/preferences'
-import { visibleUserMessageText } from '@/app/ai/chat/presentation'
+import { coalesceReasoningParts, visibleUserMessageText } from '@/app/ai/chat/presentation'
 import AttachmentList from '@/components/chat/attachment/AttachmentList.vue'
 import ChatMarkdown from '@/components/chat/ChatMarkdown.vue'
 import ReasoningBlock from '@/components/chat/ReasoningBlock.vue'
@@ -29,6 +29,7 @@ const {
   presentation?: { text?: string; attachments?: AttachmentPresentation[] }
 }>()
 const { ai } = useI18n()
+const displayParts = computed(() => coalesceReasoningParts(message.parts))
 const markdownMode = computed(() => (streaming ? 'streaming' : 'static'))
 const storedAttachments = attachmentsForMessage(message.id)
 const attachments = computed(() => presentation?.attachments ?? storedAttachments.value)
@@ -39,7 +40,7 @@ const assistantText = computed(() =>
     .join('')
 )
 const firstAssistantTextPartIndex = computed(() =>
-  message.parts.findIndex((part) => isTextUIPart(part) && part.text.length > 0)
+  displayParts.value.findIndex((part) => isTextUIPart(part) && part.text.length > 0)
 )
 const copied = refAutoReset(false, 1500)
 const { copy, isSupported: clipboardSupported } = useClipboard()
@@ -54,9 +55,18 @@ type ToolPart = Extract<UIMessagePart<UIDataTypes, UITools>, { toolCallId: strin
 
 function toolDisplayName(part: ToolPart): string {
   const name = getToolName(part)
+  const normalized = name.toLowerCase().replace(/\s+/g, '_')
+  if (normalized === 'kiro_powers') return ai.value.kiroExtensions
+  if (normalized === 'tool_load') return ai.value.loadAgentTools
   return (isMCPToolName(name) ? name.replace(/^mcp(?:__.+?__|\.[^.]+\.)/, '') : name)
     .replace(/_/g, ' ')
     .replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
+function toolDescription(part: ToolPart): string | undefined {
+  return getToolName(part).toLowerCase().replace(/\s+/g, '_') === 'kiro_powers'
+    ? ai.value.kiroExtensionsHint
+    : undefined
 }
 
 function toolDetails(part: ToolPart): string | undefined {
@@ -98,7 +108,7 @@ function partKey(part: UIMessagePart<UIDataTypes, UITools>, index: number): stri
       :class="message.role === 'user' ? 'max-w-[85%]' : ''"
     >
       <template v-if="message.role === 'assistant'">
-        <template v-for="(part, i) in message.parts" :key="partKey(part, i)">
+        <template v-for="(part, i) in displayParts" :key="partKey(part, i)">
           <!-- Reasoning -->
           <ReasoningBlock
             v-if="isReasoningUIPart(part) && part.text"
@@ -147,6 +157,9 @@ function partKey(part: UIMessagePart<UIDataTypes, UITools>, index: number): stri
                   class="ml-auto size-3 text-muted transition-transform [[data-state=open]>&]:rotate-180"
                 />
               </CollapsibleTrigger>
+              <p v-if="toolDescription(part)" class="px-1 pt-1 text-[10px] text-muted">
+                {{ toolDescription(part) }}
+              </p>
               <CollapsibleContent
                 v-if="toolState(part) !== 'pending'"
                 :class="[collapsibleContentMotion, 'text-[10px]']"

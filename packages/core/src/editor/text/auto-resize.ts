@@ -20,6 +20,25 @@ function hasTextAutoWidthChange(changes: Partial<SceneNode>): boolean {
   return Object.keys(changes).some((key) => TEXT_AUTO_WIDTH_KEYS.has(key as keyof SceneNode))
 }
 
+/** Explicit geometry edits fix the edited text axis; font and text edits keep its sizing mode. */
+export function manualTextSizingChanges(
+  node: SceneNode,
+  changes: Partial<SceneNode>
+): Partial<Pick<SceneNode, 'textAutoResize'>> {
+  if (node.type !== 'TEXT' || node.textPathData || changes.textAutoResize !== undefined) return {}
+  if (changes.height !== undefined && changes.height !== node.height) {
+    return node.textAutoResize === 'NONE' ? {} : { textAutoResize: 'NONE' }
+  }
+  if (
+    changes.width !== undefined &&
+    changes.width !== node.width &&
+    node.textAutoResize === 'WIDTH_AND_HEIGHT'
+  ) {
+    return { textAutoResize: 'HEIGHT' }
+  }
+  return {}
+}
+
 export function textAutoResizeChanges(
   node: SceneNode | undefined,
   changes: Partial<SceneNode>

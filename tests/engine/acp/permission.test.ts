@@ -60,12 +60,12 @@ describe('acp-permission', () => {
     expect(result.outcome.optionId).toBe('reject')
   })
 
-  test('rejectCurrentPermission falls back to first option when no reject kind', async () => {
+  test('rejectCurrentPermission cancels when no reject option is offered', async () => {
     const req = makeRequest([{ optionId: 'only-allow', kind: 'allow_once', name: 'Allow' }])
     const promise = requestPermissionFromUser(req)
     rejectCurrentPermission()
     const result = await promise
-    expect(result.outcome.optionId).toBe('only-allow')
+    expect(result.outcome.outcome).toBe('cancelled')
   })
 
   test('queue handles multiple concurrent requests in order', async () => {

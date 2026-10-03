@@ -2,6 +2,7 @@ import { evalCode } from './analyze'
 import { calc } from './calc'
 import { render } from './create'
 import { describe } from './describe'
+import { getDesignGuidance } from './design-guidance'
 import {
   setFill,
   setLayout,
@@ -23,6 +24,7 @@ import { viewportZoomToFit } from './vector'
  * Covers 90%+ of design sessions: render, describe, modify, structure, icons.
  */
 export const CORE_TOOLS: ToolDef[] = [
+  getDesignGuidance,
   // Read
   getSelection,
   getNode,

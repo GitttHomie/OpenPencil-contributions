@@ -16,6 +16,7 @@ export interface RulerTheme {
 export type MeasurementMode = 'off' | 'shallow' | 'deep'
 
 export interface RenderOverlays {
+  showPixelGrid?: boolean
   hoveredNodeId?: string | null
   measurementMode?: MeasurementMode
   enteredContainerId?: string | null

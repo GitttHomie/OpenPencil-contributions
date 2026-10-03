@@ -9,7 +9,7 @@ test('exclusion updates position, constraints and sizing immediately, with exact
   const scene = await createLayoutModeScene(page)
   const position = propertySection(page, 'Position')
   const constraints = propertySection(page, 'Constraints')
-  const toggle = position.getByRole('checkbox', { name: 'Exclude from auto layout' })
+  const toggle = position.getByRole('switch', { name: 'Exclude from auto layout' })
   const x = propertyField(page, 'x')
   const y = propertyField(page, 'y')
   const align = position.getByRole('button', { name: 'Align left', exact: true })
@@ -54,7 +54,7 @@ test('parent changes and mixed selections update controls without reselection', 
   page
 }) => {
   const scene = await createLayoutModeScene(page)
-  const toggle = page.getByRole('checkbox', { name: 'Exclude from auto layout' })
+  const toggle = page.getByRole('switch', { name: 'Exclude from auto layout' })
   const constraints = propertySection(page, 'Constraints')
   await scene.select([scene.ids.first])
   await expect(toggle).toBeHidden()
@@ -64,7 +64,7 @@ test('parent changes and mixed selections update controls without reselection', 
   await expect(constraints).toBeHidden()
   await toggle.check()
   await scene.select([scene.ids.first, scene.ids.second])
-  await expect(toggle).toHaveAttribute('aria-checked', 'mixed')
+  await expect(toggle).toHaveAttribute('data-mixed')
   await expect(propertyField(page, 'x')).toHaveAttribute('aria-disabled', 'true')
   await expect(constraints).toBeHidden()
   const before = await scene.read()
@@ -74,7 +74,7 @@ test('parent changes and mixed selections update controls without reselection', 
   await page.getByTestId('canvas-element').focus()
   await page.keyboard.press('Meta+z')
   await expect.poll(scene.read).toEqual(before)
-  await expect(toggle).toHaveAttribute('aria-checked', 'mixed')
+  await expect(toggle).toHaveAttribute('data-mixed')
   await scene.select([scene.ids.first])
   await scene.setLayoutMode(scene.ids.frame, 'NONE')
   await expect(toggle).toBeHidden()
@@ -84,6 +84,11 @@ test('parent changes and mixed selections update controls without reselection', 
   await expect(toggle).toBeHidden()
   await expect(constraints).toBeHidden()
   await expect(propertyField(page, 'x')).not.toHaveAttribute('aria-disabled', 'true')
+  await scene.setLayoutMode(scene.ids.frame, 'VERTICAL')
+  await scene.select([scene.ids.first, scene.ids.outer])
+  await expect(toggle).toBeHidden()
+  await scene.select([scene.ids.first])
+  await expect(toggle).toBeVisible()
 })
 
 test('both center constraint axes remain independently clickable', async ({ page }, testInfo) => {

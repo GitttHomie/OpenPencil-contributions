@@ -13,14 +13,20 @@ This reference describes scene creation, not React DOM output. Use the `render` 
 - `wrap` and `rowGap` enable wrapped flex rows. `grid`, `columns`, and `rows` enable grid (for example `columns="1fr 200px 1fr"`). Grid children use `colStart`, `rowStart`, `colSpan`, and `rowSpan`. The current grid `gap` shorthand takes precedence over `columnGap` and `rowGap`.
 - `flow="auto"|"ltr"|"rtl"` controls container flow; text `dir` controls writing direction. Preserve these separately.
 - Use measured node bounds and the existing `arrange` tool for independent artboards. Prefer layout constraints to calculating child coordinates; ordinary JavaScript arithmetic is appropriate when real geometry calculations are needed.
+- Place component boards and screens in unoccupied areas. Inspect `designFeedback` from render results for repeated unbound spacing, component-name collisions, and top-level overlaps; resolve unintended issues using the returned IDs. When arranging, pass only the IDs you intend to move.
 
 ## Paint, text, and artwork
 
 - `bg` / `fill`, `stroke`, and text `color` accept colors and supported variable references. Set colors explicitly for predictable contrast. `fills` accepts structured paints; gradient helpers include `linearGradient`, `radialGradient`, `angularGradient`, and `diamondGradient`.
 - `rounded` and `roundedTL`/`roundedTR`/`roundedBL`/`roundedBR` control corners. `strokeWidth`, `opacity`, `rotate`, and `blendMode` control appearance. `overflow="hidden"` clips content; do not hide accidental text overflow to make a broken layout appear correct.
+- Choose corner treatment with the visual direction: sharp, circular, or smooth. For a softer continuous curve, combine a nonzero radius with `cornerSmoothing={0.6}` (range 0–1, not percent); for example `<Frame rounded={16} cornerSmoothing={0.6}>`. On existing nodes use `set_radius` with `radius` and `corner_smoothing`; omitted smoothing preserves its current value, and `0` restores circular rounding. Keep repeated component corners consistent, but do not apply smoothing to every design or to circles and pills by habit. Verify the resulting `cornerSmoothing` and render at actual size.
 - `effects` accepts structured effects such as `dropShadow`, `innerShadow`, and `layerBlur`. `shadow="offsetX offsetY blur #color"` and `blur` are convenient shorthands. Effect helpers take `radius`, as Figma's effects do; when a JSX string is rendered, an option a paint or effect helper does not support is reported as a warning.
 - Text content belongs inside `Text`. Use `size`, `font`, `weight`, `lineHeight`, `letterSpacing`, `textAlign`, `textDecoration`, and `textCase`. Verify fonts actually load before judging dimensions; do not assume every font is available.
-- `Icon` uses an Iconify name, size, and color. Prefer icons to emoji when reliable vector output is needed. Image fills belong on appropriate leaf shapes, not containers whose children must remain visible.
+- `Icon` uses an Iconify name, size, and color. Prefer icons to emoji when reliable vector output is needed.
+- Use `Frame`, `Component`, and `Instance` for layout surfaces, cards, controls, and photo placeholders. Reserve shapes for graphics and illustrations. A photo is an image fill on its frame; a full-card photo belongs on the card itself, with content as children. Put a placeholder icon inside the photo frame when needed.
+- Scrims are additional solid or gradient fills above the image on the same frame, not separate rectangle nodes. Fill arrays paint from first to last: the base image comes before its scrim. `stock_photo` preserves children and overlays when replacing an existing image fill or base solid placeholder.
+- To add a scrim to an existing photo, call `set_fill` with `operation="append"`, `color="#00000000"`, `color_end="#000000CC"`, and `gradient="top-bottom"`. To revise that scrim, use its returned `fill_index` with `operation="replace"`; omitting both options replaces all fills. `set_image_fill` and `stock_photo` preserve the overlay when replacing the photo. The card example below starts with a solid photo placeholder: apply the photo to that same returned frame ID.
+- Read back the fill stack and inspect the rendered card: verify IMAGE first, a visible gradient after it, transparent and dark stop alpha, and the intended direction. Describing a scrim in reasoning does not create one.
 - Design JSX props are the portable authoring interface. Some CSS-style aliases are supported, but this is not a browser CSS engine; do not assume arbitrary HTML, classes, or styles work.
 
 ## Variables and components
@@ -40,5 +46,7 @@ This reference describes scene creation, not React DOM output. Use the `render` 
 ## Verification
 
 Inspect structure and actual rendered output. Node counts and `describe` diagnostics do not establish visual fidelity. Check wrapping with longer content, narrower containers, component edits, and relevant modes. Resolve overflow and contrast problems at their source. Reuse IDs returned by creation tools rather than repeatedly searching for the same nodes.
+
+Rendering failures remove the nodes created by that render, including earlier roots in a fragment, so a corrected retry does not retain partial components. Successful renders must be edited by their returned IDs rather than retried as new content. MCP tree rendering preserves the same replacement and insertion placement as JSX rendering.
 
 The examples below are executed by the authoring-reference tests. Create the named variables before running a variable-bound example.

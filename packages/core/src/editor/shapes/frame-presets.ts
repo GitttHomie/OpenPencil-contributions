@@ -103,11 +103,17 @@ export function createFramePresetActions(ctx: EditorContext, createShape: Create
     originals: ReadonlyMap<string, ResizeSnapshot>
   ) {
     ctx.graph.updateNode(id, next)
-    const provisional = computeConstrainedResizeChanges(ctx.graph, id, previous, next, originals)
+    const roundToPixels = ctx.state.snappingPreferences.pixelGrid
+    const provisional = computeConstrainedResizeChanges(ctx.graph, id, previous, next, originals, {
+      roundToPixels
+    })
     for (const [childId, changes] of provisional) ctx.graph.updateNode(childId, changes)
     ctx.runLayoutForNode(id)
 
-    const final = computeConstrainedResizeChanges(ctx.graph, id, previous, next, originals)
+    const final = computeConstrainedResizeChanges(ctx.graph, id, previous, next, originals, {
+      layoutResolved: true,
+      roundToPixels
+    })
     applyResize(id, next, final)
   }
 

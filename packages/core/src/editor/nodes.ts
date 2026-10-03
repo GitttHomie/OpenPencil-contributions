@@ -13,7 +13,8 @@ import { reconcileVariableLayouts } from '#core/layout/variables'
 import { createLayoutModeActions } from './layout-mode'
 import { createNodePreviewActions } from './node-preview'
 import { createNudgeActions } from './nudge'
-import { textAutoResizeChanges } from './text/auto-resize'
+import { snapGeometryChanges } from './pixel-snapping'
+import { manualTextSizingChanges, textAutoResizeChanges } from './text/auto-resize'
 import { pathTextEditChanges } from './text/path-edit'
 import type { EditorContext } from './types'
 import { createVariableBindingActions } from './variable-bindings'
@@ -33,6 +34,13 @@ export function createNodeActions(ctx: EditorContext) {
   const nudgeActions = createNudgeActions(ctx)
   const variableBindingActions = createVariableBindingActions(ctx)
 
+  function snapGeometry<T extends Partial<SceneNode>>(changes: T): T {
+    return snapGeometryChanges(
+      changes,
+      ctx.state.snappingPreferences.pixelGrid && !ctx.graph.isApplyingLayout
+    )
+  }
+
   function runChangedLayout(id: string, changes: Partial<SceneNode>) {
     if (changes.variableModes) reconcileVariableLayouts(ctx.graph)
     ctx.runLayoutForNode(id)
@@ -41,6 +49,7 @@ export function createNodeActions(ctx: EditorContext) {
   function updateNode(id: string, changes: Partial<SceneNode>) {
     const node = ctx.graph.getNode(id)
     if (!node) return
+    changes = { ...changes, ...manualTextSizingChanges(node, changes) }
     // Path-edit last so its reflowed glyphs win over auto-resize's glyph clear
     // (path text is textAutoResize NONE so they don't collide today).
     const nextChanges = styleDetachmentChanges(node, {
@@ -56,6 +65,7 @@ export function createNodeActions(ctx: EditorContext) {
   function updateNodeWithUndo(id: string, changes: Partial<SceneNode>, label = 'Update') {
     const node = ctx.graph.getNode(id)
     if (!node) return
+    changes = { ...changes, ...manualTextSizingChanges(node, changes) }
     // Same ordering rationale as updateNode: reflowed path-text glyphs win.
     const nextChanges = styleDetachmentChanges(node, {
       ...changes,
@@ -115,6 +125,7 @@ export function createNodeActions(ctx: EditorContext) {
   }
 
   return {
+    snapGeometry,
     updateNode,
     ...previewActions,
     updateNodeWithUndo,

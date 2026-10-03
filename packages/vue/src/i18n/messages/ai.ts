@@ -4,6 +4,29 @@ import { i18n } from '#vue/i18n/create'
 
 export const aiMessageDefaults = {
   localAgentsTitle: 'Local agents',
+  runWorking: 'Agent is working…',
+  runWaiting: 'Waiting for your approval',
+  runFinished: 'Run finished',
+  runStopped: 'Run stopped',
+  runFailed: 'Run failed',
+  runInterrupted: 'Run interrupted — completion was not confirmed',
+  runLimited: 'Run paused at its limit — continue to keep working',
+  allowCanvasForChat: 'Allow OpenPencil canvas tools for this chat',
+  allowCanvasForChatHint:
+    'Includes canvas edits. Shell commands, file access, and tools from other servers still ask. Resets when the agent session restarts.',
+  kiroExtensions: 'Kiro extensions',
+  kiroExtensionsHint:
+    'Skills and integrations used by Kiro. This status applies to this tool call.',
+  loadAgentTools: 'Load agent tools',
+  cliDefaultModel: 'CLI default',
+  cliModelHint:
+    'Saved with this profile and applied before chat or reviews. Model discovery does not send a prompt.',
+  refreshCLIModels: 'Refresh models',
+  cliModelsFailed: 'Could not load models. Sign in through the CLI, then refresh.',
+  cliModelUnavailable:
+    'This saved model is not in the CLI model list. Choose an available model or refresh.',
+  cliModelUnsupported:
+    'This adapter does not expose model selection. Update it or use the CLI default.',
   localAgentsDescription:
     'Use installed CLIs with their existing login and plan. No separate API key is needed. Detection does not sign in or send prompts.',
   localAgentsDesktopOnly: 'Open the desktop app to discover installed CLI agents.',
@@ -140,7 +163,15 @@ export const aiMessageDefaults = {
   modelRoleFast: 'Fast tasks',
   modelRoleVision: 'Vision',
   modelRoleDesignDescription: 'AI chat and canvas edits',
-  modelRoleReviewDescription: 'Explicit plan and design reviews',
+  modelRoleReviewDescription: 'Used by Review design in chat. Runs only when requested.',
+  reviewDesign: 'Review design',
+  reviewDescription:
+    'Review the selection, or the current page if nothing is selected. Returns findings without applying edits.',
+  reviewFocus: 'Focus (optional)',
+  reviewNeedsModel: 'Assign a Review model in AI settings to use this action.',
+  reviewEmpty: 'Select a design or add content to this page before reviewing.',
+  reviewWithImage: 'Snapshot and screenshot reviewed',
+  reviewSnapshotOnly: 'Structural snapshot only; rendered appearance was not checked',
   modelRoleFastDescription: 'Low-cost background work',
   modelRoleVisionDescription: 'Screenshots and image references',
   modelRoleUseDesign: 'Same as Design',

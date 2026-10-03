@@ -51,12 +51,11 @@ function isPastDragStartThreshold(d: DragMove, sx: number, sy: number) {
   return isPastPointerDragThreshold(d.startScreenX, d.startScreenY, sx, sy)
 }
 
-function previewMove(d: DragMove, dx: number, dy: number, editor: Editor, round = false) {
+function previewMove(d: DragMove, dx: number, dy: number, editor: Editor) {
   d.previewPositions = new Map()
   for (const [id, orig] of d.originals) {
     const delta = worldDeltaToParentLocal({ x: dx, y: dy }, orig.parentId, editor)
-    const x = round ? Math.round(orig.x + delta.x) : orig.x + delta.x
-    const y = round ? Math.round(orig.y + delta.y) : orig.y + delta.y
+    const { x, y } = editor.snapGeometry({ x: orig.x + delta.x, y: orig.y + delta.y })
     if (d.previewPositions.size === 0) {
       d.appliedDx = x - orig.x
       d.appliedDy = y - orig.y
@@ -109,7 +108,7 @@ export function handleMoveMove(
   if (dropParent && dropParent.layoutMode !== 'NONE' && !keepingAbsolutePosition) {
     computeAutoLayoutIndicatorForFrame(dropParent, cx, cy, editor, movingIds)
     editor.setDropTarget(dropParent.id)
-    previewMove(d, dx, dy, editor, !disableSnapping && editor.state.snappingPreferences.pixelGrid)
+    previewMove(d, dx, dy, editor)
     editor.requestRepaint()
     return
   }
@@ -189,6 +188,10 @@ function finishMove(
       })
     }
     editor.graph.reparentNode(id, dropId)
+    const reparented = editor.graph.getNode(id)
+    if (reparented) {
+      editor.graph.updateNode(id, editor.snapGeometry({ x: reparented.x, y: reparented.y }))
+    }
     if (indicator) editor.graph.updateNode(id, { layoutPositioning: 'AUTO' })
   }
   if (indicator) {

@@ -1,4 +1,4 @@
-export { renderJSX, renderTree } from './renderer'
+export { renderJSX, renderTree, renderRoots } from './renderer'
 export {
   finishRenderPlacement,
   resolveRenderPlacement,

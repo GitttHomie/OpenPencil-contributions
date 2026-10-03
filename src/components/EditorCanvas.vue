@@ -34,6 +34,7 @@ import { appRuntimeConfig } from '@/app/runtime/config'
 import PreparationOverlay from '@/components/preparation/canvas/Overlay.vue'
 
 import CanvasMenu from './canvas/CanvasMenu.vue'
+import GradientHandles from './canvas/gradient/GradientHandles.vue'
 import CanvasLabelEditor from './canvas/labels/CanvasLabelEditor.vue'
 import { canvasLabelPresentation } from './canvas/labels/presentation'
 import NumberField from './inputs/NumberField.vue'
@@ -199,6 +200,10 @@ const cursor = computed(() => toolCursor(store.state.activeTool, cursorOverride.
           tabindex="-1"
           :style="{ cursor }"
           class="absolute inset-0 block size-full touch-none outline-none"
+        />
+        <GradientHandles
+          :enabled="isActivePane"
+          :viewport="getRenderState ? getRenderState() : store.state"
         />
         <Transition
           enter-active-class="transition-opacity duration-150"

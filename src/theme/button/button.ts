@@ -30,8 +30,8 @@ const appButton = tv({
       lg: { base: 'h-9 px-3.5 text-sm' }
     },
     shape: {
-      square: { base: 'rounded' },
-      rounded: { base: 'rounded-md' },
+      square: { base: 'rounded smooth-corners' },
+      rounded: { base: 'rounded-md smooth-corners' },
       pill: { base: 'rounded-full' }
     }
   },

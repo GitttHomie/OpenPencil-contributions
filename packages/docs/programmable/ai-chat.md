@@ -7,6 +7,24 @@ description: Built-in AI assistant with 90+ tools for creating and modifying des
 
 Press <kbd>⌘</kbd><kbd>J</kbd> (<kbd>Ctrl</kbd> + <kbd>J</kbd>) to open the AI assistant. Describe what you want — it creates shapes, sets styles, manages layout, works with components, and analyzes your design.
 
+## Design guidance
+
+Describe what you want in your own words. Briefs, PRDs, questionnaires, and approval of intermediate design stages are optional. The assistant uses your request and existing document, makes reasonable assumptions, and scales its work to the task.
+
+Built-in guidance covers visual direction, UX flows and states, editable design systems, and review. For substantial new work, it encourages the assistant to reuse or establish variables and components before composing screens from linked instances. Small edits can proceed directly.
+
+Layout surfaces and photo containers use frames or components. Full-card photos are image fills on the card itself; scrims are additional fills above that image, with text and controls kept as children. Separate photo placeholders use a frame and can contain an icon. Shapes remain available for graphics and illustrations. The `stock_photo` tool accepts frames, components, and instances, preserves children and overlay fills, and replaces an existing image without adding duplicate fills.
+
+The AI can append solid or gradient fills with `set_fill` using `operation: "append"` and revise one fill using `fill_index`. For example, a top-to-bottom scrim uses `color: "#00000000"`, `color_end: "#000000CC"`, and `gradient: "top-bottom"`. The returned stack confirms which fills actually exist. `set_image_fill` preserves these overlays when replacing a photo. The shared authoring reference includes an executable card-and-scrim example, and review guidance calls for checking both the fill stack and rendered contrast.
+
+Corner treatment is also a design choice. Agents can combine a nonzero radius with `cornerSmoothing` in JSX, or use `set_radius` with `corner_smoothing` on existing nodes. Smoothing ranges from 0 to 1; 0 keeps circular corners. Guidance asks agents to match the product's visual direction and keep reusable components consistent, without imposing smooth corners on every design.
+
+Direct chat, desktop CLI agents, and harness sessions share the workflow. The `get_design_guidance` tool supplies detailed topics on demand and is also available to external MCP clients. Direct chat enables variable discovery, creation, editing, and binding tools by default; explicit tool restrictions in Settings still apply.
+
+Render results give the agent specific feedback about repeated unbound spacing, potentially duplicated component definitions, and overlapping top-level content. These checks do not impose a palette, spacing scale, or component count. If rendering fails partway through, the partial nodes are removed before a corrected retry.
+
+The assistant checks document structure and rendered output where supported. Canvas review can identify design problems, but cannot verify runtime keyboard behavior, screen-reader support, or actual usability.
+
 ## Setup
 
 1. Open the AI chat panel (<kbd>⌘</kbd><kbd>J</kbd>)
@@ -14,23 +32,37 @@ Press <kbd>⌘</kbd><kbd>J</kbd> (<kbd>Ctrl</kbd> + <kbd>J</kbd>) to open the AI
 3. Add a model and configure its provider, model ID, credentials, and capabilities
 4. Save the model and assign it to **Design agent**
 
-You can configure multiple reusable models and separately assign models for design work, reviews, fast tasks, and image input. Models using the same provider connection reuse its stored credential.
+You can configure multiple reusable models and separately assign models for design work, reviews, and image input. Models using the same provider connection reuse its stored credential. Fast tasks is hidden until it has a supported workflow.
+
+Choose **Review design** in chat to review the selection, or the current page when nothing is selected, with the assigned **Review** model. An optional focus can narrow the request. Reviews return findings in a separate dialog without applying changes or replacing the Design model. API models and local CLI profiles can be reviewers; Pi profiles are not supported for Review. A screenshot is included when supported; otherwise the result is marked as a structural review. The snapshot is bounded to 300 nodes, so select a smaller region for detailed reviews of large documents.
+
+API review requests receive no tools. CLI reviews launch a separate session without OpenPencil or external MCP server connections supplied by the app and deny ACP permission requests. The CLI's own configuration still belongs to that CLI. Closing the dialog or cancelling stops the review; switching documents, pages, or reviewer discards pending results.
 
 The chat composer grows with multiline prompts and can pin the current canvas selection as explicit node context. Assistant messages show provider reasoning in collapsible sections and provide a per-response copy action. Image attachments remain available for visual references when a Vision model is configured. Streaming responses use a hardened Markdown renderer with Shiki-highlighted code blocks; unsafe link protocols and embedded data images are blocked.
 
 ## Local CLI agents
 
-The desktop app detects **Claude Code**, **Codex**, **Kiro CLI**, and **Gemini CLI** in **Settings → AI & agents → Local agents**. Sign in through the CLI first; OpenPencil uses its existing authentication without requesting another API key.
+Choose **Add model** in **Settings → AI & agents**, then select **Claude Code**, **Codex**, **Kiro CLI**, or **Gemini CLI** as the provider. The desktop app detects installation status and shows setup actions inside that model's editor. Sign in through the CLI first; OpenPencil uses its existing authentication without requesting another API key.
 
-- **Installed**: choose **Use for chat**, or select the agent from the chat picker.
+Once the adapter is available, **Model ID** lists the models advertised by that CLI account. Save separate profiles for different models from the same CLI, then assign them independently to Design and Review or switch profiles in chat. OpenPencil applies the saved choice to each new session before sending a prompt, without changing the CLI's global default. If a saved model is unavailable, the request stops instead of falling back to another model.
+
+**CLI default** deliberately follows the adapter's current default, preserving existing profiles that have no model selected. **Refresh models** reloads the account's list through a temporary session with no prompts or app-supplied MCP connections. Adapters that do not expose model selection can still use CLI default; update the adapter to expose explicit choices when supported. Both ACP configuration selectors and the older session model API are supported.
+
+- **Installed**: save the profile, then assign it to Design or Review. The chat picker lists saved Design-capable profiles.
 - **CLI detected · chat adapter required**: choose **Install adapter**. This explicitly runs `npm install --global @agentclientprotocol/claude-agent-acp` for Claude Code or `npm install --global @agentclientprotocol/codex-acp` for Codex. Install Node.js and npm first if the action is disabled.
 - **Not installed**: follow the setup guide, then click **Refresh**.
 
-Discovery does not install software automatically. A failed adapter installation can be retried after correcting npm permissions or network connectivity. Choosing an agent creates a reusable model profile and assigns it to the Design role.
+Discovery does not install software automatically. A failed adapter installation can be retried after correcting npm permissions or network connectivity. Selecting a provider does not save a profile or switch your active chat; cancelling the model editor leaves your profiles unchanged.
 
-All local agents also need the OpenPencil MCP companion to connect to the canvas. If it is missing, choose **Set up canvas connection** in Local agents. This installs the companion version matching the app and reconnects the editor without requiring an app restart. Both companion and adapter setup use the public npm registry, even when your default registry is private. If startup fails after installation, retry or inspect **Settings → MCP**.
+Canvas editing through local agents also needs the OpenPencil MCP companion. If it is missing, choose **Set up canvas connection** inside the CLI model editor. This installs the companion version matching the app and reconnects the editor without requiring an app restart. Both companion and adapter setup use the public npm registry, even when your default registry is private. If startup fails after installation, retry or inspect **Settings → MCP**.
 
 Kiro CLI connects through its native ACP v3 mode (`kiro-cli acp --agent-engine=v3 --auth-method=cli`); use a CLI version that supports these options. Gemini CLI connects through `gemini --acp`. Neither needs a separate chat adapter.
+
+Kiro chat waits for the OpenPencil canvas connection before sending its first prompt. Its permission dialog offers **Allow OpenPencil canvas tools for this chat** for verified canvas tool requests. This explicitly approves canvas inspection and edits for that agent session; shell commands, file operations, other MCP servers, and unidentified tools still require separate approval. Restarting the agent session resets this choice, while the CLI's own **Always allow** choices remain managed by the CLI.
+
+Kiro may also run its own extension and tool-discovery operations. **Kiro extensions** refers to Kiro Powers, its skills and integration system. A **Done** status belongs to that individual tool call, not to the overall design task.
+
+The status below the chat input tracks the entire run. **Agent is working…** remains visible during reasoning and tool calls; **Waiting for your approval** identifies a pending agent permission request. **Run finished** appears only after the provider confirms completion and stays visible until the next run. Stopping, failure, interruption, and reaching a limit have separate statuses, so a disconnected stream cannot look successfully finished. This confirms that the agent stopped working, not that the design has passed review.
 
 In local-agent chat, “build an app” means create editable screens in the open canvas. OpenPencil includes this context on every turn; application source files are only requested when you explicitly ask for implementation outside the canvas. If canvas tools fail, the agent should report the failure rather than fall back to scaffolding a code project.
 
@@ -44,7 +76,7 @@ The built-in AI captures this limit when each message starts. Stopping, remainin
 
 ## Tool access
 
-Open **Settings → Tool access** to choose which tools direct AI model connections can use. Search by name or description, expand read-only or side-effect groups, and toggle individual tools or an entire group. Group switches affect all tools in that group, not only search results. **Restore defaults** restores the compact default tool set; extended tools such as `create_component` can be enabled individually.
+Open **Settings → Tool access** to choose which tools direct AI model connections can use. All shared canvas tools are enabled by default, matching the local MCP canvas catalog. Existing explicit overrides are preserved. Search by name or description, expand read-only or side-effect groups, and toggle individual tools or an entire group. Group switches affect all tools in that group, not only search results. **Restore defaults** enables the full available canvas catalog. MCP-specific filesystem, document-connection, and external integration tools still depend on their transport.
 
 Preferences are saved locally and apply to the next message, including in an existing conversation. They do not change an already-running request. Enabling many tools increases the schemas sent to the model.
 
@@ -86,7 +118,7 @@ Remote servers must use HTTPS. Loopback HTTP endpoints are accepted for local de
 The configurable tool catalog covers these categories; the tools offered to a model depend on your Tool access settings:
 
 - **Create** — frames, shapes, text, components, pages. Renders JSX for complex layouts.
-- **Style** — fills, strokes, effects, opacity, corner radius, blend modes.
+- **Style** — fills, strokes, effects, opacity, corner radius and smoothing, blend modes.
 - **Layout** — auto-layout, grid, alignment, spacing, sizing.
 - **Components** — create components, instances, component sets. Manage overrides.
 - **Variables** — create/edit variables, collections, modes. Bind to fills.

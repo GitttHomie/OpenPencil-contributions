@@ -7,7 +7,7 @@ import { computePixelGridSnap, resolveObjectPixelSnap } from '#vue/shared/input/
 
 describe('move snap guide presentation', () => {
   test('pixel rounding adjusts a lone frame without drawing self-alignment guides', () => {
-    const pixel = computePixelGridSnap({ x: 10.25, y: 20.4, width: 100, height: 80 }, 5)
+    const pixel = computePixelGridSnap({ x: 10.25, y: 20.4, width: 100, height: 80 })
     expect(pixel.delta).toEqual({ x: -0.25, y: -0.3999999999999986 })
     expect(pixel.guides).toEqual([])
     const editor = createEditor()

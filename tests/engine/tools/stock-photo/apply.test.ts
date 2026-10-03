@@ -44,18 +44,16 @@ function setup() {
   return { graph, page, figma: new FigmaAPI(graph) }
 }
 
-const AREA_TARGET_TYPES = [
-  'FRAME',
+const AREA_TARGET_TYPES = ['FRAME', 'COMPONENT', 'INSTANCE'] as const satisfies readonly NodeType[]
+
+const UNSUITABLE_TARGET_TYPES = [
   'RECTANGLE',
   'ROUNDED_RECTANGLE',
   'ELLIPSE',
   'STAR',
   'POLYGON',
-  'COMPONENT',
-  'INSTANCE'
-] as const satisfies readonly NodeType[]
-
-const UNSUITABLE_TARGET_TYPES = [
+  'VECTOR',
+  'BOOLEAN_OPERATION',
   'CANVAS',
   'GROUP',
   'TEXT',
@@ -104,90 +102,6 @@ describe('applyPhoto', () => {
     })
   }
 
-  test('applies a photo to closed vector geometry', async () => {
-    const { graph, page, figma } = setup()
-    const vector = graph.createNode('VECTOR', page.id, {
-      name: 'Closed vector',
-      width: 100,
-      height: 100,
-      vectorNetwork: {
-        vertices: [
-          { x: 0, y: 0 },
-          { x: 100, y: 0 },
-          { x: 100, y: 100 },
-          { x: 0, y: 100 }
-        ],
-        segments: [
-          { start: 0, end: 1, tangentStart: { x: 0, y: 0 }, tangentEnd: { x: 0, y: 0 } },
-          { start: 1, end: 2, tangentStart: { x: 0, y: 0 }, tangentEnd: { x: 0, y: 0 } },
-          { start: 2, end: 3, tangentStart: { x: 0, y: 0 }, tangentEnd: { x: 0, y: 0 } },
-          { start: 3, end: 0, tangentStart: { x: 0, y: 0 }, tangentEnd: { x: 0, y: 0 } }
-        ],
-        regions: [{ windingRule: 'NONZERO', loops: [[0, 1, 2, 3]] }]
-      }
-    })
-    const calls: ProviderCall[] = []
-
-    const result = await applyPhoto(figma, createProvider(calls), {
-      id: vector.id,
-      query: 'marble texture'
-    })
-
-    expect(result.error).toBeUndefined()
-    expect(calls).toHaveLength(1)
-    expect(vector.fills[0]).toMatchObject({ type: 'IMAGE', imageScaleMode: 'FILL' })
-  })
-
-  test('rejects open vector geometry before searching', async () => {
-    const { graph, page, figma } = setup()
-    const vector = graph.createNode('VECTOR', page.id, {
-      name: 'Open vector',
-      vectorNetwork: {
-        vertices: [
-          { x: 0, y: 0 },
-          { x: 100, y: 100 }
-        ],
-        segments: [{ start: 0, end: 1, tangentStart: { x: 0, y: 0 }, tangentEnd: { x: 0, y: 0 } }],
-        regions: []
-      }
-    })
-    const originalFills = copyFills(vector.fills)
-    const calls: ProviderCall[] = []
-
-    const result = await applyPhoto(figma, createProvider(calls), {
-      id: vector.id,
-      query: 'should not run'
-    })
-
-    expect(result.error).toBe(
-      `"${vector.name}" has no closed vector regions — use closed area geometry`
-    )
-    expect(calls).toHaveLength(0)
-    expect(vector.fills).toEqual(originalFills)
-    expect(graph.images.size).toBe(0)
-  })
-
-  test('applies a photo to Boolean geometry with operand children', async () => {
-    const { graph, page, figma } = setup()
-    const operation = graph.createNode('BOOLEAN_OPERATION', page.id, {
-      name: 'Combined shape',
-      width: 200,
-      height: 120
-    })
-    graph.createNode('RECTANGLE', operation.id)
-    graph.createNode('ELLIPSE', operation.id)
-    const calls: ProviderCall[] = []
-
-    const result = await applyPhoto(figma, createProvider(calls), {
-      id: operation.id,
-      query: 'abstract texture'
-    })
-
-    expect(result.error).toBeUndefined()
-    expect(calls).toHaveLength(1)
-    expect(operation.fills[0]).toMatchObject({ type: 'IMAGE', imageScaleMode: 'FILL' })
-  })
-
   for (const type of UNSUITABLE_TARGET_TYPES) {
     test(`rejects ${type} before searching`, async () => {
       const { graph, page, figma } = setup()
@@ -221,7 +135,7 @@ describe('applyPhoto', () => {
   }
 
   for (const type of ['FRAME', 'COMPONENT', 'INSTANCE'] as const satisfies readonly NodeType[]) {
-    test(`rejects ${type} content containers before searching`, async () => {
+    test(`applies a background photo to ${type} without removing children or scrims`, async () => {
       const { graph, page, figma } = setup()
       const container = graph.createNode(type, page.id, {
         name: `${type} with content`,
@@ -234,7 +148,18 @@ describe('applyPhoto', () => {
           }
         ]
       })
-      const child = graph.createNode('RECTANGLE', container.id)
+      const scrim = {
+        type: 'GRADIENT_LINEAR' as const,
+        color: { r: 0, g: 0, b: 0, a: 1 },
+        opacity: 0.6,
+        visible: true,
+        gradientStops: [
+          { position: 0, color: { r: 0, g: 0, b: 0, a: 0 } },
+          { position: 1, color: { r: 0, g: 0, b: 0, a: 1 } }
+        ]
+      }
+      container.fills.push(scrim)
+      const child = graph.createNode('TEXT', container.id, { text: 'Card title' })
       const originalFills = copyFills(container.fills)
       const calls: ProviderCall[] = []
 
@@ -243,11 +168,20 @@ describe('applyPhoto', () => {
         query: 'should not run'
       })
 
-      expect(result.error).toBe(`"${container.name}" has children — use a leaf image placeholder`)
-      expect(calls).toHaveLength(0)
-      expect(container.fills).toEqual(originalFills)
+      expect(result.error).toBeUndefined()
+      expect(calls).toHaveLength(1)
+      expect(container.fills[0].type).toBe('IMAGE')
+      expect(container.fills.slice(1)).toEqual(originalFills.slice(1))
       expect(graph.getNode(child.id)).toBe(child)
-      expect(graph.images.size).toBe(0)
+      expect(child.text).toBe('Card title')
+      expect(graph.images.size).toBe(1)
+      const replacement = await applyPhoto(figma, createProvider(calls), {
+        id: container.id,
+        query: 'replacement'
+      })
+      expect(replacement.error).toBeUndefined()
+      expect(container.fills).toHaveLength(2)
+      expect(container.fills[1]).toEqual(scrim)
     })
   }
 })

@@ -50,6 +50,10 @@ for (const example of AUTHORING_EXAMPLES) {
     expect(frame.width).toBe(280)
     expect(frame.height).toBeGreaterThan(32)
     expect(frame.layoutMode).toBe('VERTICAL')
+    if (example.title === 'Card background with a gradient scrim') {
+      expect(frame.cornerRadius).toBe(20)
+      expect(frame.cornerSmoothing).toBe(0.6)
+    }
     expect(graph.getChildren(frame.id).every((child) => child.type === 'TEXT')).toBe(true)
     expect(JSX_REFERENCE).toContain(example.jsx)
   })

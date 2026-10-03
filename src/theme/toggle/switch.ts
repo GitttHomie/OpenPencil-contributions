@@ -6,8 +6,8 @@ const switchTheme = {
   },
   variants: {
     size: {
-      sm: { root: 'h-4 w-7 p-0.5', thumb: 'size-3 data-[state=checked]:translate-x-3' },
-      md: { root: 'h-5 w-9 p-0.5', thumb: 'size-4 data-[state=checked]:translate-x-4' }
+      sm: { root: 'h-4 w-7 p-px', thumb: 'size-3 data-[state=checked]:translate-x-3' },
+      md: { root: 'h-5 w-9 p-px', thumb: 'size-4 data-[state=checked]:translate-x-4' }
     },
     state: {
       idle: {},

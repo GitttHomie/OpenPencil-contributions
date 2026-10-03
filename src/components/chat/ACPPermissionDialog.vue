@@ -11,6 +11,8 @@ import { acpPermissionOptionTestId, useI18n, vTestId } from '@open-pencil/vue'
 
 import {
   currentPermission,
+  canAllowCanvasForChat,
+  allowCanvasForChat,
   rejectCurrentPermission,
   respondToPermission
 } from '@/app/ai/acp/permission'
@@ -74,6 +76,16 @@ function handleDismiss() {
       >{{ toolInput }}</pre>
 
     <div class="mt-4 flex flex-col gap-2">
+      <AlertDialogAction
+        v-if="canAllowCanvasForChat"
+        class="w-full rounded bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent/90"
+        @click="allowCanvasForChat"
+      >
+        {{ ai.allowCanvasForChat }}
+      </AlertDialogAction>
+      <p v-if="canAllowCanvasForChat" class="text-[10px] text-muted">
+        {{ ai.allowCanvasForChatHint }}
+      </p>
       <AlertDialogAction
         v-for="opt in allowOptions"
         :key="opt.optionId"

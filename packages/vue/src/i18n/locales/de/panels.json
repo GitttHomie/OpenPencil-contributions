@@ -354,5 +354,11 @@
   "lineHeightMode": "Zeilenhöhenmodus",
   "unresolvedVariable": "Variablenwert nicht verfügbar",
   "excludeFromAutoLayout": "Vom Auto-Layout ausschließen",
-  "positionAutoLayout": "Die Position wird durch das Auto-Layout des übergeordneten Elements bestimmt"
+  "positionAutoLayout": "Die Position wird durch das Auto-Layout des übergeordneten Elements bestimmt",
+  "gradientMove": "Verlauf verschieben",
+  "gradientStart": "Verlaufsanfang",
+  "gradientEnd": "Verlaufsende",
+  "gradientRadius": "Verlauf drehen und skalieren",
+  "gradientWidth": "Zweiter Verlaufsradius",
+  "gradientCanvasHint": "Griffe rasten an Kanten, Ecken, Mittellinien und Richtungen ein. Umschalt rastet Winkel ein; Alt/Option ermöglicht freies Platzieren; Escape bricht ab."
 }

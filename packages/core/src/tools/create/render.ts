@@ -1,8 +1,62 @@
 import * as v from 'valibot'
 
-import { finishRenderPlacement, resolveRenderPlacement } from '#core/design-jsx/placement'
+import type { RenderResult, TreeNode } from '@open-pencil/design-jsx'
+
+import {
+  finishRenderPlacement,
+  resolveRenderPlacement,
+  type RenderPlacement,
+  type RenderPlacementInput
+} from '#core/design-jsx/placement'
+import type { FigmaAPI } from '#core/figma-api'
+import { designFeedback, type DesignFeedback } from '#core/tools/design-guidance/feedback'
 import { toolNumber } from '#core/tools/input'
 import { defineTool } from '#core/tools/schema'
+
+interface ToolRenderResult extends Omit<RenderResult, 'childIds'> {
+  children: string[]
+  designFeedback?: DesignFeedback[]
+  siblings?: Pick<RenderResult, 'id' | 'name' | 'type'>[]
+}
+
+async function renderPlaced(
+  figma: FigmaAPI,
+  args: RenderPlacementInput,
+  create: (placement: RenderPlacement) => Promise<RenderResult[]>
+) {
+  const placement = resolveRenderPlacement(figma.graph, args, figma.currentPageId)
+  const results = await create(placement)
+  finishRenderPlacement(figma.graph, results, placement)
+  const result = results[0]
+  const feedback = designFeedback(
+    figma.graph,
+    results.map((node) => node.id)
+  )
+  const response: ToolRenderResult = {
+    id: result.id,
+    name: result.name,
+    type: result.type,
+    children: result.childIds
+  }
+  if (result.warnings) response.warnings = result.warnings
+  if (feedback.length) response.designFeedback = feedback
+  if (results.length > 1) {
+    response.siblings = results
+      .slice(1)
+      .map((node) => ({ id: node.id, name: node.name, type: node.type }))
+  }
+  return response
+}
+
+/** MCP parses JSX before crossing into the WebView; preserve the normal render tool contract. */
+export async function renderDesignTree(
+  figma: FigmaAPI,
+  tree: TreeNode,
+  args: RenderPlacementInput
+) {
+  const { renderRoots } = await import('#core/design-jsx')
+  return renderPlaced(figma, args, (placement) => renderRoots(figma.graph, tree, placement))
+}
 
 export const render = defineTool({
   name: 'render',
@@ -35,30 +89,6 @@ export const render = defineTool({
   execute: async (figma, args) => {
     const { renderJSX } = await import('#core/design-jsx')
 
-    const placement = resolveRenderPlacement(figma.graph, args, figma.currentPageId)
-    const results = await renderJSX(figma.graph, args.jsx, placement)
-    finishRenderPlacement(figma.graph, results, placement)
-    const result = results[0]
-
-    const response: {
-      id: string
-      name: string
-      type: string
-      children: string[]
-      warnings?: typeof result.warnings
-      siblings?: Array<{ id: string; name: string; type: string }>
-    } = {
-      id: result.id,
-      name: result.name,
-      type: result.type,
-      children: result.childIds
-    }
-    if (result.warnings) response.warnings = result.warnings
-    if (results.length > 1) {
-      response.siblings = results
-        .slice(1)
-        .map((node) => ({ id: node.id, name: node.name, type: node.type }))
-    }
-    return response
+    return renderPlaced(figma, args, (placement) => renderJSX(figma.graph, args.jsx, placement))
   }
 })

@@ -22,11 +22,6 @@ const roleDefinitions = computed(() => [
     description: ai.value.modelRoleReviewDescription
   },
   {
-    role: 'fast' as const,
-    label: ai.value.modelRoleFast,
-    description: ai.value.modelRoleFastDescription
-  },
-  {
     role: 'vision' as const,
     label: ai.value.modelRoleVision,
     description: ai.value.modelRoleVisionDescription

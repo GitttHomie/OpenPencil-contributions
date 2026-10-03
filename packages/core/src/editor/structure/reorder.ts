@@ -1,5 +1,6 @@
 import { assertNodeEditable } from '#core/editor/capabilities'
 import { applyMoveStates, captureMoveState } from '#core/editor/history/move'
+import { snapGeometryChanges } from '#core/editor/pixel-snapping'
 import type { EditorContext } from '#core/editor/types'
 import { computeLayout } from '#core/layout'
 
@@ -48,6 +49,10 @@ export function createStructureReorderActions(ctx: EditorContext) {
     const original = captureMoveState(ctx.graph, node)
 
     ctx.graph.reparentNode(nodeId, newParentId)
+    ctx.graph.updateNode(
+      nodeId,
+      snapGeometryChanges({ x: node.x, y: node.y }, ctx.state.snappingPreferences.pixelGrid)
+    )
     ctx.graph.reorderChild(nodeId, newParentId, insertIndex)
     ctx.runLayoutForNode(newParentId)
     if (origParentId !== newParentId) ctx.runLayoutForNode(origParentId)

@@ -4,6 +4,8 @@ import { expect, test } from 'bun:test'
 import { simulateReadableStream, type UIMessage } from 'ai'
 import { MockLanguageModelV4 } from 'ai/test'
 
+import { DESIGN_WORKFLOW } from '@open-pencil/core/tools'
+
 import { createToolLoopTransport } from '@/app/ai/chat/transports'
 import { aiToolOverrides } from '@/app/ai/tools/preferences'
 import { createEditorStore } from '@/app/editor/session/create'
@@ -63,11 +65,32 @@ test('a reused AI transport refreshes actual request tools for each message', as
       }
       return model.doStreamCalls.at(-1)?.tools?.map((tool) => tool.name) ?? []
     }
-    expect(await send()).not.toContain('create_component')
-    aiToolOverrides.value = { create_component: true, get_components: false }
+    const initial = await send()
+    expect(initial).toContain('create_component')
+    for (const name of [
+      'get_design_guidance',
+      'create_collection',
+      'create_variable',
+      'bind_variable'
+    ]) {
+      expect(initial).toContain(name)
+    }
+    expect(model.doStreamCalls.at(-1)?.prompt).toContainEqual({
+      role: 'system',
+      content: expect.stringContaining(DESIGN_WORKFLOW)
+    })
+    aiToolOverrides.value = {
+      create_component: true,
+      get_components: false,
+      get_current_page: false,
+      get_design_guidance: false,
+      create_variable: false
+    }
     const updated = await send()
     expect(updated).toContain('create_component')
     expect(updated).not.toContain('get_components')
+    expect(updated).not.toContain('get_design_guidance')
+    expect(updated).not.toContain('create_variable')
     expect(model.doStreamCalls).toHaveLength(2)
     // History remains valid even if an extended tool is now disabled.
     const next = await send([

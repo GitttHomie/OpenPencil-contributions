@@ -3,6 +3,7 @@ import type { Canvas } from 'canvaskit-wasm'
 import type { SceneGraph } from '@open-pencil/scene-graph'
 import { computeDescendantVisualBounds } from '@open-pencil/scene-graph/geometry'
 
+import { drawPixelGrid } from '#core/canvas/pixel-grid'
 import type { RenderOverlays, SkiaRenderer } from '#core/canvas/renderer'
 import type { EditorState } from '#core/editor/types'
 import { emitNavigationTrace } from '#core/profiler'
@@ -59,6 +60,7 @@ export function renderFromEditorState(
     graph,
     state.selectedIds,
     {
+      showPixelGrid: state.showPixelGrid,
       hoveredNodeId: state.hoveredNodeId,
       measurementMode: state.measurementMode,
       enteredContainerId: state.enteredContainerId,
@@ -274,6 +276,7 @@ export function render(
   if (layer !== 'scene') {
     canvas.save()
     canvas.scale(r.dpr, r.dpr)
+    if (overlays.showPixelGrid) drawPixelGrid(r, canvas)
     r.labelCache.update(graph, r.pageId, sceneVersion, graph.positionPreviewVersion)
     drawLabelPass(r, canvas, graph, overlays)
     canvas.restore()

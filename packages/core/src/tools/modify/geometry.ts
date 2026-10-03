@@ -42,12 +42,25 @@ export const setOpacity = defineTool({
 export const setRadius = defineTool({
   name: 'set_radius',
 
-  description: 'Set corner radius. Use individual corners for independent values.',
+  description:
+    'Set corner radius and optional corner smoothing (0–1). Use individual corners for independent radii. Smoothing needs a nonzero radius; choose it to suit the design.',
   execution: { kind: 'sync', mutation: 'properties' },
   input: v.object({
     id: nodeIdInput,
     radius: v.optional(
       toolNumber(v.pipe(v.number(), v.minValue(0), v.description('Corner radius for all corners')))
+    ),
+    corner_smoothing: v.optional(
+      toolNumber(
+        v.pipe(
+          v.number(),
+          v.minValue(0),
+          v.maxValue(1),
+          v.description(
+            'Corner smoothing: 0 = circular rounding, 1 = maximum smoothing (not percent)'
+          )
+        )
+      )
     ),
     top_left: v.optional(
       toolNumber(v.pipe(v.number(), v.minValue(0), v.description('Top-left radius')))
@@ -72,12 +85,14 @@ export const setRadius = defineTool({
     if (args.top_right !== undefined) node.topRightRadius = args.top_right
     if (args.bottom_right !== undefined) node.bottomRightRadius = args.bottom_right
     if (args.bottom_left !== undefined) node.bottomLeftRadius = args.bottom_left
+    if (args.corner_smoothing !== undefined) node.cornerSmoothing = args.corner_smoothing
     const cr = node.cornerRadius
     if (typeof cr === 'number') {
-      return { id: args.id, cornerRadius: cr }
+      return { id: args.id, cornerRadius: cr, cornerSmoothing: node.cornerSmoothing }
     }
     return {
       id: args.id,
+      cornerSmoothing: node.cornerSmoothing,
       topLeftRadius: node.topLeftRadius,
       topRightRadius: node.topRightRadius,
       bottomRightRadius: node.bottomRightRadius,

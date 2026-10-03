@@ -6,6 +6,12 @@ import { emitNavigationTrace } from '#core/profiler'
 import type { EditorContext } from './types'
 
 export function createViewportActions(ctx: EditorContext) {
+  function setPixelGridVisible(visible: boolean) {
+    if (ctx.state.showPixelGrid === visible) return
+    ctx.state.showPixelGrid = visible
+    ctx.requestRepaint()
+  }
+
   function currentViewport() {
     return { panX: ctx.state.panX, panY: ctx.state.panY, zoom: ctx.state.zoom }
   }
@@ -113,6 +119,7 @@ export function createViewportActions(ctx: EditorContext) {
   }
 
   return {
+    setPixelGridVisible,
     screenToCanvas,
     setZoomAroundPoint,
     applyZoom,

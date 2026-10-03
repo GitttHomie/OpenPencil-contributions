@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import {
+  DropdownMenuCheckboxItem,
+  DropdownMenuItemIndicator,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuPortal,
@@ -154,6 +156,18 @@ watch(open, (v) => {
 
         <DropdownMenuSeparator :class="menuCls.separator" />
 
+        <DropdownMenuCheckboxItem
+          :model-value="store.state.showPixelGrid ?? false"
+          :class="itemCls"
+          @update:model-value="store.setPixelGridVisible"
+          @select.prevent
+        >
+          <DropdownMenuItemIndicator class="absolute left-2">
+            <icon-lucide-check class="size-3.5" />
+          </DropdownMenuItemIndicator>
+          <span class="flex-1">{{ menuText.pixelGrid }}</span>
+          <AppShortcutText>{{ appMenuShortcutLabel('view-pixel-grid') }}</AppShortcutText>
+        </DropdownMenuCheckboxItem>
         <DropdownMenuItem :class="itemCls" @select.prevent="toggleRulers">
           <icon-lucide-check v-if="store.state.showRulers" class="absolute left-2 size-3.5" />
           <span class="flex-1">{{ panels.rulers }}</span>

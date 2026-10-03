@@ -354,5 +354,11 @@
   "lineHeightMode": "Mode de hauteur de ligne",
   "unresolvedVariable": "Valeur de variable indisponible",
   "excludeFromAutoLayout": "Exclure de la disposition automatique",
-  "positionAutoLayout": "La position est contrôlée par la disposition automatique du parent"
+  "positionAutoLayout": "La position est contrôlée par la disposition automatique du parent",
+  "gradientMove": "Déplacer le dégradé",
+  "gradientStart": "Début du dégradé",
+  "gradientEnd": "Fin du dégradé",
+  "gradientRadius": "Pivoter et redimensionner le dégradé",
+  "gradientWidth": "Rayon secondaire du dégradé",
+  "gradientCanvasHint": "Les poignées s’alignent sur les bords, coins, centres et directions. Maj aligne les angles ; Alt/Option permet un placement libre ; Échap annule."
 }
