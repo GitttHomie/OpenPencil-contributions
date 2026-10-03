@@ -5,7 +5,6 @@ import type { SceneGraph, SceneNode } from '../'
 import { cloneNodeProps, copyEffects, copyFills, copyStrokes, copyStyleRuns } from '../copy'
 import type { NodeCloneMode } from '../copy'
 import {
-  getInstanceOverride,
   hasInstanceOverride as hasNodeInstanceOverride,
   setInstanceOverride,
   type InstanceOverrideState
@@ -13,6 +12,11 @@ import {
 import { scaleNodeChanges } from '../scaling/node'
 import { scaleVariableBindingUnits } from '../variables/units'
 import { INSTANCE_SYNC_FIELDS } from './fields'
+import {
+  createInstanceStructureSync,
+  mappedComponentChild,
+  type InstanceStructureSync
+} from './structure'
 
 function setSceneProp<K extends keyof SceneNode>(
   target: Partial<SceneNode>,
@@ -206,7 +210,7 @@ function matchFallbackChildren(
   instParentId: string,
   overrides: InstanceOverrideState,
   instChildMap: Map<string, SceneNode>,
-  usedInstChildIds: Set<string>
+  structure: InstanceStructureSync
 ): void {
   const fallbackByType = new Map<SceneNode['type'], Map<string, SceneNode[]>>()
   const remainingCandidateCount = new Map<SceneNode['type'], number>()
@@ -220,7 +224,7 @@ function matchFallbackChildren(
   }
   for (const childId of instParent.childIds) {
     const child = graph.nodes.get(childId)
-    if (!child || usedInstChildIds.has(child.id)) continue
+    if (!child || !structure.canMatchFallback(child)) continue
     remainingCandidateCount.set(child.type, (remainingCandidateCount.get(child.type) ?? 0) + 1)
     let byName = fallbackByType.get(child.type)
     if (!byName) {
@@ -244,7 +248,7 @@ function matchFallbackChildren(
     if (!match) continue
     remainingCandidateCount.set(compChild.type, candidateCount - 1)
     instChildMap.set(compChildId, match)
-    usedInstChildIds.add(match.id)
+    structure.claim(match.id)
     linkMatchedChild(overrides, instParentId, match, compChildId)
   }
 }
@@ -263,10 +267,7 @@ function sortInstanceChildren(
   for (let index = 0; index < instParent.childIds.length; index++) {
     const childId = instParent.childIds[index]
     const node = graph.nodes.get(childId)
-    const source = node
-      ? getInstanceOverride(overrides, instParentId, node.id, 'sourceComponentId')
-      : undefined
-    const mapped = typeof source === 'string' ? source : node?.componentId
+    const mapped = node ? mappedComponentChild(node, instParentId, overrides) : null
     const componentIndex = mapped ? orderMap.get(mapped) : undefined
     ranks.set(childId, componentIndex ?? compChildOrder.length + index)
   }
@@ -286,20 +287,17 @@ function matchLinkedChildren(
   overrides: InstanceOverrideState,
   compChildIdSet: ReadonlySet<string>,
   instChildMap: Map<string, SceneNode>,
-  usedInstChildIds: Set<string>
+  usedInstChildIds: Set<string>,
+  structure: InstanceStructureSync
 ): void {
   for (const childId of instParent.childIds) {
     const child = graph.nodes.get(childId)
     if (!child) continue
-    const sourceComponentId = getInstanceOverride(
-      overrides,
-      instParentId,
-      child.id,
-      'sourceComponentId'
-    )
-    const mappedComponentId =
-      typeof sourceComponentId === 'string' ? sourceComponentId : child.componentId
+    const mappedComponentId = mappedComponentChild(child, instParentId, overrides)
     if (mappedComponentId && compChildIdSet.has(mappedComponentId)) {
+      const previous = instChildMap.get(mappedComponentId)
+      if (previous && !structure.prefer(child, previous)) continue
+      if (previous) usedInstChildIds.delete(previous.id)
       instChildMap.set(mappedComponentId, child)
       usedInstChildIds.add(child.id)
     }
@@ -312,6 +310,24 @@ export function syncChildren(
   instParentId: string,
   overrides: InstanceOverrideState
 ): void {
+  if (
+    isCyclicSync(graph, compParentId, instParentId) ||
+    !graph.getNode(compParentId) ||
+    !graph.getNode(instParentId)
+  )
+    return
+  const structure = createInstanceStructureSync(graph, compParentId, instParentId, overrides)
+  syncChildTree(graph, compParentId, instParentId, overrides, structure)
+  structure.finish()
+}
+
+function syncChildTree(
+  graph: SceneGraph,
+  compParentId: string,
+  instParentId: string,
+  overrides: InstanceOverrideState,
+  structure: InstanceStructureSync
+): void {
   // Guard against cyclic sync: if the instance parent is inside the component's own
   // subtree, syncing would clone the component into itself — a self-referential cycle
   // that causes unbounded recursion and OOM.
@@ -320,16 +336,6 @@ export function syncChildren(
   const compParent = graph.nodes.get(compParentId)
   const instParent = graph.nodes.get(instParentId)
   if (!compParent || !instParent) return
-
-  // Remove descendants whose definition was deleted. Unmapped imported extras
-  // remain intact; they are not evidence of an authored structural deletion.
-  for (const childId of instParent.childIds) {
-    const child = graph.nodes.get(childId)
-    if (!child) continue
-    const source = getInstanceOverride(overrides, instParentId, child.id, 'sourceComponentId')
-    const mapped = typeof source === 'string' ? source : child.componentId
-    if (mapped && !graph.nodes.has(mapped)) graph.deleteNode(child.id)
-  }
 
   const instChildMap = new Map<string, SceneNode>()
   const usedInstChildIds = new Set<string>()
@@ -343,8 +349,19 @@ export function syncChildren(
     overrides,
     compChildIdSet,
     instChildMap,
-    usedInstChildIds
+    usedInstChildIds,
+    structure
   )
+  for (const id of usedInstChildIds) structure.claim(id)
+
+  // The source may have moved under a new wrapper or into a sibling container.
+  for (const compChildId of compParent.childIds) {
+    if (instChildMap.has(compChildId)) continue
+    const existing = structure.reuse(compChildId, instParentId)
+    if (existing) {
+      instChildMap.set(compChildId, existing)
+    }
+  }
 
   // Pass 2: Fallback matching for unmatched children (e.g. from Figma imports)
   matchFallbackChildren(
@@ -354,7 +371,7 @@ export function syncChildren(
     instParentId,
     overrides,
     instChildMap,
-    usedInstChildIds
+    structure
   )
 
   // Pass 3: Clone only genuinely missing component children
@@ -363,11 +380,8 @@ export function syncChildren(
       const src = graph.nodes.get(compChildId)
       if (!src) continue
       const clone = cloneChildInCoordinates(graph, src, compParent, instParent)
-      if (src.childIds.length > 0) {
-        cloneChildrenWithMapping(graph, compChildId, clone.id)
-      }
       instChildMap.set(compChildId, clone)
-      usedInstChildIds.add(clone.id)
+      structure.claim(clone.id)
     }
   }
 
@@ -392,7 +406,7 @@ export function syncChildren(
     updateSyncedProps(graph, instChild, updates)
 
     if (!hasNodeInstanceOverride(overrides, instParentId, instChild.id, 'componentId')) {
-      syncChildren(graph, compChildId, instChild.id, overrides)
+      syncChildTree(graph, compChildId, instChild.id, overrides, structure)
     }
   }
 

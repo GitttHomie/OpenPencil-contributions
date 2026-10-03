@@ -58,6 +58,14 @@ See [canvas navigation](../user-guide/canvas-navigation), [components and librar
 - Prevent non-Latin font discovery and rendering crashes across platforms; add Arabic/Persian shaping and RTL layout, then broaden CJK and mixed-script visual fixtures.
 - Build a portable-font strategy for reproducible documents across machines on top of existing substitution visibility and agent-readable font status, including curated redistributable fonts, embedded or linked document fonts, and licensing metadata ([#502](https://github.com/open-pencil/open-pencil/issues/502), [#503](https://github.com/open-pencil/open-pencil/issues/503)).
 
+### Component synchronization performance
+
+- Benchmark adding a badge to a main button component with 100 and 1,000 instances, measuring synchronization and layout time separately; include complex nested components and property-only edits.
+- Prepare source structure and change information once per component update and reuse it across instances.
+- Separate property-only updates from hierarchy reconciliation, and synchronize only affected branches when layers are added, moved, or removed.
+- Limit layout recalculation to affected instances and dependent ancestors, including auto-layout and Hug sizing.
+- Preserve instance node identities, local overrides, nested and swapped components, imported mappings, and Undo/Redo. Compare correctness and timing against the current full synchronization path before replacing it.
+
 ### Cloud and self-hosting
 
 - Provide an optional OpenPencil Cloud backend for account-based workspace sync, sharing, collaboration, comments, and managed team libraries without making cloud accounts mandatory for the editor.

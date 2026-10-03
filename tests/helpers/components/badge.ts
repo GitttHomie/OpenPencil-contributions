@@ -1,6 +1,10 @@
 import type { Page } from '@playwright/test'
 
+import type { SceneNode } from '@open-pencil/scene-graph'
+
 import { CanvasHelper } from '#tests/helpers/canvas'
+
+type BadgeChild = Pick<SceneNode, 'id' | 'parentId' | 'type' | 'text' | 'componentId'>
 
 export async function createComponentBadgeScene(page: Page) {
   await page.goto('/?test&no-rulers')
@@ -134,6 +138,38 @@ export async function createComponentBadgeScene(page: Page) {
         editor.select([nodeId])
         editor.requestRender()
       }, id)
+    },
+    async readBadgeContents(badgeId: string) {
+      return page.evaluate(
+        ({ componentId, badgeId }) => {
+          const editor = window.openPencil?.getStore?.()
+          if (!editor) throw new Error('Editor unavailable')
+          const graph = editor.graph
+          const instance = graph
+            .getChildren(editor.state.currentPageId)
+            .find((node) => node.type === 'INSTANCE' && node.componentId === componentId)
+          const copy =
+            instance && graph.getChildren(instance.id).find((node) => node.componentId === badgeId)
+          const descendants = (id: string): BadgeChild[] =>
+            graph
+              .getChildren(id)
+              .flatMap((node) => [
+                {
+                  id: node.id,
+                  parentId: node.parentId,
+                  type: node.type,
+                  text: node.text,
+                  componentId: node.componentId
+                },
+                ...descendants(node.id)
+              ])
+          return [graph.getNode(badgeId), copy].map((badge) => {
+            if (!badge) throw new Error('Badge unavailable')
+            return { id: badge.id, layoutMode: badge.layoutMode, children: descendants(badge.id) }
+          })
+        },
+        { componentId: setup.component, badgeId }
+      )
     },
     async read() {
       return page.evaluate((componentId) => {

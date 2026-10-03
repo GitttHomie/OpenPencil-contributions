@@ -63,7 +63,7 @@
 - Keep dropdown widths stable during dialog animations, defer font-list and chat measurements, and skip unchanged canvas sizes to avoid resize-observer feedback.
 - Keep text-selection highlights aligned with rendered text and snap dragged numeric values to their configured increments.
 - Drag canvas labels to move their containers, or double-click to rename frames, components, and instances, with filled diamond icons for definitions and outlined diamonds for instances.
-- Paste copied component definitions as linked instances, avoid recursive component nesting, and inherit positioning, auto-layout exclusion, text styling, and corner smoothing while preserving instance overrides.
+- Paste copied component definitions as linked instances, avoid recursive component nesting, and inherit positioning, auto-layout exclusion, text styling, and corner smoothing. Reuse instance children and preserve their overrides when component content moves or gains auto-layout wrappers, without leaving duplicate text.
 - Hide instance children when deleting them without removing their structure, and propagate layer deletions from the main component to its instances.
 - Paste objects into the center of the selected container, preserve their internal spacing, and convert canvas coordinates correctly for nested or rotated destinations and Paste to replace.
 - Reflow children when adding auto layout to reopened frames, and keep Hug parents from collapsing when a child switches to Fill. Undo restores the layout and sizing together.

@@ -127,10 +127,13 @@ export function createGraphEventSubscription(options: GraphEventOptions) {
       reparented: (nodeId, oldParentId, newParentId) => {
         options.emitEditorEvent('node:reparented', nodeId, oldParentId, newParentId)
         onNodeStructureChanged(nodeId)
+        if (oldParentId) options.scheduleComponentSync(oldParentId)
       },
       reordered: (nodeId, parentId, index, previousParentId) => {
         options.emitEditorEvent('node:reordered', nodeId, parentId, index, previousParentId)
         onNodeStructureChanged(nodeId)
+        if (previousParentId && previousParentId !== parentId)
+          options.scheduleComponentSync(previousParentId)
       }
     })
   }
