@@ -46,6 +46,23 @@ test('evaluates JSX into plain inert data', async ({ page }) => {
   })
 })
 
+test('evaluates namespaced behaviour elements into inert data', async ({ page }) => {
+  const result = await evaluate(
+    page,
+    '<Switch.Root name="Notifications"><Switch.Thumb /></Switch.Root>'
+  )
+  expect(result).toMatchObject({
+    ok: true,
+    roots: [
+      {
+        type: 'Switch.Root',
+        props: { name: 'Notifications' },
+        children: [{ type: 'Switch.Thumb', props: {}, children: [] }]
+      }
+    ]
+  })
+})
+
 test('supports local constants, function components, arrays, and conditionals', async ({
   page
 }) => {

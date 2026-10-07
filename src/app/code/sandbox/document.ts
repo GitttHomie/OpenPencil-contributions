@@ -26,8 +26,17 @@ self.onmessage = ({ data }) => {
     if (name === 'defineVars') return (vars) => Object.fromEntries(Object.entries(vars).map(([key, value]) => [key, { __openPencilHelper: 'designVar', args: [value] }]))
     return helper(name)
   }
-  const names = Object.keys(elements)
-  const tags = elements
+  const tags = Object.create(null)
+  for (const [name, type] of Object.entries(elements)) {
+    const [namespace, part] = name.split('.')
+    if (part) {
+      tags[namespace] ??= Object.create(null)
+      tags[namespace][part] = type
+    } else {
+      tags[name] = type
+    }
+  }
+  const names = Object.keys(tags)
   const helpers = Object.fromEntries(helperNames.map((name) => [name, helperRuntime(name)]))
   const validate = (value, depth = 0, state = { elements: 0, bytes: 0 }) => {
     if (depth > limits.depth) throw new Error('Design JSX output is too deeply nested.')
