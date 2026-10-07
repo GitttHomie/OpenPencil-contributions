@@ -96,7 +96,10 @@ test('first Google font selection commits while SemiBold loads without a substit
     await expect(
       page.getByTestId('font-picker-item').filter({ hasText: 'Downloaded Test Font' })
     ).toBeVisible()
-    expect(fonts.counts.previews).toBe(0)
+    expect(await readTypography(page, id)).toMatchObject({
+      fontFamily: 'Inter',
+      fontWeight: 600
+    })
     await page.getByTestId('font-picker-item').filter({ hasText: 'Downloaded Test Font' }).click()
     await expect.poll(() => fonts.counts.requestedWeights).toContain(600)
     expect((await readTypography(page, id))?.fontFamily).toBe('Downloaded Test Font')
