@@ -11,26 +11,37 @@ import {
 } from 'reka-ui'
 import { computed, ref } from 'vue'
 
-import { useI18n, useLayoutControlsContext, useRetainedPopup } from '@open-pencil/vue'
+import { useI18n, useSelectionLayout, useRetainedPopup } from '@open-pencil/vue'
 
 import VariableNumberField from '@/components/properties/VariableNumberField.vue'
 import { useSelectUI } from '@/components/ui/select/select'
+import { panelFieldBase } from '@/theme/panel/field'
 
 const { axis = 'primary' } = defineProps<{ axis?: 'primary' | 'counter' }>()
-const ctx = useLayoutControlsContext()
+const { nodes, merged, updateAllWithUndo } = useSelectionLayout()
 const { open: popupOpen, portalActive } = useRetainedPopup()
 const { panels } = useI18n()
 const anchor = ref<HTMLElement | null>(null)
 const prop = computed(() => (axis === 'primary' ? 'itemSpacing' : 'counterAxisSpacing'))
-const horizontal = computed(() => (ctx.node.layoutMode === 'HORIZONTAL') === (axis === 'primary'))
+const horizontal = computed(() => (merged('layoutMode') === 'HORIZONTAL') === (axis === 'primary'))
 const label = computed(() =>
   horizontal.value ? panels.value.horizontalGap : panels.value.verticalGap
 )
-const auto = computed(() => axis === 'primary' && ctx.gapAuto && ctx.node.layoutWrap !== 'WRAP')
-const allowAuto = computed(() => axis === 'primary' && ctx.node.layoutWrap !== 'WRAP')
+const auto = computed(
+  () =>
+    axis === 'primary' &&
+    merged('primaryAxisAlign') === 'SPACE_BETWEEN' &&
+    nodes.value.every((node) => node.layoutWrap !== 'WRAP')
+)
+const allowAuto = computed(
+  () => axis === 'primary' && nodes.value.every((node) => node.layoutWrap !== 'WRAP')
+)
 const menu = useSelectUI({ item: 'rounded py-1.5 pr-2 pl-6 text-xs' })
 function setMode(value: string) {
-  ctx.setGapAuto(value === 'AUTO')
+  updateAllWithUndo(
+    { primaryAxisAlign: value === 'AUTO' ? 'SPACE_BETWEEN' : 'MIN' },
+    'Change gap mode'
+  )
 }
 </script>
 
@@ -44,13 +55,13 @@ function setMode(value: string) {
       <div
         v-if="auto"
         data-test-id="layout-gap-input"
-        class="flex h-[26px] items-center rounded border border-border bg-input focus-within:border-accent"
+        :class="[panelFieldBase, 'flex items-center text-[11px]']"
       >
-        <span class="px-[5px] text-muted">
+        <span class="flex min-w-6 shrink-0 items-center justify-center px-[5px] text-muted">
           <icon-lucide-align-horizontal-space-between v-if="horizontal" class="size-3.5" />
           <icon-lucide-align-vertical-space-between v-else class="size-3.5" />
         </span>
-        <span class="min-w-0 flex-1 truncate text-xs text-surface">{{ panels.auto }}</span>
+        <span class="min-w-0 flex-1 truncate text-right text-surface">{{ panels.auto }}</span>
         <SelectTrigger
           data-test-id="layout-gap-menu"
           :aria-label="label"
@@ -65,13 +76,12 @@ function setMode(value: string) {
         v-else
         :data-test-id="axis === 'primary' ? 'layout-gap-input' : 'layout-cross-gap-input'"
         :aria-label="label"
-        :model-value="Math.round(ctx.node[prop])"
+        :model-value="merged(prop)"
         :min="0"
-        :node-id="ctx.node.id"
+        :node-id="nodes[0]?.id ?? ''"
+        :node-ids="nodes.map((node) => node.id)"
+        edit-properties
         :binding-path="prop"
-        @update:model-value="ctx.updateProp(prop, $event)"
-        @commit="(value, previous) => ctx.commitProp(prop, value, previous)"
-        @cancel="ctx.cancelPreview"
       >
         <template #icon>
           <icon-lucide-align-horizontal-space-between v-if="horizontal" class="size-3.5" />
@@ -103,7 +113,11 @@ function setMode(value: string) {
               ><icon-lucide-check class="size-3 text-accent"
             /></SelectItemIndicator>
             <SelectItemText>{{
-              mode === 'AUTO' ? panels.auto : Math.round(ctx.node.itemSpacing)
+              mode === 'AUTO'
+                ? panels.auto
+                : typeof merged('itemSpacing') === 'symbol'
+                  ? panels.mixed
+                  : merged('itemSpacing')
             }}</SelectItemText>
           </SelectItem>
         </SelectViewport>

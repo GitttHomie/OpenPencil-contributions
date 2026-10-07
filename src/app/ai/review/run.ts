@@ -4,7 +4,7 @@ import { fromUint8Array } from 'js-base64'
 import { ACP_AGENTS } from '@open-pencil/core/constants'
 import { computeContentBounds } from '@open-pencil/core/io'
 
-import { buildReasoningProviderOptions } from '@/app/ai/chat/reasoning'
+import { reasoningCallSettings } from '@/app/ai/chat/reasoning'
 import { createAIModelRuntime, type ACPModelRuntime } from '@/app/ai/models'
 import { boundedImageScale } from '@/app/ai/tools/vision'
 import type { EditorStore } from '@/app/editor/active-store'
@@ -47,7 +47,11 @@ async function createReviewAgent(runtime: ACPModelRuntime, image: Uint8Array | n
     agentDef,
     cwd: await homeDir(),
     purpose: 'review',
+    launch: runtime.role.profile.acpLaunch,
+    integration: runtime.role.profile.acpIntegration,
+    sessionValues: runtime.role.profile.acpOptions,
     modelId: runtime.role.profile.customModelID || runtime.role.profile.modelID,
+    thinking: () => runtime.role.profile.acpThinking,
     image: image ? fromUint8Array(image) : undefined
   })
 }
@@ -155,9 +159,9 @@ export async function reviewDesign(
       abortSignal: request.signal,
       maxRetries: 0,
       maxOutputTokens: Math.min(runtime.role.profile.maxOutputTokens, MAX_OUTPUT_TOKENS),
-      providerOptions: buildReasoningProviderOptions(
+      ...reasoningCallSettings(
         runtime.role.connection.providerID,
-        runtime.role.profile.reasoningEffort ?? ''
+        runtime.role.profile.thinkingLevel
       ),
       messages: [{ role: 'user', content }]
     })

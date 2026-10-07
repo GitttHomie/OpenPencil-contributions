@@ -20,13 +20,14 @@ test('guidance discovery is shared, read-only, and does not require external cap
   expect(getDesignGuidance.mutates).toBe(false)
   expect(getDesignGuidance.capabilities).toEqual([])
   expect(result).toMatchObject({
-    version: '1.0.0',
+    version: '1.1.0',
     workflow: DESIGN_WORKFLOW,
     available: [
       { topic: 'ux' },
       { topic: 'visual' },
       { topic: 'design-system' },
-      { topic: 'review' }
+      { topic: 'review' },
+      { topic: 'creation' }
     ],
     guidance: []
   })
@@ -50,6 +51,6 @@ test('guidance rejects unknown topics and oversized requests through its public 
   const figma = new FigmaAPI(new SceneGraph())
   expect(() => getDesignGuidance.execute(figma, { topics: ['install-packages'] })).toThrow()
   expect(() =>
-    getDesignGuidance.execute(figma, { topics: ['ux', 'ux', 'ux', 'ux', 'ux'] })
+    getDesignGuidance.execute(figma, { topics: ['ux', 'ux', 'ux', 'ux', 'ux', 'ux'] })
   ).toThrow()
 })

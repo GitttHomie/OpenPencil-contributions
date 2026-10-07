@@ -77,8 +77,8 @@ export function useTextEdit(
   useEventListener(textareaRef, 'compositionupdate', onCompositionUpdate)
   useEventListener(textareaRef, 'compositionend', onCompositionEnd)
   useEventListener(textareaRef, 'keydown', onKeyDown)
-  useEventListener(canvasRef, 'mousedown', () =>
-    focusTextAreaOnCanvasPointerDown(textareaRef, store)
+  useEventListener(canvasRef, 'mousedown', (event) =>
+    focusTextAreaOnCanvasPointerDown(textareaRef, store, event)
   )
 
   useTextEditingSession({

@@ -5,14 +5,14 @@ import { FigmaAPI } from '@open-pencil/core/figma-api'
 import { exportFigFile } from '@open-pencil/core/io'
 import { initCodec } from '@open-pencil/core/kiwi'
 import { materializeDocument, parseFigBuffer } from '@open-pencil/fig'
-import type { SymbolData } from '@open-pencil/fig/instance-overrides'
+import { symbolDataOf } from '@open-pencil/fig/instance-overrides'
 import type { NodeChange } from '@open-pencil/kiwi/fig/codec'
 import { setInstanceOverride } from '@open-pencil/scene-graph'
 
 import { expectDefined } from '#core-tests/helpers/assert'
-import { readFixtureJSON } from '#core-tests/helpers/fig/fixtures'
+import { readFixtureObject } from '#core-tests/helpers/fig/fixtures'
 
-const fixture = readFixtureJSON<Record<string, unknown>[]>('nested-binding-ownership-records.json')
+const fixture = readFixtureObject('nested-binding-ownership-records.json')
 
 for (const scale of [0.5, 2]) {
   for (const literalClaim of [false, true]) {
@@ -54,7 +54,7 @@ for (const scale of [0.5, 2]) {
       const exported = expectDefined(
         parsed.nodeChanges.find((node) => node.name === 'Rescaled owner')
       )
-      const symbol = exported.symbolData as SymbolData
+      const symbol = expectDefined(symbolDataOf(exported), 'exported symbol data')
       expect(
         symbol.symbolOverrides?.filter((entry) => entry.size).map((entry) => entry.guidPath?.guids)
       ).toEqual([[symbol.symbolID]])

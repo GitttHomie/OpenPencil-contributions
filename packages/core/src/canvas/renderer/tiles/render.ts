@@ -8,7 +8,7 @@ import {
   type RenderChunkIndex,
   type RenderChunkPictureCache,
   drawRenderChunkDirect
-} from '#core/canvas/renderer/chunks'
+} from '#core/canvas/renderer/chunks/index'
 import { rendererNow } from '#core/canvas/renderer/clock'
 
 import { type TileKey, tileWorldBounds } from './geometry'

@@ -3,7 +3,7 @@ import { expect, test } from 'bun:test'
 import { exportFigFile } from '@open-pencil/core/io'
 import { initCodec } from '@open-pencil/core/kiwi'
 import { parseFigBuffer } from '@open-pencil/fig'
-import type { SymbolData } from '@open-pencil/fig/instance-overrides'
+import { symbolDataOf } from '@open-pencil/fig/instance-overrides'
 import { SceneGraph, setInstanceOverride, rescaleNodeTree } from '@open-pencil/scene-graph'
 
 test('serializes self size claims against the instance main component', async () => {
@@ -23,7 +23,7 @@ test('serializes self size claims against the instance main component', async ()
   const bytes = await exportFigFile(graph)
   const { nodeChanges } = parseFigBuffer(bytes.buffer as ArrayBuffer)
   const exported = nodeChanges.find((node) => node.type === 'INSTANCE')
-  const symbol = exported?.symbolData as SymbolData | undefined
+  const symbol = exported ? symbolDataOf(exported) : undefined
   if (!symbol) throw new Error('Missing exported symbol')
   expect(exported?.size).toEqual({ x: 16, y: 16 })
   expect(symbol.uniformScaleFactor).toBe(0.5)

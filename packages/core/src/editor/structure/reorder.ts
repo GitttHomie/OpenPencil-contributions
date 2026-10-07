@@ -1,4 +1,5 @@
 import { assertNodeEditable } from '#core/editor/capabilities'
+import { prepareSlotEdits } from '#core/editor/components/slots/index'
 import { applyMoveStates, captureMoveState, type MoveState } from '#core/editor/history/move'
 import { snapGeometryChanges } from '#core/editor/pixel-snapping'
 import type { EditorContext } from '#core/editor/types'
@@ -39,6 +40,7 @@ export function createStructureReorderActions(ctx: EditorContext) {
     if (!node) return
     const origParentId = node.parentId ?? ctx.state.currentPageId
     const original = captureMoveState(ctx.graph, node)
+    if (!prepareSlotEdits(ctx, [origParentId, parentId])) return
 
     doReorderChild(nodeId, parentId, insertIndex)
     if (origParentId !== parentId) ctx.runLayoutForNode(origParentId)
@@ -52,6 +54,7 @@ export function createStructureReorderActions(ctx: EditorContext) {
     if (!node) return
     const origParentId = node.parentId ?? ctx.state.currentPageId
     const original = captureMoveState(ctx.graph, node)
+    if (!prepareSlotEdits(ctx, [origParentId, newParentId])) return
 
     ctx.graph.reparentNode(nodeId, newParentId)
     ctx.graph.updateNode(
@@ -97,9 +100,10 @@ export function createStructureReorderActions(ctx: EditorContext) {
       if (next.every((id, index) => id === childIds[index])) continue
       before.set(parentId, [...childIds])
       after.set(parentId, next)
-      applyChildOrder(parentId, next)
     }
     if (after.size === 0) return
+    if (!prepareSlotEdits(ctx, after.keys())) return
+    for (const [parentId, childIds] of after) applyChildOrder(parentId, childIds)
 
     ctx.undo.push({
       label,
@@ -160,11 +164,13 @@ export function createStructureReorderActions(ctx: EditorContext) {
   }
 
   return {
-    reorderInAutoLayout,
-    reorderChildWithUndo,
-    bringForward,
-    sendBackward,
-    bringToFront,
-    sendToBack
+    reorderInAutoLayout: (nodeId: string, parentId: string, insertIndex: number) =>
+      ctx.undo.runBatch('Reorder', () => reorderInAutoLayout(nodeId, parentId, insertIndex)),
+    reorderChildWithUndo: (nodeId: string, parentId: string, insertIndex: number) =>
+      ctx.undo.runBatch('Reorder', () => reorderChildWithUndo(nodeId, parentId, insertIndex)),
+    bringForward: () => ctx.undo.runBatch('Bring forward', bringForward),
+    sendBackward: () => ctx.undo.runBatch('Send backward', sendBackward),
+    bringToFront: () => ctx.undo.runBatch('Bring to front', bringToFront),
+    sendToBack: () => ctx.undo.runBatch('Send to back', sendToBack)
   }
 }

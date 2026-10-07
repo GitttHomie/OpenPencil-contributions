@@ -1,8 +1,10 @@
+import { CATALOG_ONLY_MODEL } from '#tests/helpers/chat/catalog'
 import { expect, test } from '#tests/helpers/chat/fixture'
 
 test('Design profile selector exposes provider and capabilities', async ({
   configuredChat: chat
 }) => {
+  await expect(chat.page.getByTestId('chat-thinking-selector')).toBeVisible()
   await chat.profileTrigger.click()
 
   await expect(chat.page.getByText('Design agent', { exact: true })).toBeVisible()
@@ -16,6 +18,8 @@ test('OpenRouter accepts a custom model ID from Settings', async ({ configuredCh
   await chat.page.getByTestId('provider-settings-trigger').click()
   await chat.page.locator('[data-model-id]').first().click()
   await chat.page.getByLabel('Model ID').click()
+  // The catalog replaces the fallback list once it loads; pick only after it has settled.
+  await expect(chat.page.getByRole('option', { name: CATALOG_ONLY_MODEL })).toBeVisible()
   await chat.page.getByRole('option', { name: 'Custom model…' }).click()
   const input = chat.page.getByTestId('provider-settings-custom-model')
   await input.fill(customModel)

@@ -3,15 +3,23 @@ import { MIXED, type MixedValue } from '@open-pencil/vue'
 
 import AppInput from '@/components/ui/input/AppInput.vue'
 
-const { value, label } = defineProps<{ value: MixedValue<string>; label: string }>()
+import { usePropertyValueFocus } from './usePropertyValueFocus'
+
+const { value, label, focusRequest } = defineProps<{
+  value: MixedValue<string>
+  label: string
+  focusRequest?: number
+}>()
+usePropertyValueFocus(() => focusRequest)
 const emit = defineEmits<{ update: [value: string]; commit: [] }>()
 </script>
 
 <template>
   <AppInput
+    ref="input"
     :model-value="value === MIXED ? '' : value"
     tone="panel"
-    size="sm"
+    size="xs"
     :state="value === MIXED ? 'mixed' : 'idle'"
     :placeholder="value === MIXED ? '—' : undefined"
     :aria-label="label"

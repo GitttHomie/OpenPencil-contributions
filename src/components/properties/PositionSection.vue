@@ -11,6 +11,7 @@ import PanelGrid from '@/components/ui/panel/PanelGrid.vue'
 import PanelSection from '@/components/ui/panel/PanelSection.vue'
 import AppSwitch from '@/components/ui/toggle/AppSwitch.vue'
 
+const { showSize = true } = defineProps<{ showSize?: boolean }>()
 const { panels } = useI18n()
 const store = useEditorStore()
 const canAlignVertices = computed(
@@ -139,7 +140,7 @@ function handleAlign(
         </Tip>
       </PanelGrid>
 
-      <PanelGrid v-if="isMulti" :columns="2" class="mt-1.5">
+      <PanelGrid v-if="isMulti && showSize" :columns="2" class="mt-1.5">
         <Tip :label="panels.width">
           <NumberField
             icon="W"

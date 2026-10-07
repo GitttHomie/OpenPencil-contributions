@@ -8,6 +8,8 @@ import {
 } from '@open-pencil/scene-graph'
 import { parseColor } from '@open-pencil/scene-graph/color'
 
+import type { RekaScope } from './behaviours'
+import { renderRekaNode } from './behaviours/render'
 import {
   assignComponentProperties,
   componentMetadata,
@@ -88,7 +90,7 @@ export async function renderRoots<Artwork>(
   const nodes: SceneNode[] = []
   try {
     for (const root of roots) {
-      const node = await renderNode(services, graph, root, parentId)
+      const node = await renderNode(services, graph, root, parentId, options.onNode)
       nodes.push(node)
       if (options.x !== undefined) graph.updateNode(node.id, { x: options.x })
       if (options.y !== undefined) graph.updateNode(node.id, { y: options.y })
@@ -521,22 +523,20 @@ async function renderArtworkNode<Artwork>(
   }
 }
 
-async function renderNode<Artwork>(
-  services: DesignJSXServices<Artwork>,
+export interface ElementOverrides {
+  overrides: Partial<SceneNode>
+  /** Variable IDs by bound field, such as `fills/0/color`. */
+  bindings: Record<string, string>
+}
+
+/** The fields and variable bindings an element's props set on a `nodeType` node under `parentId`. */
+export function elementOverrides(
   graph: SceneGraph,
+  nodeType: NodeType,
   tree: TreeNode,
   parentId: string
-): Promise<SceneNode> {
-  if (tree.type === 'icon' || tree.type === 'svg')
-    return renderArtworkNode(services, graph, tree, parentId)
-  if (tree.type === 'instance') return renderInstanceNode(graph, tree, parentId)
-
-  const nodeType = TYPE_MAP[tree.type]
-  if (!nodeType) throw new Error(`Unknown element: <${tree.type}>`)
-
-  const parent = graph.getNode(parentId)
-  const parentLayout = parent?.layoutMode ?? 'NONE'
-
+): ElementOverrides {
+  const parentLayout = graph.getNode(parentId)?.layoutMode ?? 'NONE'
   const isText = nodeType === 'TEXT'
   const { props, bindings } = preparePropsForRender(graph, tree.props, isText, parentId)
   const overrides = {
@@ -551,14 +551,58 @@ async function renderNode<Artwork>(
     if (childText) overrides.text = childText
     else if (typeof propText === 'string') overrides.text = propText
   }
+  return { overrides, bindings }
+}
 
+async function renderNode<Artwork>(
+  services: DesignJSXServices<Artwork>,
+  graph: SceneGraph,
+  tree: TreeNode,
+  parentId: string,
+  onNode?: RenderOptions['onNode'],
+  scope?: RekaScope
+): Promise<SceneNode> {
+  const node = await renderNodeContent(services, graph, tree, parentId, onNode, scope)
+  onNode?.(tree, node)
+  return node
+}
+
+async function renderNodeContent<Artwork>(
+  services: DesignJSXServices<Artwork>,
+  graph: SceneGraph,
+  tree: TreeNode,
+  parentId: string,
+  onNode?: RenderOptions['onNode'],
+  scope?: RekaScope
+): Promise<SceneNode> {
+  if (tree.type === 'icon' || tree.type === 'svg')
+    return renderArtworkNode(services, graph, tree, parentId)
+  if (tree.type === 'instance') return renderInstanceNode(graph, tree, parentId)
+  const reka = await renderRekaNode(graph, tree, parentId, scope, {
+    render: (child, childParentId, childScope) =>
+      renderNode(services, graph, child, childParentId, onNode, childScope),
+    create: (nodeType, element, elementParentId) => {
+      const { overrides, bindings } = elementOverrides(graph, nodeType, element, elementParentId)
+      const created = graph.createNode(nodeType, elementParentId, overrides)
+      applyBindings(graph, created.id, bindings)
+      return created
+    },
+    instance: (element, elementParentId) => renderInstanceNode(graph, element, elementParentId),
+    finishSet: (setId) => inferComponentSetProperties(graph, setId)
+  })
+  if (reka) return reka
+
+  const nodeType = TYPE_MAP[tree.type]
+  if (!nodeType) throw new Error(`Unknown element: <${tree.type}>`)
+
+  const { overrides, bindings } = elementOverrides(graph, nodeType, tree, parentId)
   const node = graph.createNode(nodeType, parentId, overrides)
   try {
     applyBindings(graph, node.id, bindings)
     for (const child of tree.children) {
       if (typeof child === 'string') continue
       if (isTreeNode(child)) {
-        await renderNode(services, graph, child, node.id)
+        await renderNode(services, graph, child, node.id, onNode, scope)
       }
     }
     if (node.type === 'COMPONENT_SET') inferComponentSetProperties(graph, node.id)

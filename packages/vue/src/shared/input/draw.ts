@@ -44,9 +44,17 @@ export function startShapeDraw(
   setDrag(createDraw(editor, nodeId, cx, cy))
 }
 
+const LINE_ANGLE_STEP = 45
+
 export function handleDrawMove(d: DragDraw, cx: number, cy: number, shiftKey: boolean) {
   let w = cx - d.startX
   let h = cy - d.startY
+  if (d.line) {
+    let angle = (Math.atan2(h, w) * 180) / Math.PI
+    if (shiftKey) angle = Math.round(angle / LINE_ANGLE_STEP) * LINE_ANGLE_STEP
+    d.update({ x: d.startX, y: d.startY, width: Math.hypot(w, h), height: 0, rotation: angle })
+    return
+  }
 
   if (shiftKey) {
     const size = Math.max(Math.abs(w), Math.abs(h))
@@ -62,11 +70,34 @@ export function handleDrawMove(d: DragDraw, cx: number, cy: number, shiftKey: bo
   })
 }
 
+function committedDimensions(node: SceneNode | undefined): Partial<SceneNode> | undefined {
+  if (node?.type === 'TEXT') {
+    const isPointText = node.width < 2 && node.height < 2
+    return {
+      width: isPointText ? DEFAULT_TEXT_WIDTH : node.width,
+      height: isPointText ? DEFAULT_TEXT_HEIGHT : node.height,
+      textAutoResize: isPointText ? 'WIDTH_AND_HEIGHT' : 'NONE'
+    }
+  } else if (node?.type === 'LINE' && node.width < 2) {
+    return { width: 100, height: 0, rotation: 0 }
+  } else if (node && node.width < 2 && node.height < 2) {
+    return { width: 100, height: 100 }
+  }
+  return undefined
+}
+
 function createDraw(editor: Editor, nodeId: string, startX: number, startY: number): DragDraw {
   const graph = editor.graph
   const start = editor.snapGeometry({ x: startX, y: startY })
   // Keep the draft in page coordinates until release, so layout cannot fight drawing.
   let parent = graph.hitTestFrame(startX, startY, new Set([nodeId]), editor.state.currentPageId)
+  while (
+    parent &&
+    (parent.locked || ['GROUP', 'BOOLEAN_OPERATION', 'COMPONENT_SET'].includes(parent.type))
+  ) {
+    parent = parent.parentId ? (graph.getNode(parent.parentId) ?? null) : null
+  }
+  if (parent) parent = graph.getNode(editor.acceptingParent(parent.id)) ?? null
   if (graph.getNode(nodeId)?.type === 'SECTION') {
     while (parent && parent.type !== 'SECTION' && parent.type !== 'CANVAS') {
       parent = parent.parentId ? (graph.getNode(parent.parentId) ?? null) : null
@@ -94,19 +125,13 @@ function createDraw(editor: Editor, nodeId: string, startX: number, startY: numb
     }
     finished = true
     const node = graph.getNode(nodeId)
+    const clicked = Boolean(node && node.width < 2 && node.height < 2)
     try {
-      if (node?.type === 'TEXT') {
-        const isPointText = node.width < 2 && node.height < 2
-        preview.update(nodeId, {
-          width: isPointText ? DEFAULT_TEXT_WIDTH : node.width,
-          height: isPointText ? DEFAULT_TEXT_HEIGHT : node.height,
-          textAutoResize: isPointText ? 'WIDTH_AND_HEIGHT' : 'NONE'
-        })
-      } else if (node && node.width < 2 && node.height < 2) {
-        preview.update(nodeId, { width: 100, height: 100 })
-      }
+      const dimensions = committedDimensions(node)
+      if (dimensions) preview.update(nodeId, dimensions)
       preview.commit()
       if (node && parent) attachDraw(editor, nodeId, parent, startX, startY)
+      if (node?.type === 'FRAME' && !clicked) editor.adoptCoveredLayers(node.id)
       if (node?.type === 'SECTION') editor.adoptNodesIntoSection(node.id)
       editor.undo.commitBatch()
     } catch (error) {
@@ -130,6 +155,7 @@ function createDraw(editor: Editor, nodeId: string, startX: number, startY: numb
 
   return {
     type: 'draw',
+    line: graph.getNode(nodeId)?.type === 'LINE',
     startX: start.x,
     startY: start.y,
     nodeId,

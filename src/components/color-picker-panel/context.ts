@@ -54,6 +54,7 @@ function createColorPickerPanelContext(props: ColorPanelProps, emit: ColorPanelE
     fieldFormat: colorModel.format,
     isOkHCLFormat,
     onRekaColorUpdate: colorModel.updateFromReka,
+    pickColor: (color: Color) => emit('update', color),
     setFieldFormat,
     updateRGBAHue: colorModel.updateHue,
     updateRGBAAlpha: colorModel.updateAlpha,

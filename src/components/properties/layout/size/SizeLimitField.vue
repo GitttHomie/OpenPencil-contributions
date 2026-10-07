@@ -9,7 +9,7 @@ import {
   SelectViewport
 } from 'reka-ui'
 
-import { useLayoutControlsContext, useRetainedPopup } from '@open-pencil/vue'
+import { useSelectionLayout, useRetainedPopup } from '@open-pencil/vue'
 
 import type { SizeLimitFieldProps } from '@/components/properties/layout/size/types'
 import VariableNumberField from '@/components/properties/VariableNumberField.vue'
@@ -18,13 +18,13 @@ import { useSelectUI } from '@/components/ui/select/select'
 
 const { item } = defineProps<SizeLimitFieldProps>()
 
-const ctx = useLayoutControlsContext()
+const { nodes, merged, setSizeLimit } = useSelectionLayout()
 const { open: popupOpen, portalActive } = useRetainedPopup()
 const selectUI = useSelectUI({ item: 'rounded py-1.5 px-2 text-xs' })
 
 function handleSelect(value: string) {
-  if (value === 'CURRENT') ctx.setSizeLimitToCurrent(item.prop)
-  else if (value === 'REMOVE') ctx.removeSizeLimit(item.prop)
+  if (value === 'CURRENT') setSizeLimit(item.prop, 'current')
+  else if (value === 'REMOVE') setSizeLimit(item.prop, 'remove')
 }
 </script>
 
@@ -33,13 +33,12 @@ function handleSelect(value: string) {
     <VariableNumberField
       :icon="item.icon"
       :aria-label="item.label"
-      :model-value="Math.round(ctx.node[item.prop] ?? 0)"
+      :model-value="merged(item.prop) ?? 0"
       :min="0"
-      :node-id="ctx.node.id"
+      :node-id="nodes[0]?.id ?? ''"
+      :node-ids="nodes.map((node) => node.id)"
+      edit-properties
       :binding-path="item.prop"
-      @update:model-value="ctx.updateSizeLimit(item.prop, $event)"
-      @commit="(value: number, previous: number) => ctx.commitSizeLimit(item.prop, value, previous)"
-      @cancel="ctx.cancelPreview"
     >
       <template #after-variable>
         <SelectRoot

@@ -13,11 +13,11 @@ import {
   ComboboxViewport,
   type AcceptableValue
 } from 'reka-ui'
-import { nextTick } from 'vue'
+import { computed, nextTick } from 'vue'
 
 import { useRetainedPopup } from '#vue/lifecycle/retention/popup'
-import { deferFontListMeasurements } from '#vue/primitives/FontPicker/resize'
 import type { FontPickerUI } from '#vue/primitives/FontPicker/types'
+import { useFontListPosition } from '#vue/primitives/FontPicker/useFontListPosition'
 import {
   useFontPicker,
   type FontAccessController,
@@ -54,18 +54,22 @@ const { searchTerm, open, filtered, loading, accessState, requestAccess, select 
   onSelect: (family) => emit('select', family)
 })
 const { portalActive } = useRetainedPopup(open)
+const selectedOption = computed(() => ({ family: modelValue.value }))
+const prepareList = useFontListPosition({ open, searchTerm, modelValue, filtered })
+
+function selectOption(value: AcceptableValue) {
+  if (value && typeof value === 'object' && 'family' in value && typeof value.family === 'string')
+    select(value.family)
+}
 </script>
 
 <template>
   <ComboboxRoot
     v-model:open="open"
-    :model-value="modelValue"
+    :model-value="selectedOption"
+    by="family"
     :ignore-filter="true"
-    @update:model-value="
-      (v: AcceptableValue) => {
-        if (typeof v === 'string') select(v)
-      }
-    "
+    @update:model-value="selectOption"
   >
     <ComboboxAnchor as-child>
       <ComboboxTrigger as-child>
@@ -108,9 +112,10 @@ const { portalActive } = useRetainedPopup(open)
             :estimate-size="36"
           >
             <ComboboxItem
-              @vue:mounted="deferFontListMeasurements(virtualizer)"
-              @vue:updated="deferFontListMeasurements(virtualizer)"
-              :value="option.family"
+              @vue:mounted="prepareList(virtualizer)"
+              @vue:updated="prepareList(virtualizer)"
+              :value="option"
+              :text-value="option.family"
               :class="ui?.item"
               :style="{ fontFamily: `'${option.family}', sans-serif` }"
             >

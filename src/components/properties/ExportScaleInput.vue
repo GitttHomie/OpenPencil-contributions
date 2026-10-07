@@ -13,6 +13,7 @@ import { useRetainedPopup } from '@open-pencil/vue'
 import { useInputUI } from '@/components/ui/input/input'
 import { menuItem, useMenuUI } from '@/components/ui/menu/menu'
 import Tip from '@/components/ui/overlay/Tip.vue'
+import { panelFieldBase } from '@/theme/panel/field'
 
 interface ExportScaleInputProps {
   presets: readonly number[]
@@ -37,8 +38,10 @@ onDeactivated(() => {
 watch(modelValue, (value) => (text.value = `${value}x`), { immediate: true })
 
 const inputClass = useInputUI({
-  size: 'sm',
-  ui: { base: 'min-w-0 flex-1 rounded-none border-0 bg-transparent focus:border-transparent' }
+  size: 'xs',
+  ui: {
+    base: 'h-full min-w-0 flex-1 rounded-none border-0 bg-transparent focus:border-transparent focus:ring-0'
+  }
 }).base
 const menuCls = useMenuUI({ content: 'min-w-[7rem]' })
 const itemCls = menuItem({ justify: 'between' })
@@ -63,9 +66,7 @@ function isActive(scale: number) {
 
 <template>
   <Tip :label="label" :disabled="!label">
-    <div
-      class="flex min-w-0 flex-1 overflow-hidden rounded border border-border bg-input focus-within:border-accent"
-    >
+    <div :class="[panelFieldBase, 'flex flex-1 overflow-hidden']">
       <input
         ref="inputRef"
         v-model="text"

@@ -13,6 +13,7 @@ function openExternally(event: MouseEvent, href: string): void {
   // The desktop WebView must not navigate away from the app; hand links to the OS.
   if (!IS_TAURI) return
   event.preventDefault()
+  event.stopPropagation()
   void import('@tauri-apps/plugin-opener').then(({ openUrl }) => openUrl(href))
 }
 

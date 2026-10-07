@@ -2,7 +2,7 @@ import type { Node as YogaNode } from 'yoga-layout'
 
 import type { SceneGraph, SceneNode } from '@open-pencil/scene-graph'
 
-import { updateLayoutNode } from './constraints'
+import { updateHugFrameSize, updateLayoutNode } from './constraints'
 import { hasEditedLayout, usesDetachedDerivedLayout } from './derived'
 
 export type ComputeLayoutFn = (graph: SceneGraph, frameId: string) => void
@@ -26,7 +26,7 @@ function preservesImportedHugCrossSize(
 function applyFrameSize(graph: SceneGraph, frame: SceneNode, yogaNode: YogaNode): void {
   if (frame.layoutMode === 'GRID') {
     if (frame.gridTemplateRows.length === 0) {
-      updateLayoutNode(graph, frame, { height: yogaNode.getComputedHeight() })
+      updateHugFrameSize(graph, frame, { height: yogaNode.getComputedHeight() })
     }
     return
   }
@@ -54,7 +54,7 @@ function applyFrameSize(graph: SceneGraph, frame: SceneNode, yogaNode: YogaNode)
     }
   }
 
-  updateLayoutNode(graph, frame, updates)
+  updateHugFrameSize(graph, frame, updates)
 }
 
 function computedChildPosition(
@@ -134,7 +134,7 @@ function updateChildFromYoga(graph: SceneGraph, child: SceneNode, yogaChild: Yog
 }
 
 function preservesImportedInstanceInternals(child: SceneNode): boolean {
-  return child.type === 'INSTANCE' && child.source.format === 'fig'
+  return child.type === 'INSTANCE' && child.source.format === 'fig' && !hasEditedLayout(child)
 }
 
 function recomputeGridChild(

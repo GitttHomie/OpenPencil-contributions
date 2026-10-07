@@ -28,7 +28,13 @@ export function useCanvasGradientPicker(
   }
 
   watch(
-    [isOpen, () => target()?.nodeId, () => target()?.fillIndex, () => activeEditor.value],
+    [
+      isOpen,
+      () => target()?.nodeId,
+      () => target()?.property,
+      () => target()?.index,
+      () => activeEditor.value
+    ],
     () => {
       close()
       const editor = activeEditor.value

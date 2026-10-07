@@ -23,10 +23,26 @@ beforeAll(async () => {
   )
 })
 
-/** Reproduce the previous writer using the same records, without the new provenance entry. */
+/** Recreate the previous writer's synthetic layout, not today's renderer-shaped glyphs. */
 function withoutParagraphMarker(bytes: Uint8Array): Uint8Array {
   const parsed = parseFigBuffer(bytes.buffer as ArrayBuffer)
   for (const node of parsed.nodeChanges) {
+    const derived = node.derivedTextData
+    if (node.type === 'TEXT' && derived) {
+      const length = node.textData?.characters?.length ?? 0
+      const fontSize = node.fontSize ?? 24
+      const lineHeight = Math.ceil(fontSize * 1.2)
+      const width = derived.layoutSize?.x ?? 0
+      derived.baselines = [{
+        firstCharacter: 0, endCharacter: Math.max(length - 1, 0),
+        position: { x: 0, y: lineHeight }, width, lineY: 0, lineHeight,
+        lineAscent: Math.max(lineHeight - fontSize * 0.2, 0)
+      }]
+      derived.logicalIndexToCharacterOffsetMap = Array.from(
+        { length: length + 1 }, (_, index) => index * width / Math.max(length, 1)
+      )
+      for (const glyph of derived.glyphs ?? []) glyph.position.y = lineHeight
+    }
     node.pluginData = node.pluginData?.filter(
       (entry) => !(entry.pluginID === 'open-pencil' && entry.key === 'textLayout')
     )

@@ -7,6 +7,7 @@ Headless Vue 3 primitives and composables; the root app is one consumer. Primiti
 - Fields compose variable/token binding through `BindingProvider` (`packages/vue/src/controls/binding-provider/`) and `BindableValue` (`packages/vue/src/primitives/BindableValue/`). Keep numeric interaction in `NumberField`; providers own binding lookup, mutation, and undo batching.
 - `PropertySection`, `SegmentedControl`, and `PropertyList` under `packages/vue/src/primitives/` are controlled and editor-agnostic. Connect PropertyList events to selection and undo through `useEditorPropertyList()` or an app adapter; never call `useEditor()` from a primitive.
 - Compose property rows from `PanelGrid`, `PanelFieldGroup`, `PanelItemRow`, and `PropertyItemRow`; use `BindableValue`, `FillRoot`, and `FillSwatch` rather than rebuilding binding or picker infrastructure.
+- Grouped numeric fields use `useNumberPropertyControls()` and the number binding provider for shared targets, previews, and binding identity; expansion state never changes document values. `tests/e2e/properties/grouped-values/bindings.spec.ts`.
 - Binding-aware fields detach or mutate only on the first value change; opening and focusing are non-destructive.
 - Prefer models, events, and props over imperative slot actions except for explicitly renderless action primitives. Use VueUse for DOM refs and focus.
 - Preserve interaction gotchas when refactoring: splitter handles, NumberField pointer ownership, section dragging, panel containment, and number-spinner styling.
@@ -15,7 +16,15 @@ Headless Vue 3 primitives and composables; the root app is one consumer. Primiti
 
 The app's `DesignPanel` retains at most one selection-property subtree through `RetainedPanel`. The app installs `createRetainedScopePlugin()`; opted-in descendants receive `provideRetainedActivity()`. Vue component scopes are detached, so pausing only a parent or bare `KeepAlive` does not suspend descendant work. Cancel drafts synchronously before DOM detachment can fire blur, close transient state and gate portals with `useRetainedPopup()`, and invalidate pending async results on deactivation or disposal. The plugin lets cleanup flush before pausing each component scope and resumes it on activation; it requires Vue's Options API. Unmounting the owning editor releases the retained subtree.
 
+## Preview islands
+
+- Preview runs controls as real components, never as canvas simulations: `packages/vue/src/canvas/islands/` renders each top-level layer that holds an instance with a behaviour as DOM in a shadow root over the canvas, projected through `@open-pencil/dom-css`, and mounts each behaviour's Reka UI primitives on its layers. Typing, focus, and keyboard handling belong to the browser and Reka.
+- The concept, the pipeline from state to DOM, and how to add a kind are in `packages/docs/development/behaviours-and-preview.md`.
+- Variants draw control states: Core's `resolvePlayState` shows instances in a state on a private graph, and controls are keyed by layer path so a variant switch keeps their DOM, including a focused input. The document is never changed (`packages/core/tests/editor/play/states.test.ts`, `tests/e2e/components/behaviours.spec.ts`).
+
 ## Commands, menus, i18n
+
+- Canvas selection resolves visible hits through the page, then selects the immediate child of the entered scope; clicking inside a selected container enters one level on release, while dragging keeps moving the selection and Cmd/Ctrl-click selects the deepest hit. Drilling into text selects it first; subsequent single clicks keep it selected, and a double-click starts editing, and Cmd/Ctrl-double-click remains selection-only. Visible overflow participates in selection and drilling, while ancestor clipping still applies; `tests/e2e/canvas/selection-depth.spec.ts`.
 
 - Commands use `packages/vue/src/editor/commands/registry.ts` for shortcuts, bindings, and menu IDs. Store portable tokens (`MOD+D`) and format them at render time; labels and translations never contain shortcuts.
 - Canvas menu structure lives in `packages/vue/src/editor/menu-model/canvas.ts`; the app's `CanvasMenu.vue` renders it.

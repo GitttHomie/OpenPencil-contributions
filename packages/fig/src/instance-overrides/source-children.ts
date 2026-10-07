@@ -1,8 +1,8 @@
 import { setInstanceOverride, type SceneGraph, type SceneNode } from '@open-pencil/scene-graph'
 
-import type { InstanceOccurrence } from './interpret'
 import type { MaterializedInstance } from './materialize-instance'
-import { occurrences } from './occurrence-path'
+import { occurrences } from './occurrence/path'
+import type { InstanceOccurrence } from './occurrence/types'
 
 export interface MaterializedComponentOccurrence {
   occurrence: InstanceOccurrence
@@ -79,7 +79,8 @@ export function linkInstanceSourceChildren(
     target: InstanceOccurrence,
     source: InstanceOccurrence,
     owner: SceneNode,
-    sourceNodes: ReadonlyMap<InstanceOccurrence, SceneNode>
+    sourceNodes: ReadonlyMap<InstanceOccurrence, SceneNode>,
+    inOwnerScope = true
   ): void => {
     for (const [child, counterpart] of pairSourceChildren(target, source)) {
       const targetNode = materialized.nodes.get(child)
@@ -87,9 +88,27 @@ export function linkInstanceSourceChildren(
       if (!targetNode || !sourceNode) {
         throw new Error(`Missing materialized correspondence for ${child.sourceId}`)
       }
+      // Only the nearest owner supplies the source used to inherit assignments.
+      // An outer occurrence can share a value that is an override in this scope.
+      if (targetNode.type === 'INSTANCE' && sourceNode.type === 'INSTANCE' && inOwnerScope) {
+        targetNode.componentPropertyAssignments = Object.fromEntries(
+          Object.entries(targetNode.componentPropertyAssignments).filter(([id]) => {
+            const declaredBy = child.assignmentOwners?.[id]
+            return !declaredBy || declaredBy !== counterpart.assignmentOwners?.[id]
+          })
+        )
+      }
       links.push({ owner, target: targetNode, source: sourceNode })
+      // Slot content is the instance's own; its instances are owners in their own right.
+      if (child.slotContentId) continue
       if (child.mainComponentId === counterpart.mainComponentId) {
-        match(child, counterpart, owner, sourceNodes)
+        match(
+          child,
+          counterpart,
+          owner,
+          sourceNodes,
+          inOwnerScope && child.mainComponentId === null
+        )
       }
     }
   }
@@ -136,6 +155,7 @@ export function mapInstanceSourceChildren(
       if (!node) throw new Error(`Unmaterialized source child ${counterpart.sourceId}`)
       result.set(child, node.id)
       if (child.mainComponentId !== null) expand(child)
+      else if (child.slotContentId) for (const content of child.children) visit(content)
       else matchChildren(child, counterpart, nodes)
     }
   }

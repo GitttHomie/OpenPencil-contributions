@@ -1,12 +1,14 @@
 import type { Ref } from 'vue'
 
 import { hitTestGuides } from '@open-pencil/core/canvas'
+import type { SceneNode } from '@open-pencil/scene-graph'
 
 import type { EditorStore } from '@/app/editor/active-store'
 
 export function createCanvasContextSelection(
   canvasRef: Ref<HTMLCanvasElement | null>,
-  store: EditorStore
+  store: EditorStore,
+  hitTestLabel: (x: number, y: number) => SceneNode | null
 ) {
   function selectAtContextPoint(event: MouseEvent) {
     const canvas = canvasRef.value
@@ -33,6 +35,11 @@ export function createCanvasContextSelection(
     }
     store.setSelectedGuide(null)
     const { x: cx, y: cy } = store.screenToCanvas(sx, sy)
+    const label = hitTestLabel(cx, cy)
+    if (label) {
+      if (!store.state.selectedIds.has(label.id)) store.select([label.id])
+      return
+    }
     store.selectAtPoint(cx, cy)
   }
 

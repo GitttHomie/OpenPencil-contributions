@@ -1,10 +1,11 @@
 import { describe, expect, test } from 'bun:test'
 
+import { expectDefined } from '#core-tests/helpers/assert'
+
 import { computeAllLayouts } from '@open-pencil/core/layout'
 import { SceneGraph } from '@open-pencil/scene-graph'
 
 import { createComponentSyncScheduler } from '#core/editor/component-sync'
-import { expectDefined } from '#core-tests/helpers/assert'
 
 function createGraph() {
   const graph = new SceneGraph()
@@ -49,6 +50,39 @@ function createGraph() {
 }
 
 describe('component sync layout scope', () => {
+  test('preserves newly imported trees until content is added to their existing layout', async () => {
+    const graph = new SceneGraph()
+    const frame = graph.createNode('FRAME', graph.getPages()[0].id, {
+      width: 100,
+      height: 40,
+      layoutMode: 'VERTICAL',
+      primaryAxisSizing: 'HUG',
+      counterAxisSizing: 'FIXED'
+    })
+    const child = graph.createNode('FRAME', frame.id, { width: 100, height: 12 })
+    graph.applyImportedStateDuring(() => {
+      graph.updateNode(frame.id, {
+        source: { ...frame.source, format: 'fig' },
+        derivedLayout: { width: 100, height: 40 }
+      })
+    })
+    const { scheduleComponentSync } = createComponentSyncScheduler(
+      () => graph,
+      () => undefined
+    )
+    scheduleComponentSync(frame.id, 'creation')
+    scheduleComponentSync(child.id, 'creation')
+    await Promise.resolve()
+    expect(frame.height).toBe(40)
+    expect(frame.derivedLayout?.height).toBe(40)
+
+    const added = graph.createNode('FRAME', frame.id, { width: 100, height: 20 })
+    scheduleComponentSync(added.id, 'creation')
+    await Promise.resolve()
+    expect(frame.derivedLayout).toBeNull()
+    expect(frame.height).toBe(32)
+  })
+
   test('recomputes only the pages that changed, including cross-page instances', async () => {
     const { graph, componentPage, instancePage, unrelatedPage, label } = createGraph()
     const scopes: (string | undefined)[] = []

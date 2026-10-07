@@ -2,6 +2,7 @@ import { getNodeEditCapability, type Editor } from '@open-pencil/core/editor'
 import type { SceneNode } from '@open-pencil/scene-graph'
 
 import type { CanvasLabelKind } from '#vue/canvas/labels/edit'
+import { selectionAtScope } from '#vue/shared/input/select/scope'
 import type { DragState } from '#vue/shared/input/types'
 
 type NodeEditMethods = Partial<{ enterNodeEditMode: (nodeId: string) => void }>
@@ -50,11 +51,6 @@ export function createTextEditInput(options: TextEditInputOptions) {
     const localY = cy - abs.y
     if (localX < 0 || localY < 0 || localX > editNode.width || localY > editNode.height) {
       editor.commitTextEdit()
-      const hit = hitTestInScope(cx, cy, true)
-      if (hit?.type === 'TEXT' && hit.id !== editNode.id) {
-        startTextEditingAt(hit, cx, cy)
-        return true
-      }
       return false
     }
     if (getClickCount() >= 3) {
@@ -69,13 +65,20 @@ export function createTextEditInput(options: TextEditInputOptions) {
     return true
   }
 
-  function startTextEditingAt(hit: SceneNode, cx: number, cy: number) {
+  function startTextEditingAt(
+    hit: SceneNode,
+    cx: number,
+    cy: number,
+    selection: 'cursor' | 'word' = 'word'
+  ) {
     editor.select([hit.id])
     editor.startTextEditing(hit.id)
+    if (editor.state.editingTextId !== hit.id) return
     const textEd = editor.textEditor
     if (textEd) {
       const abs = editor.graph.getAbsolutePosition(hit.id)
-      textEd.selectWordAt(cx - abs.x, cy - abs.y)
+      if (selection === 'word') textEd.selectWordAt(cx - abs.x, cy - abs.y)
+      else textEd.setCursorAt(cx - abs.x, cy - abs.y)
       editor.requestRender()
     }
   }
@@ -86,9 +89,7 @@ export function createTextEditInput(options: TextEditInputOptions) {
     cy: number
   ): SceneNode | null {
     const hit = editor.graph.hitTestDeep(cx, cy, editor.state.currentPageId)
-    if (!hit) return null
-    if (hit.id === containerId || editor.graph.isDescendant(hit.id, containerId)) return hit
-    return null
+    return selectionAtScope(editor.graph, hit, containerId)
   }
 
   function startLabelRename(cx: number, cy: number): boolean {
@@ -128,15 +129,14 @@ export function createTextEditInput(options: TextEditInputOptions) {
     }
     const hit = getContainerDescendantHit(selectedId, cx, cy)
     editor.enterContainer(selectedId)
-    if (hit?.type === 'TEXT') startTextEditingAt(hit, cx, cy)
-    else if (hit) editor.select([hit.id])
+    if (hit) editor.select([hit.id])
     else editor.clearSelection()
     return true
   }
 
   function onDblClick(e: MouseEvent) {
     const nodeEditEditor = editor as Editor & NodeEditMethods
-    if (editor.state.editingTextId) return
+    if (e.metaKey || e.ctrlKey || editor.state.editingTextId) return
 
     const { cx, cy } = getCoords(e)
     if (startLabelRename(cx, cy)) return

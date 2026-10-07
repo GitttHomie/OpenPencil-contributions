@@ -4,10 +4,25 @@ import {
   analyzeOverlaps,
   analyzeSpacing,
   analyzeTypography,
-  diffCreate,
-  diffShow
+  diffApply,
+  diffShow,
+  lint,
+  lintFix
 } from './analyze'
 import { designToComponentMap, designToTokens } from './codegen'
+import {
+  bindComponentProperty,
+  createComponentProperty,
+  deleteComponentProperty,
+  editComponentProperty,
+  getComponentProperties,
+  setInstanceProperties
+} from './component-properties'
+import {
+  configureComponentSlot,
+  createComponentSlot,
+  resetInstanceSlot
+} from './component-properties/slots'
 import {
   createComponent,
   createInstance,
@@ -17,10 +32,13 @@ import {
   createVector,
   exposeInstanceSwap,
   combineAsVariants,
+  createSlot,
   fetchIconsTool,
+  getBehaviour,
   importSVG,
   insertIcon,
-  searchIconsTool
+  searchIconsTool,
+  setBehaviour
 } from './create'
 import {
   setBlend,
@@ -37,8 +55,8 @@ import {
   setTextResize,
   setVisible
 } from './modify'
+import { setPaint } from './modify/paint-stack'
 import {
-  diffJSX,
   getComponents,
   getCurrentPage,
   getFontStatus,
@@ -113,6 +131,7 @@ export const EXTENDED_TOOLS: ToolDef[] = [
   selectNodes,
   queryNodes,
   getComponents,
+  getComponentProperties,
   listLibraries,
   insertLibraryComponent,
   switchPage,
@@ -120,7 +139,6 @@ export const EXTENDED_TOOLS: ToolDef[] = [
   getFontStatus,
   listFonts,
   listAvailableFonts,
-  diffJSX,
   // Create (advanced)
   createShape,
   searchIconsTool,
@@ -130,6 +148,17 @@ export const EXTENDED_TOOLS: ToolDef[] = [
   createComponent,
   createInstance,
   exposeInstanceSwap,
+  createComponentProperty,
+  bindComponentProperty,
+  editComponentProperty,
+  deleteComponentProperty,
+  setInstanceProperties,
+  createComponentSlot,
+  configureComponentSlot,
+  resetInstanceSlot,
+  createSlot,
+  getBehaviour,
+  setBehaviour,
   createPage,
   createVector,
   createSlice,
@@ -148,6 +177,7 @@ export const EXTENDED_TOOLS: ToolDef[] = [
   setLocked,
   setStrokeAlign,
   setImageFill,
+  setPaint,
   // Structure (advanced)
   cloneNode,
   nodeMove,
@@ -194,11 +224,13 @@ export const EXTENDED_TOOLS: ToolDef[] = [
   // Analyze & diff
   analyzeColors,
   analyzeTypography,
+  lint,
+  lintFix,
   analyzeSpacing,
   analyzeClusters,
   analyzeOverlaps,
-  diffCreate,
   diffShow,
+  diffApply,
   // Codegen
   designToTokens,
   designToComponentMap

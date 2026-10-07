@@ -1,6 +1,6 @@
-import { lookupAgents } from '@/app/ai/agents/native'
 import { decodeTauriStderr } from '@/app/shell/ui'
-import { resolvePlatformCommand } from '@/app/tauri/command'
+
+import { startAgentProcess } from './process-start'
 
 export type TauriChild = {
   write(data: number[]): Promise<void>
@@ -10,6 +10,7 @@ export type TauriChild = {
 type ACPProcessOptions = {
   command: string
   args: string[]
+  env?: Record<string, string>
   logId: string
   destroying: () => boolean
   onUnexpectedClose: () => void
@@ -18,24 +19,17 @@ type ACPProcessOptions = {
 export async function spawnACPProcess({
   command: commandName,
   args,
+  env,
   logId,
   destroying,
   onUnexpectedClose
 }: ACPProcessOptions) {
-  const { Command } = await import('@tauri-apps/plugin-shell')
-  const lookup = await lookupAgents()
-  const resolved = resolvePlatformCommand(commandName, args)
-  const command = Command.create(resolved.command, resolved.args, {
-    encoding: 'raw',
-    env: { PATH: lookup.searchPath }
-  })
-
   const stdoutChunks: Uint8Array[] = []
   let stdoutResolver: ((chunk: Uint8Array | null) => void) | null = null
   let stdoutClosed = false
   let stdoutClosedError: Error | null = null
 
-  command.stdout.on('data', (raw: Uint8Array | number[]) => {
+  const stdout = (raw: Uint8Array | number[]) => {
     const chunk = raw instanceof Uint8Array ? raw : new Uint8Array(raw)
     if (stdoutResolver) {
       const resolve = stdoutResolver
@@ -44,13 +38,13 @@ export async function spawnACPProcess({
     } else {
       stdoutChunks.push(chunk)
     }
-  })
+  }
 
-  command.stderr.on('data', (raw: Uint8Array | number[] | string) => {
+  const stderr = (raw: Uint8Array | number[] | string) => {
     console.error(`[ACP ${logId}]`, decodeTauriStderr(raw))
-  })
+  }
 
-  command.on('close', () => {
+  const close = () => {
     stdoutClosed = true
     stdoutClosedError = destroying() ? null : new Error('Agent process exited unexpectedly.')
     if (stdoutResolver) {
@@ -61,9 +55,9 @@ export async function spawnACPProcess({
     if (!destroying()) {
       onUnexpectedClose()
     }
-  })
+  }
 
-  const child = await command.spawn()
+  const child = await startAgentProcess({ command: commandName, args, env, stdout, stderr, close })
 
   const output = new ReadableStream<Uint8Array>({
     async pull(controller) {

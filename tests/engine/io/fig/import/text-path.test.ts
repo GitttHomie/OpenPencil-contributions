@@ -84,7 +84,8 @@ describe('TEXT_PATH import mapping', () => {
           }
         ]
       },
-      [blob]
+      [blob],
+      'Hi'
     )
 
     expect(glyphs).toHaveLength(2)

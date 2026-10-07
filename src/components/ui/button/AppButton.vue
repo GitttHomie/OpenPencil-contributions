@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, normalizeClass, useAttrs, type HTMLAttributes } from 'vue'
 
+import AppSpinner from '@/components/ui/feedback/AppSpinner.vue'
 import {
   useAppButtonUI,
   type AppButtonColor,
@@ -8,7 +9,6 @@ import {
   type AppButtonSize,
   type AppButtonVariant
 } from '@/theme/button/button'
-import { motionStyles } from '@/theme/motion/styles'
 
 const {
   color = 'neutral',
@@ -57,7 +57,7 @@ const isDisabled = computed(() => disabled || loading)
     :class="styles.base"
   >
     <span v-if="loading" data-slot="loading-icon" :class="styles.icon">
-      <icon-lucide-loader-2 :class="motionStyles.spinner" />
+      <AppSpinner class="size-full" />
     </span>
     <span v-else-if="$slots.leading" data-slot="leading-icon" :class="styles.icon">
       <slot name="leading" />

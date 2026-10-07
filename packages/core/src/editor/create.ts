@@ -10,12 +10,12 @@ import { prefetchFigmaSchema } from '#core/clipboard'
 import { IS_BROWSER } from '#core/constants'
 import { releaseFigPopulationWorker } from '#core/kiwi/fig/population/client'
 import { releaseOriginalFigArchive } from '#core/kiwi/fig/session/original-archive'
-import { setTextMeasurer } from '#core/layout'
+import { installTextMeasurer } from '#core/layout'
 import { createLayoutRunner } from '#core/layout/mutations'
-import { emitNavigationTrace } from '#core/profiler'
+import { emitNavigationTrace } from '#core/profiler/index'
 import { TextEditor } from '#core/text/editor'
 import { fontManager } from '#core/text/fonts'
-import { fontResolver } from '#core/text/resolver'
+import { fontResolver } from '#core/text/resolver/index'
 
 import { createAlignmentActions } from './alignment'
 import { createClipboardBridge } from './bridges/clipboard'
@@ -29,8 +29,10 @@ import { createComponentActions } from './components'
 import { createGraphEventSubscription } from './graph-events'
 import { createGraphReadActions } from './graph-reads'
 import { createGuideActions } from './guides'
+import { createDesignIssueActions } from './issues'
 import { createNodeActions } from './nodes'
 import { createPageActions } from './pages'
+import { createPlayActions } from './play/actions'
 import { createSelectionActions } from './selection'
 import { createShapeActions } from './shapes'
 import { createDefaultEditorState } from './state'
@@ -65,6 +67,7 @@ export function createEditor(options?: EditorOptions) {
   let _ck: CanvasKit | null = null
   let _renderer: SkiaRenderer | null = null
   const _renderers = new Set<SkiaRenderer>()
+  let uninstallTextMeasurer: (() => void) | null = null
   const interactiveEdits = new Map<symbol, (() => void) | undefined>()
   let _textEditor: TextEditor | null = null
   const events: Emitter<EditorEvents> = createNanoEvents()
@@ -91,6 +94,7 @@ export function createEditor(options?: EditorOptions) {
   function requestRender() {
     state.renderVersion++
     state.sceneVersion++
+    state.canvasVersion++
     emitNavigationTrace('render:requested', {
       kind: 'render',
       renderVersion: state.renderVersion,
@@ -100,6 +104,11 @@ export function createEditor(options?: EditorOptions) {
       renderVersion: state.renderVersion,
       sceneVersion: state.sceneVersion
     })
+  }
+
+  function requestRefresh() {
+    state.sceneVersion++
+    emitEditorEvent('refresh:requested')
   }
 
   function requestRepaint() {
@@ -210,6 +219,7 @@ export function createEditor(options?: EditorOptions) {
     getRenderer: () => _renderer,
     getTextEditor: () => _textEditor,
     requestRender,
+    requestRefresh,
     requestRepaint,
     beginInteractiveEdit,
     onEditorEvent,
@@ -227,10 +237,11 @@ export function createEditor(options?: EditorOptions) {
   const selection = createSelectionActions(ctx)
   const pages = createPageActions(ctx)
   const guides = createGuideActions(ctx)
+  const designIssues = createDesignIssueActions(ctx)
   const shapes = createShapeActions(ctx)
   const nodes = createNodeActions(ctx)
   const structure = createStructureActions(ctx, nodes.beginNodePreview)
-  const components = createComponentActions(ctx)
+  const components = createComponentActions(ctx, structure.wrapInAutoLayout)
   const clipboard = createClipboardActions(ctx)
   const colorSpace = createColorSpaceActions(ctx)
   const undoActions = createUndoActions(ctx)
@@ -238,6 +249,7 @@ export function createEditor(options?: EditorOptions) {
   const variables = createVariableActions(ctx)
   const vectorize = createVectorizeActions(ctx)
   const alignment = createAlignmentActions(ctx)
+  const preview = createPlayActions(ctx)
   const clipboardBridge = createClipboardBridge(clipboard, selection)
   const componentBridge = createComponentBridge(components, selection, structure, pages)
   const structureBridge = createStructureBridge(structure, selection)
@@ -248,18 +260,31 @@ export function createEditor(options?: EditorOptions) {
     _renderer = renderer
     _renderers.add(renderer)
     _textEditor ??= new TextEditor(ck)
-    setTextMeasurer(
+    uninstallTextMeasurer?.()
+    uninstallTextMeasurer =
       typeof renderer.measureTextNode === 'function'
-        ? (node, maxWidth) => renderer.measureTextNode(node, maxWidth)
+        ? installTextMeasurer((node, maxWidth) => renderer.measureTextNode(node, maxWidth))
         : null
-    )
+  }
+
+  function releaseTextMeasurer() {
+    uninstallTextMeasurer?.()
+    uninstallTextMeasurer = null
   }
 
   function removeCanvasRenderer(renderer: SkiaRenderer) {
     _renderers.delete(renderer)
     if (_renderer === renderer) {
       _renderer = _renderers.values().next().value ?? null
+      const remaining = _renderer
+      releaseTextMeasurer()
+      if (remaining && typeof remaining.measureTextNode === 'function') {
+        uninstallTextMeasurer = installTextMeasurer((node, maxWidth) =>
+          remaining.measureTextNode(node, maxWidth)
+        )
+      }
     }
+    if (_renderers.size === 0) releaseTextMeasurer()
   }
 
   function replaceGraph(newGraph: SceneGraph) {
@@ -286,6 +311,7 @@ export function createEditor(options?: EditorOptions) {
   }
 
   function dispose() {
+    releaseTextMeasurer()
     nodes.cancelNodePreviews()
     interactiveEdits.clear()
     stopFontResolutionEvents()
@@ -323,6 +349,7 @@ export function createEditor(options?: EditorOptions) {
     isInteractiveEditing: () => interactiveEdits.size > 0,
     cancelInteractiveEdit,
     requestRender,
+    requestRefresh,
     requestRepaint,
     onEditorEvent,
     setCanvasKit,
@@ -341,6 +368,7 @@ export function createEditor(options?: EditorOptions) {
 
     // Canvas and frame guides
     ...guides,
+    ...designIssues,
 
     // Shapes & tools
     ...shapes,
@@ -353,6 +381,9 @@ export function createEditor(options?: EditorOptions) {
 
     // Alignment (align, flip, rotate)
     ...alignment,
+
+    // Preview: instances with a behaviour respond to the pointer on this canvas
+    ...preview,
 
     // Bitmap-to-vector replacement
     ...vectorize,

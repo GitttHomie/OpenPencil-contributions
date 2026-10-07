@@ -1,6 +1,6 @@
 import { tryOnScopeDispose } from '@vueuse/core'
 import { isEqual } from 'es-toolkit'
-import { computed, reactive, ref, toRaw, watch } from 'vue'
+import { computed, reactive, ref, toRaw } from 'vue'
 import type { Ref } from 'vue'
 
 import type { AIProviderID } from '@open-pencil/core/constants'
@@ -35,7 +35,7 @@ export function useModelProfileEditor({ profileId, keyInput, labels: ai }: Profi
     providerDef,
     isACP,
     isHarness,
-    supportsReasoningEffort,
+    supportsThinking,
     providerDisplayName,
     modelOptions,
     selectedModelValue,
@@ -143,11 +143,6 @@ export function useModelProfileEditor({ profileId, keyInput, labels: ai }: Profi
     }
   }
 
-  watch(
-    () => [draft.customBaseURL, draft.customModelID, draft.customAPIType, draft.modelID],
-    resetConnectionTest
-  )
-
   void refreshKeyStatus()
 
   return {
@@ -157,7 +152,7 @@ export function useModelProfileEditor({ profileId, keyInput, labels: ai }: Profi
     providerDef,
     isACP,
     isHarness,
-    supportsReasoningEffort,
+    supportsThinking,
     providerDisplayName,
     modelOptions,
     selectedModelValue,
@@ -173,6 +168,7 @@ export function useModelProfileEditor({ profileId, keyInput, labels: ai }: Profi
     connectionTestStatus,
     connectionTestReason,
     saveError,
+    resetConnectionTest,
     saveResult,
     updateProvider,
     updateModel,

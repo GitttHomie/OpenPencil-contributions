@@ -1,4 +1,4 @@
-import { emitNavigationTrace } from '#core/profiler'
+import { emitNavigationTrace } from '#core/profiler/index'
 
 import type { TileSchedulerMetrics } from './scheduler'
 

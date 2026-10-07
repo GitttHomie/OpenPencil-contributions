@@ -33,6 +33,8 @@ const {
   okhcl?: OkHCLControls | null
   swatchBackground?: string
   gradientTarget?: GradientTarget
+  /** Names the trigger for a paint that is not a fill, such as a stroke. */
+  label?: string
 }>()
 const emit = defineEmits<{
   update: [fill: Fill]
@@ -69,7 +71,7 @@ function cancelFromEscape(event: KeyboardEvent) {
       <PopoverTrigger as-child>
         <FillSwatchTrigger
           :fill="fill"
-          :label="panels.fill"
+          :label="label ?? panels.fill"
           :background="swatchBackground"
           data-test-id="fill-picker-swatch"
         />
@@ -129,13 +131,6 @@ function cancelFromEscape(event: KeyboardEvent) {
             :fill="root.fill"
             @update="emit('update', $event)"
           />
-          <p
-            v-if="root.category === 'GRADIENT' && gradientTarget"
-            class="mt-2 text-[10px] text-muted"
-          >
-            {{ panels.gradientCanvasHint }}
-          </p>
-
           <ImageFillPicker
             v-if="root.category === 'IMAGE'"
             :fill="root.fill"

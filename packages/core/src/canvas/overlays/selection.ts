@@ -1,5 +1,6 @@
 import type { Canvas } from 'canvaskit-wasm'
 
+import { isInComponent, slotPropertyId } from '@open-pencil/scene-graph'
 import type { SceneGraph, SceneNode } from '@open-pencil/scene-graph'
 import { computeBounds, rotatedCorners } from '@open-pencil/scene-graph/geometry'
 import Matrix from '@open-pencil/scene-graph/matrix'
@@ -9,7 +10,9 @@ import type { RenderOverlays, SkiaRenderer } from '#core/canvas/renderer'
 import {
   HANDLE_HALF_SIZE,
   ROTATION_HANDLE_DISTANCE,
+  CODE_FOCUS_FILL_ALPHA,
   SELECTION_DASH_ALPHA,
+  PARENT_OUTLINE_ALPHA,
   SECTION_HOVER_STROKE_WIDTH
 } from '#core/constants'
 import {
@@ -19,8 +22,21 @@ import {
   rotationHandleLayout,
   type RotationHandleLayout,
   type RotationPreview
-} from '#core/geometry'
-import { pathTextSelectionBand, pointAtArc } from '#core/text/path'
+} from '#core/geometry/index'
+import { pathTextSelectionBand, pointAtArc } from '#core/text/path/index'
+
+function beginNodeOutline(
+  r: SkiaRenderer,
+  canvas: Canvas,
+  graph: SceneGraph,
+  node: SceneNode,
+  preview?: RotationPreview | null
+): void {
+  r.auxStroke.setColor(r.outlineColor(node, graph))
+  r.auxStroke.setPathEffect(null)
+  canvas.save()
+  canvas.concat(createSceneGeometry(graph, preview).screenMatrix(node, r))
+}
 
 export function drawHoverHighlight(
   r: SkiaRenderer,
@@ -32,10 +48,28 @@ export function drawHoverHighlight(
   const node = hoveredNodeId ? graph.getNode(hoveredNodeId) : undefined
   if (!node) return
   r.auxStroke.setStrokeWidth((node.type === 'SECTION' ? SECTION_HOVER_STROKE_WIDTH : 1) / r.zoom)
-  r.auxStroke.setColor(r.isComponentType(node.type) ? r.compColor() : r.selColor())
-  r.auxStroke.setPathEffect(null)
-  canvas.save()
-  canvas.concat(createSceneGeometry(graph, preview).screenMatrix(node, r))
+  beginNodeOutline(r, canvas, graph, node, preview)
+  r.strokeNodeShape(canvas, node, r.auxStroke)
+  canvas.restore()
+}
+
+/**
+ * The layer of the code element around the cursor: the hover outline over a light tint, so it
+ * reads apart from canvas hover (outline only) and selection (outline and handles).
+ */
+export function drawCodeFocus(
+  r: SkiaRenderer,
+  canvas: Canvas,
+  graph: SceneGraph,
+  nodeId?: string | null,
+  preview?: RotationPreview | null
+): void {
+  const node = nodeId ? graph.getNode(nodeId) : undefined
+  if (!node) return
+  r.auxFill.setColor(r.outlineColor(node, graph, CODE_FOCUS_FILL_ALPHA))
+  r.auxStroke.setStrokeWidth(1 / r.zoom)
+  beginNodeOutline(r, canvas, graph, node, preview)
+  r.strokeNodeShape(canvas, node, r.auxFill)
   r.strokeNodeShape(canvas, node, r.auxStroke)
   canvas.restore()
 }
@@ -51,7 +85,7 @@ export function drawEnteredContainer(
   if (!node) return
   const dash = r.ck.PathEffect.MakeDash([4 / r.zoom, 4 / r.zoom], 0)
   r.auxStroke.setStrokeWidth(1 / r.zoom)
-  r.auxStroke.setColor(r.selColor(SELECTION_DASH_ALPHA))
+  r.auxStroke.setColor(r.outlineColor(node, graph, SELECTION_DASH_ALPHA))
   r.auxStroke.setPathEffect(dash)
   canvas.save()
   try {
@@ -88,8 +122,7 @@ function drawSingleSelection(
   // is suppressed (see drawTextEditOverlay) since it can't follow the path.
   if (editing && !isPathText) return
 
-  const useComponentColor = r.isComponentType(node.type)
-  r.selectionPaint.setColor(useComponentColor ? r.compColor() : r.selColor())
+  r.selectionPaint.setColor(r.outlineColor(node, graph))
   r.selectionPaint.setStrokeWidth(1 / r.zoom)
 
   const rotation = node.rotation
@@ -127,8 +160,7 @@ export function drawSelection(
     const node = graph.getNode(id)
     if (!node) continue
 
-    const useComponentColor = r.isComponentType(node.type)
-    r.selectionPaint.setColor(useComponentColor ? r.compColor() : r.selColor())
+    r.selectionPaint.setColor(r.outlineColor(node, graph))
     r.selectionPaint.setStrokeWidth(1 / r.zoom)
 
     const rotation = node.rotation
@@ -209,10 +241,10 @@ function drawTextPathSelection(
         for (let i = 2; i < bandPoly.length; i += 2) band.lineTo(bandPoly[i], bandPoly[i + 1])
         band.close()
         const immutableBand = band.detachAndDelete()
-        r.auxFill.setColor(r.selColor(0.16))
+        r.auxFill.setColor(r.outlineColor(node, graph, 0.16))
         canvas.drawPath(immutableBand, r.auxFill)
         r.auxStroke.setStrokeWidth(1 / r.zoom)
-        r.auxStroke.setColor(r.selColor())
+        r.auxStroke.setColor(r.outlineColor(node, graph))
         r.auxStroke.setPathEffect(null)
         canvas.drawPath(immutableBand, r.auxStroke)
         immutableBand.delete()
@@ -220,7 +252,7 @@ function drawTextPathSelection(
 
       // Faint dashed bounds + resize/rotate handles from the fitted path box.
       r.auxStroke.setStrokeWidth(1 / r.zoom)
-      r.auxStroke.setColor(r.selColor(SELECTION_DASH_ALPHA))
+      r.auxStroke.setColor(r.outlineColor(node, graph, SELECTION_DASH_ALPHA))
       // MakeDash allocates a WASM PathEffect the JS GC won't reclaim; this runs
       // every repaint while a TEXT_PATH node is selected, so free it explicitly.
       const dash = r.ck.PathEffect.MakeDash([4 / r.zoom, 4 / r.zoom], 0)
@@ -372,6 +404,8 @@ export function drawParentFrameOutlines(
     const parent = graph.getNode(node.parentId)
     if (!parent || parent.type === 'CANVAS') continue
     if (drawn.has(parent.id) || selectedIds.has(parent.id)) continue
+    // Slots get their own dashed outline (overlays/slots.ts).
+    if (slotPropertyId(parent)) continue
 
     const grandparent = parent.parentId ? graph.getNode(parent.parentId) : null
     if (!grandparent || grandparent.type === 'CANVAS') continue
@@ -399,6 +433,7 @@ export function drawParentFrameOutlines(
     path.close()
 
     const immutablePath = path.detachAndDelete()
+    r.parentOutlinePaint.setColor(r.outlineColor(parent, graph, PARENT_OUTLINE_ALPHA))
     canvas.drawPath(immutablePath, r.parentOutlinePaint)
     immutablePath.delete()
   }
@@ -431,10 +466,15 @@ export function drawGroupBounds(
     bounds.y + bounds.height
   ])
   r.auxStroke.setStrokeWidth(1)
-  r.auxStroke.setColor(r.selColor(SELECTION_DASH_ALPHA))
+  const component = nodes.every((node) => isInComponent(graph, node.id))
+  r.auxStroke.setColor(
+    component ? r.compColor(SELECTION_DASH_ALPHA) : r.selColor(SELECTION_DASH_ALPHA)
+  )
+  r.selectionPaint.setColor(component ? r.compColor() : r.selColor())
   r.auxStroke.setPathEffect(null)
   canvas.drawRect(r.ck.LTRBRect(minX, minY, maxX, maxY), r.auxStroke)
   drawBoundsHandlesScreenSpace(r, canvas, minX, minY, maxX, maxY)
+  r.selectionPaint.setColor(r.selColor())
 }
 
 export function getRotatedCorners(r: SkiaRenderer, n: SceneNode, abs: Vector): Vector[] {

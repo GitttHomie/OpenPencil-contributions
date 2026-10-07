@@ -2,7 +2,7 @@ import type { Canvas } from 'canvaskit-wasm'
 
 import type { SkiaRenderer } from '#core/canvas/renderer'
 
-export const PIXEL_GRID_MIN_ZOOM = 8
+export const PIXEL_GRID_MIN_ZOOM = 4
 
 /** Visible document-pixel boundaries, aligned to device pixels after pan and zoom. */
 export function pixelGridLines(pan: number, zoom: number, extent: number, dpr: number): number[] {

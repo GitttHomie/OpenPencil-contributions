@@ -1,4 +1,9 @@
-import { canCreateInstance, type SceneGraph, type SceneNode } from '@open-pencil/scene-graph'
+import {
+  canCreateInstance,
+  remapComponentPropertyPluginData,
+  type SceneGraph,
+  type SceneNode
+} from '@open-pencil/scene-graph'
 
 import type { ClipboardNodeTree } from './snapshot'
 
@@ -30,6 +35,10 @@ export function createPastedTrees(
       const node = graph.getNode(id)
       if (!node) continue
       graph.updateNode(id, {
+        pluginData: remapComponentPropertyPluginData(
+          node.pluginData,
+          (id) => copiedIds.get(id) ?? id
+        ),
         componentId: node.componentId
           ? (copiedIds.get(node.componentId) ?? node.componentId)
           : null,
@@ -82,9 +91,27 @@ export function createPastedTrees(
     if (pasteTarget === pageId) break
   }
   const created: string[] = []
-  for (const node of nodes) {
+  function createRoot(node: ClipboardNodeTree) {
     const definition = definitions.get(node.id)
-    if (definition) {
+    if (definition && graph.getNode(pasteTarget)?.type === 'COMPONENT_SET') {
+      const source = graph.getNode(definition)
+      const sourceSet = source?.parentId ? graph.getNode(source.parentId) : undefined
+      const id = createTree(node, pasteTarget, 20)
+      // Properties inherited from a different set must travel with the copied variant.
+      if (sourceSet?.type === 'COMPONENT_SET' && sourceSet.id !== pasteTarget) {
+        const properties = new Map(
+          sourceSet.componentPropertyDefinitions
+            .filter((property) => property.type !== 'VARIANT')
+            .map((property) => [property.id, property])
+        )
+        for (const property of node.componentPropertyDefinitions)
+          properties.set(property.id, property)
+        graph.updateNode(id, {
+          componentPropertyDefinitions: structuredClone([...properties.values()])
+        })
+      }
+      created.push(id)
+    } else if (definition) {
       const instance = graph.createInstance(definition, pasteTarget, {
         x: node.x + 20,
         y: node.y + 20,
@@ -97,6 +124,7 @@ export function createPastedTrees(
       created.push(createTree(node, pasteTarget, 20))
     }
   }
+  for (const node of nodes) createRoot(node)
   remapReferences()
   const canReplace = replacementTargets.every(
     (target) =>

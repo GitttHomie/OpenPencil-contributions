@@ -1,4 +1,5 @@
 import type { SceneGraph, SceneNode } from '@open-pencil/scene-graph'
+import { OPEN_PENCIL_PLUGIN_DATA, readPluginData, withPluginData } from '@open-pencil/scene-graph'
 
 /**
  * Convert source component references to canonical destination node identities.
@@ -27,6 +28,20 @@ export function linkComponentPropertyValues(
     }
   }
   for (const node of materialized) {
+    const defaults = readPluginData(
+      node.pluginData,
+      OPEN_PENCIL_PLUGIN_DATA.componentVariantDefaults
+    )
+    if (defaults) {
+      for (const [id, value] of Object.entries(defaults)) {
+        if (definitions.get(id) === 'INSTANCE_SWAP') defaults[id] = sources.get(value) ?? value
+      }
+      node.pluginData = withPluginData(
+        node.pluginData,
+        OPEN_PENCIL_PLUGIN_DATA.componentVariantDefaults,
+        defaults
+      )
+    }
     // for-in skips the entry array that most nodes, which assign nothing, never need.
     for (const propertyId in node.componentPropertyAssignments) {
       if (definitions.get(propertyId) !== 'INSTANCE_SWAP') continue

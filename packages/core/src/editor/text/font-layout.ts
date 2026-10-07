@@ -2,7 +2,7 @@ import type { SkiaRenderer } from '#core/canvas/renderer'
 import type { EditorContext } from '#core/editor/types'
 import { withTextMeasurer } from '#core/layout/text-measurement'
 import { collectNodeFontFaces } from '#core/text/requirements'
-import type { FontResolutionSnapshot } from '#core/text/resolver'
+import type { FontResolutionSnapshot } from '#core/text/resolver/index'
 
 type FontLayoutContext = Pick<EditorContext, 'graph' | 'runLayoutForNode' | 'requestRender'> & {
   getRenderer: () => Pick<SkiaRenderer, 'measureTextNode'> | null

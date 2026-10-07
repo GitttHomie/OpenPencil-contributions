@@ -1,3 +1,7 @@
 tests/fixtures/*.fig filter=lfs diff=lfs merge=lfs -text
 tests/fixtures/fonts/*.ttf filter=lfs diff=lfs merge=lfs -text
+# Tiny regression subsets stay in Git so forks do not require upstream LFS credentials.
+tests/fixtures/fonts/Fredoka-Regular-*.ttf -filter -diff -merge -text
+tests/fixtures/variable-override-precedence.fig -filter -diff -merge -text
 packages/core/vendor/canvaskit-webgpu/*.wasm filter=lfs diff=lfs merge=lfs -text
+CHANGELOG.md merge=union

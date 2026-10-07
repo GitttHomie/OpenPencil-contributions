@@ -41,9 +41,11 @@ const cls = computed(() => inputGroup({ size, disabled }))
       <slot />
     </div>
     <div data-slot="input-group-toolbar" :class="cls.toolbar({ class: ui?.toolbar })">
-      <slot name="leading" />
       <div data-slot="input-group-model" :class="cls.model({ class: ui?.model })">
         <slot name="model" />
+      </div>
+      <div data-slot="input-group-leading" :class="cls.leading({ class: ui?.leading })">
+        <slot name="leading" />
       </div>
       <div data-slot="input-group-actions" :class="cls.actions({ class: ui?.actions })">
         <slot name="actions" />

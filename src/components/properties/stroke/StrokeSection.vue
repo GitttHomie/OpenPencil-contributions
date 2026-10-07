@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 
 import type { Color, Fill, SceneNode, Stroke } from '@open-pencil/scene-graph'
 import { colorToHexRaw } from '@open-pencil/scene-graph/color'
 import {
   applySolidStrokeColor,
+  BORDER_WIDTH_PATHS,
+  applyStrokePaint,
   BindableValueRoot,
   useColorBindingProvider,
   useI18n,
@@ -13,7 +15,7 @@ import {
 } from '@open-pencil/vue'
 import type { BindableValueActions } from '@open-pencil/vue'
 
-import ColorPicker from '@/components/ColorPicker/ColorPicker.vue'
+import FillPicker from '@/components/fill-picker/FillPicker.vue'
 import NumberField from '@/components/inputs/NumberField.vue'
 import VariableBindingPicker from '@/components/properties/binding/VariableBindingPicker.vue'
 import PropertyItemRow from '@/components/properties/item-list/PropertyItemRow.vue'
@@ -21,16 +23,17 @@ import {
   applyPaintMutation,
   cancelPaintMutation,
   commitPaintMutation,
-  paintBindingTargets
+  paintBindingTargets,
+  startCanvasPaintGesture
 } from '@/components/properties/paint/binding'
 import { createStrokeOkhclAdapter } from '@/components/properties/paint/okhcl'
 import PaintField from '@/components/properties/paint/PaintField.vue'
 import PaintValue from '@/components/properties/paint/PaintValue.vue'
 import PropertyListRoot from '@/components/properties/PropertyListRoot.vue'
 import { useSharedStylePicker } from '@/components/properties/shared-style/useSharedStylePicker'
+import VariableNumberField from '@/components/properties/VariableNumberField.vue'
 import IconButton from '@/components/ui/button/IconButton.vue'
 import Tip from '@/components/ui/overlay/Tip.vue'
-import FillSwatchTrigger from '@/components/ui/paint/FillSwatchTrigger.vue'
 import PanelSection from '@/components/ui/panel/PanelSection.vue'
 import AppSelect from '@/components/ui/select/AppSelect.vue'
 const {
@@ -48,15 +51,20 @@ const { advancedActive } = strokeCtx
 const colorProvider = useColorBindingProvider()
 const okhcl = useOkHCL()
 const { panels, common } = useI18n()
-const expandedSides = ref(false)
 
-function strokePreview(stroke: Stroke, color: Color): Fill {
-  return {
-    type: 'SOLID',
-    color,
-    opacity: stroke.opacity,
-    visible: stroke.visible
-  }
+/** A bound variable colours the swatch, but only a solid stroke has one colour to replace. */
+function displayStroke(stroke: Stroke, resolvedColor: Color | undefined): Fill {
+  return stroke.type === 'SOLID' && resolvedColor ? { ...stroke, color: resolvedColor } : stroke
+}
+
+function updateStrokePaint(
+  binding: BindableValueActions<Color>,
+  flush: () => void,
+  stroke: Stroke,
+  paint: Fill,
+  update: (stroke: Stroke) => void
+) {
+  applyPaintMutation(binding, flush, () => update(applyStrokePaint(stroke, paint)))
 }
 
 function updateStrokeColor(
@@ -70,22 +78,27 @@ function updateStrokeColor(
   if (commit) commitPaintMutation(binding)
 }
 
-function onToggleSides(activeNode: SceneNode | null) {
-  if (!activeNode) return
-  const next = !expandedSides.value
-  expandedSides.value = next
-  if (next && !activeNode.independentStrokeWeights) {
-    const weight = activeNode.strokes[0]?.weight ?? 1
-    strokeCtx.selectSide('CUSTOM', {
-      ...activeNode,
-      borderTopWeight: weight,
-      borderRightWeight: weight,
-      borderBottomWeight: weight,
-      borderLeftWeight: weight
-    })
-  } else if (!next && activeNode.independentStrokeWeights) {
-    strokeCtx.selectSide('ALL', activeNode)
-  }
+const sideVisibility = ref<Record<string, boolean>>({})
+watch(
+  () => strokeCtx.nodes.value,
+  (nodes) => {
+    for (const node of nodes) sideVisibility.value[node.id] ??= node.independentStrokeWeights
+  },
+  { immediate: true }
+)
+function supportsSides(node: SceneNode | null) {
+  return (
+    node !== null &&
+    ['FRAME', 'COMPONENT', 'INSTANCE', 'RECTANGLE', 'ROUNDED_RECTANGLE'].includes(node.type)
+  )
+}
+function showSides(node: SceneNode | null) {
+  return supportsSides(node) && node
+    ? (sideVisibility.value[node.id] ?? node.independentStrokeWeights)
+    : false
+}
+function onToggleSides(node: SceneNode | null) {
+  if (node) sideVisibility.value[node.id] = !showSides(node)
 }
 </script>
 
@@ -109,6 +122,22 @@ function onToggleSides(activeNode: SceneNode | null) {
             /></IconButton>
           </template>
         </AppSelect>
+        <StrokeSettingsPopover
+          v-if="advancedActive"
+          :stroke="isMixed ? undefined : items[0]"
+          @patch="actions.patch(0, $event)"
+        />
+        <IconButton
+          v-if="!isMixed && items.length > 0 && supportsSides(activeNode)"
+          :label="panels.strokeSides"
+          size="xs"
+          class="size-[26px] shrink-0"
+          :active="showSides(activeNode)"
+          data-property="stroke-sides"
+          @click="onToggleSides(activeNode)"
+        >
+          <icon-lucide-layout-grid class="size-3.5" />
+        </IconButton>
         <IconButton :label="panels.addStroke" @click="actions.add(strokeCtx.defaultStroke)">
           <icon-lucide-plus class="size-3.5" />
         </IconButton>
@@ -147,32 +176,29 @@ function onToggleSides(activeNode: SceneNode | null) {
             @update:opacity="actions.patch(index, { opacity: $event })"
           >
             <template #preview>
-              <ColorPicker
-                :color="binding.resolvedValue ?? stroke.color"
+              <FillPicker
+                :label="panels.stroke"
+                :gradient-target="
+                  selectedNodeIds.length === 1 && activeNode
+                    ? { nodeId: activeNode.id, property: 'strokes', index }
+                    : undefined
+                "
+                :fill="displayStroke(stroke, binding.resolvedValue)"
                 :okhcl="createStrokeOkhclAdapter(okhcl, activeNode, index)"
+                @canvas-gesture="startCanvasPaintGesture(binding.actions, flush)"
                 @update="
-                  updateStrokeColor(
-                    binding.actions,
-                    flush,
-                    $event,
-                    (changes) => actions.patch(index, changes),
-                    false
+                  updateStrokePaint(binding.actions, flush, stroke, $event, (next) =>
+                    actions.update(index, next)
                   )
                 "
                 @open-change="!$event && commitPaintMutation(binding.actions)"
                 @cancel="cancelPaintMutation(binding.actions)"
-              >
-                <template #trigger>
-                  <FillSwatchTrigger
-                    :label="panels.stroke"
-                    :fill="strokePreview(stroke, binding.resolvedValue ?? stroke.color)"
-                  />
-                </template>
-              </ColorPicker>
+              />
             </template>
 
             <template #value>
               <PaintValue
+                v-if="stroke.type === 'SOLID'"
                 :color="stroke.color"
                 :resolved-color="binding.resolvedValue"
                 :variable-name="binding.variable?.name ?? binding.bindingId"
@@ -219,47 +245,49 @@ function onToggleSides(activeNode: SceneNode | null) {
           @update:model-value="strokeCtx.updateAlign($event as Stroke['align'], activeNode)"
         />
         <Tip :label="panels.strokeWeight">
-          <NumberField
-            v-if="!expandedSides"
+          <VariableNumberField
+            v-if="activeNode && supportsSides(activeNode) && !showSides(activeNode)"
             class="flex-1"
             icon="W"
+            :aria-label="panels.strokeWeight"
+            :model-value="items[0]?.weight ?? 1"
+            :min="0"
+            data-property="stroke-weight"
+            :node-id="activeNode.id"
+            :node-ids="selectedNodeIds"
+            binding-path="borderTopWeight"
+            :binding-paths="BORDER_WIDTH_PATHS"
+            edit-properties
+          />
+          <NumberField
+            v-else-if="activeNode && !supportsSides(activeNode)"
+            icon="W"
+            :aria-label="panels.strokeWeight"
             :model-value="items[0]?.weight ?? 1"
             :min="0"
             data-property="stroke-weight"
             @update:model-value="actions.patch(0, { weight: $event })"
+            @commit="flush"
+            @cancel="flush"
           />
         </Tip>
-        <StrokeSettingsPopover
-          v-if="advancedActive"
-          :stroke="items[0]"
-          @patch="actions.patch(0, $event)"
-        />
-        <IconButton
-          :label="panels.strokeSides"
-          size="xs"
-          class="size-[26px] shrink-0"
-          :active="expandedSides"
-          data-property="stroke-sides"
-          @click="onToggleSides(activeNode)"
-        >
-          <icon-lucide-layout-grid class="size-3.5" />
-        </IconButton>
       </div>
 
-      <StrokeSettingsPopover v-if="isMixed && advancedActive" />
-
       <div
-        v-if="!isMixed && items.length > 0 && expandedSides"
+        v-if="!isMixed && items.length > 0 && activeNode && showSides(activeNode)"
         class="mt-1.5 grid grid-cols-2 gap-1.5"
       >
-        <NumberField
-          v-for="side in strokeCtx.borderSides"
-          :key="side"
-          :label="side[0].toUpperCase()"
-          :model-value="strokeCtx.borderWeight(activeNode, side)"
+        <VariableNumberField
+          v-for="(path, index) in BORDER_WIDTH_PATHS"
+          :key="path"
+          :label="['T', 'R', 'B', 'L'][index]"
+          :model-value="0"
           :min="0"
-          :data-property="`stroke-${side}-weight`"
-          @update:model-value="strokeCtx.updateBorderWeight(side, $event, activeNode)"
+          :data-property="`stroke-${strokeCtx.borderSides[index]}-weight`"
+          :node-id="activeNode.id"
+          :node-ids="selectedNodeIds"
+          :binding-path="path"
+          edit-properties
         />
       </div>
     </PanelSection>

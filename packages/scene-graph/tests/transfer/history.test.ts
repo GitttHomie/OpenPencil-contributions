@@ -4,6 +4,7 @@ import {
   applyGraphTransfer,
   captureTransferredState,
   prepareGraphTransfer,
+  removeGraphTransfer,
   SceneGraph
 } from '@open-pencil/scene-graph'
 
@@ -30,4 +31,23 @@ test('history captures post-placement geometry and separates reused image owners
   expect(snapshot.nodes[0].props.x).toBe(120)
   target.deleteNode(plan.rootIds[0])
   expect(() => captureTransferredState(target, plan)).toThrow('Missing transferred node')
+})
+
+test('removing a transferred component still rejects an independently created instance', () => {
+  const source = new SceneGraph()
+  const target = new SceneGraph()
+  const root = source.createNode('COMPONENT', source.getPages()[0].id)
+  source.createNode('FRAME', root.id)
+  const plan = prepareGraphTransfer({
+    source,
+    target,
+    rootIds: [root.id],
+    dependencyPageIds: [],
+    parentId: target.getPages()[0].id
+  })
+  applyGraphTransfer(target, plan)
+  target.createInstance(plan.rootIds[0], target.getPages()[0].id)
+  const ids = new Set(target.nodes.keys())
+  expect(() => removeGraphTransfer(target, plan)).toThrow('Transferred content is referenced')
+  expect(new Set(target.nodes.keys())).toEqual(ids)
 })

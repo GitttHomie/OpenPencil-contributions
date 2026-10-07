@@ -12,6 +12,7 @@ import type { Vector } from '@open-pencil/scene-graph/primitives'
 
 import resizeCursorSVG from '#vue/shared/assets/resize-cursor.svg?raw'
 import rotateCursorSVG from '#vue/shared/assets/rotate-cursor.svg?raw'
+import { selectionAtScope } from '#vue/shared/input/select/scope'
 import type { CornerPosition, HandlePosition } from '#vue/shared/input/types'
 
 export function getPointerCoords(e: MouseEvent, canvas: HTMLCanvasElement | null, editor: Editor) {
@@ -49,18 +50,16 @@ export function hitTestInEditorScope(
 
   const renderer = editor.renderer
   if (!renderer) return null
-  if (scopeId) {
-    if (!editor.graph.getNode(scopeId)) {
-      editor.state.enteredContainerId = null
-    } else {
-      return deep
-        ? editor.graph.hitTestDeep(cx, cy, scopeId)
-        : editor.graph.hitTest(cx, cy, scopeId)
-    }
-  }
+  if (scopeId && !editor.graph.getNode(scopeId)) editor.state.enteredContainerId = null
+  // Test the page first so clipping and objects in front of the entered scope still apply.
+  const hit = editor.graph.hitTestDeep(cx, cy, editor.state.currentPageId)
   return deep
-    ? editor.graph.hitTestDeep(cx, cy, editor.state.currentPageId)
-    : editor.graph.hitTest(cx, cy, editor.state.currentPageId)
+    ? hit
+    : selectionAtScope(
+        editor.graph,
+        hit,
+        editor.state.enteredContainerId ?? editor.state.currentPageId
+      )
 }
 
 export function isInsideEditorContainerBounds(

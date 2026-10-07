@@ -24,10 +24,19 @@ test(
     })
     const url = `http://127.0.0.1:${process.env.OPENPENCIL_TEST_MCP_PORT ?? '7600'}/mcp`
     const headers = token ? [{ name: 'Authorization', value: `Bearer ${token}` }] : []
+    const prompt = await page.evaluate(async (agentId) => {
+      const path = '/src/app/ai/acp/prompt.ts'
+      const { buildACPUserPrompt } = await import(path)
+      return buildACPUserPrompt(
+        'Build a playful horse-matching app called Hay. Make just one compact mobile screen with a title, a profile card, and two choice buttons. Use simple shapes instead of photos. Keep it to at most eight tool calls.',
+        true,
+        agentId
+      ) as string
+    }, agent.id)
     const session = await runCanvasAgent(
       agent,
       { type: 'http', name: 'open-pencil', url, headers },
-      'Build a playful horse-matching app called Hay. Make just one compact mobile screen with a title, a profile card, and two choice buttons. Use simple shapes instead of photos. Keep it to at most eight tool calls.'
+      prompt
     )
     await testInfo.attach('agent-session', {
       body: JSON.stringify(session),

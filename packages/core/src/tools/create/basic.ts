@@ -1,6 +1,6 @@
 import * as v from 'valibot'
 
-import type { FigmaNodeProxy } from '#core/figma-api'
+import type { FigmaNodeProxy } from '#core/figma-api/index'
 import { toolNumber, positionInputs } from '#core/tools/input'
 import { defineTool, nodeSummary } from '#core/tools/schema'
 

@@ -1,21 +1,23 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
-import { WEB_FONT_PROVIDER_IDS } from '@open-pencil/core/text'
 import { FontPickerRoot, useI18n } from '@open-pencil/vue'
 import type { FontPickerUI } from '@open-pencil/vue'
 
 import {
   listFamilies,
-  loadFont,
+  loadWebFontPreview,
   localFontAccessState,
   requestLocalFontAccess
 } from '@/app/editor/fonts'
+import { createFontPreviewQueue } from '@/app/editor/fonts/previews'
 import { usePopoverUI } from '@/components/ui/overlay/popover'
 import { useSelectUI } from '@/components/ui/select/select'
 
+import FontPickerItem from './FontPickerItem.vue'
+
 const { panels } = useI18n()
-const { label: labelProp } = defineProps<{ label?: string }>()
+const { label: labelProp, placeholder } = defineProps<{ label?: string; placeholder?: string }>()
 const label = computed(() => labelProp ?? panels.value.fontFamily)
 const modelValue = defineModel<string>({ required: true })
 const emit = defineEmits<{ select: [family: string] }>()
@@ -25,7 +27,7 @@ const cls = usePopoverUI({
 })
 const selectCls = useSelectUI({
   trigger: 'w-full rounded px-2 py-1 text-xs',
-  item: 'w-full gap-2 px-3 py-2.5 text-sm leading-tight'
+  item: 'h-9 w-full gap-2 px-3 py-2 text-sm leading-tight'
 })
 
 const ui = computed<FontPickerUI>(() => ({
@@ -38,18 +40,11 @@ const ui = computed<FontPickerUI>(() => ({
   emptyAction: 'mt-2 rounded bg-accent px-2 py-1 text-xs font-medium text-white disabled:opacity-50'
 }))
 
-const previewFontLoads = new Set<string>()
+const requestPreview = createFontPreviewQueue(loadWebFontPreview)
 
 const localFontAccess = {
   state: localFontAccessState,
   load: requestLocalFontAccess
-}
-
-function loadPreviewFont(family: string, source: string) {
-  if (!WEB_FONT_PROVIDER_IDS.includes(source as (typeof WEB_FONT_PROVIDER_IDS)[number])) return
-  if (previewFontLoads.has(family)) return
-  previewFontLoads.add(family)
-  void loadFont(family)
 }
 </script>
 
@@ -73,28 +68,18 @@ function loadPreviewFont(family: string, source: string) {
         :aria-label="label"
         :class="selectCls.trigger"
       >
-        <span class="truncate">{{ modelValue }}</span>
+        <span class="truncate">{{ modelValue || placeholder }}</span>
         <icon-lucide-chevron-down class="size-3 shrink-0 text-muted" />
       </button>
     </template>
 
     <template #item="{ family, selected, source }">
-      <div
-        data-test-id="font-picker-item"
-        class="flex min-w-0 flex-1 items-center gap-2"
-        @pointerenter="loadPreviewFont(family, source)"
-      >
-        <icon-lucide-check v-if="selected" class="size-3 shrink-0 text-accent" />
-        <span v-else class="size-3 shrink-0" />
-        <span class="truncate" :style="{ fontFamily: `'${family}', sans-serif` }">{{
-          family
-        }}</span>
-        <span
-          class="font-sans ml-auto shrink-0 rounded bg-input px-1.5 py-0.5 text-[9px] uppercase text-muted"
-        >
-          {{ source }}
-        </span>
-      </div>
+      <FontPickerItem
+        :family="family"
+        :selected="selected"
+        :source="source"
+        :request-preview="requestPreview"
+      />
     </template>
   </FontPickerRoot>
 </template>

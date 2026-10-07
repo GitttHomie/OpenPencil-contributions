@@ -35,12 +35,14 @@ export function handleSelectDown(
     return
   }
 
-  if (editor.state.editingTextId && handleTextEditClick(cx, cy, e.shiftKey)) return
+  const deep = e.metaKey || e.ctrlKey
+  if (editor.state.editingTextId) {
+    if (!deep && handleTextEditClick(cx, cy, e.shiftKey)) return
+    editor.commitTextEdit()
+  }
 
-  if (editor.state.editingTextId) editor.commitTextEdit()
-
-  const labelHit = resolveLabelHit(cx, cy, fns)
-  if (!labelHit) {
+  const labelHit = deep ? null : resolveLabelHit(cx, cy, fns)
+  if (!labelHit && !deep) {
     if (tryStartRotation(cx, cy)) return
 
     const resizeDrag = tryStartResize(cx, cy, editor)
@@ -50,13 +52,18 @@ export function handleSelectDown(
     }
   }
 
-  const hit = labelHit ?? resolveHit(cx, cy, editor, fns)
+  const hit = deep ? fns.hitTestInScope(cx, cy, true) : resolveHit(cx, cy, editor, fns)
   if (!hit) {
     if (!editor.state.enteredContainerId) {
       editor.clearSelection()
       setDrag({ type: 'marquee', startX: cx, startY: cy })
     }
     return
+  }
+
+  if (deep) {
+    editor.state.enteredContainerId =
+      hit.parentId === editor.state.currentPageId ? null : hit.parentId
   }
 
   if (!editor.state.selectedIds.has(hit.id) && !e.shiftKey) {

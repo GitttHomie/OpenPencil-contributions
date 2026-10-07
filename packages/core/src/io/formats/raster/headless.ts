@@ -2,7 +2,7 @@ import type { CanvasKit } from 'canvaskit-wasm'
 
 import type { SceneGraph } from '@open-pencil/scene-graph'
 
-import { SkiaRenderer } from '#core/canvas'
+import { SkiaRenderer } from '#core/canvas/index'
 
 import { renderNodesToImage, renderThumbnail, type ExportFormat } from './render'
 

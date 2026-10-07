@@ -5,12 +5,12 @@ import Matrix from '@open-pencil/scene-graph/matrix'
 import { TRANSPARENT } from '#core/constants'
 import { resolvePasteTarget } from '#core/editor/clipboard/paste-target'
 import type { EditorContext } from '#core/editor/types'
-import { computeImageHash } from '#core/figma-api'
+import { computeImageHash } from '#core/figma-api/index'
 import {
   createSVGNodesFromImport,
   prepareSVGImport,
   type SVGImportData
-} from '#core/io/formats/svg'
+} from '#core/io/formats/svg/index'
 import { computeAllLayouts } from '#core/layout'
 
 const IMAGE_MAX_DIMENSION = 4096

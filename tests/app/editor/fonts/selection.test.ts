@@ -78,4 +78,31 @@ describe('Tauri font helpers', () => {
     await expect(loadFont('Missing Family', 'Regular')).resolves.toBe(fallback)
     expect(loadFontSpy).toHaveBeenCalledWith('Missing Family', 'Regular', '', undefined)
   })
+
+  test('online previews use cached or remote bytes without requesting local font access', async () => {
+    const bytes = new ArrayBuffer(4)
+    vi.spyOn(fontManager, 'loadedData').mockReturnValue(null)
+    const cached = vi.spyOn(fontManager, 'loadCachedFont').mockResolvedValue(null)
+    const remote = vi.spyOn(fontManager, 'loadRemoteFont').mockResolvedValue(bytes)
+    const local = vi.spyOn(fontManager, 'loadLocalFont')
+    const { loadWebFontPreview } = await import('@/app/editor/fonts')
+
+    expect(await loadWebFontPreview('Web Preview')).toBe(bytes)
+    expect(cached).toHaveBeenCalledWith('Web Preview', 'Regular', 'Web Preview')
+    expect(remote).toHaveBeenCalledWith('Web Preview', 'Regular', 'Web Preview')
+    expect(local).not.toHaveBeenCalled()
+  })
+
+  test('previews fetch missing family-name glyphs from a previously loaded subset', async () => {
+    const subset = new ArrayBuffer(4)
+    const complete = new ArrayBuffer(8)
+    vi.spyOn(fontManager, 'loadedData').mockReturnValue(subset)
+    vi.spyOn(fontManager, 'remoteStyleNeedsCoverage').mockReturnValue(true)
+    vi.spyOn(fontManager, 'loadCachedFont').mockResolvedValue(null)
+    const remote = vi.spyOn(fontManager, 'loadRemoteFont').mockResolvedValue(complete)
+    const { loadWebFontPreview } = await import('@/app/editor/fonts')
+
+    expect(await loadWebFontPreview('Preview')).toBe(complete)
+    expect(remote).toHaveBeenCalledWith('Preview', 'Regular', 'Preview')
+  })
 })

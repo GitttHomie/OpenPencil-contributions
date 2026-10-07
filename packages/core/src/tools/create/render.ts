@@ -8,7 +8,7 @@ import {
   type RenderPlacement,
   type RenderPlacementInput
 } from '#core/design-jsx/placement'
-import type { FigmaAPI } from '#core/figma-api'
+import type { FigmaAPI } from '#core/figma-api/index'
 import { designFeedback, type DesignFeedback } from '#core/tools/design-guidance/feedback'
 import { toolNumber } from '#core/tools/input'
 import { defineTool } from '#core/tools/schema'
@@ -54,7 +54,7 @@ export async function renderDesignTree(
   tree: TreeNode,
   args: RenderPlacementInput
 ) {
-  const { renderRoots } = await import('#core/design-jsx')
+  const { renderRoots } = await import('#core/design-jsx/index')
   return renderPlaced(figma, args, (placement) => renderRoots(figma.graph, tree, placement))
 }
 
@@ -62,9 +62,13 @@ export const render = defineTool({
   name: 'render',
 
   description:
-    'Render JSX to design nodes. Supports inline SVG paths, including open stroked paths: <svg viewBox="0 0 24 24" size={24}><path d="M2 12 L22 12" stroke="#000" fill="none" /></svg>. Use replace_id to replace a placeholder while preserving its position.',
+    'Create editable design nodes from JSX. Required argument: jsx (a string containing the complete JSX). Payload: {"jsx":"<Frame name=\\"Card\\" w={320} h={200} />"}. When using a tool dispatcher, put this entire payload in its arguments field. Use replace_id to replace a placeholder while preserving its position. Supports inline SVG, including open stroked paths.',
   execution: { kind: 'async', mutation: 'document' },
   input: v.object({
+    jsx: v.pipe(
+      v.string(),
+      v.description('Required JSX source string, for example <Frame name="Card" w={320} h={200} />')
+    ),
     replace_id: v.optional(
       v.pipe(
         v.string(),
@@ -83,11 +87,10 @@ export const render = defineTool({
       )
     ),
     x: v.optional(toolNumber(v.pipe(v.number(), v.description('X position of the root node')))),
-    y: v.optional(toolNumber(v.pipe(v.number(), v.description('Y position of the root node')))),
-    jsx: v.pipe(v.string(), v.description('JSX string to render'))
+    y: v.optional(toolNumber(v.pipe(v.number(), v.description('Y position of the root node'))))
   }),
   execute: async (figma, args) => {
-    const { renderJSX } = await import('#core/design-jsx')
+    const { renderJSX } = await import('#core/design-jsx/index')
 
     return renderPlaced(figma, args, (placement) => renderJSX(figma.graph, args.jsx, placement))
   }

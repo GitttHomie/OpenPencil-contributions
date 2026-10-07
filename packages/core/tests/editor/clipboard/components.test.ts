@@ -5,6 +5,41 @@ import { expectDefined } from '#core-tests/helpers/assert'
 import { buildOpenPencilClipboardHTML } from '@open-pencil/core/clipboard'
 import { createEditor } from '@open-pencil/core/editor'
 
+for (const foreign of [false, true]) {
+  test(`variant copy keeps its set name and choices (${foreign ? 'another' : 'same'} document)`, async () => {
+    const source = createEditor()
+    const target = foreign ? createEditor() : source
+    try {
+      const component = source.graph.createNode('COMPONENT', source.state.currentPageId, {
+        name: 'Button',
+        width: 100,
+        height: 40
+      })
+      source.addVariant(component.id)
+      const set = expectDefined(source.graph.getNode(component.parentId ?? ''))
+      const hover = expectDefined(source.graph.getNode(set.childIds[1]))
+      source.select([hover.id])
+      const payload = await source.prepareCopy()
+      target.clearSelection()
+      await target.pasteSnapshot(expectDefined(payload.snapshot))
+      const pasted = expectDefined(target.graph.getNode([...target.state.selectedIds][0]))
+      const definition = expectDefined(target.graph.getNode(pasted.componentId ?? ''))
+      const pastedSet = expectDefined(target.graph.getNode(definition.parentId ?? ''))
+      expect(pasted).toMatchObject({ type: 'INSTANCE', name: 'Button' })
+      expect(pastedSet).toMatchObject({ type: 'COMPONENT_SET', name: 'Button' })
+      expect(pastedSet.childIds).toHaveLength(2)
+      expect(pastedSet.id === set.id).toBe(!foreign)
+      target.undoAction()
+      expect(target.graph.getNode(pasted.id)).toBeUndefined()
+      target.redoAction()
+      expect(target.graph.getNode(pasted.id)?.name).toBe('Button')
+    } finally {
+      if (foreign) target.dispose()
+      source.dispose()
+    }
+  })
+}
+
 for (const delivery of ['snapshot', 'legacy-html'] as const) {
   test(`${delivery}: copying a definition pastes a linked instance outside itself, with one-step undo`, async () => {
     const editor = createEditor()

@@ -23,7 +23,7 @@ import {
   missingGlyphOccurrences,
   missingGlyphsByScript,
   type FontResolutionSettled
-} from '#core/text/resolver'
+} from '#core/text/resolver/index'
 
 import { resolveParagraphFontFamilies } from './font-families'
 import { pushParagraphStyle, type ParagraphPaintStyle, type ParagraphBuildOptions } from './paint'
@@ -252,6 +252,14 @@ export function buildTextPicture(r: TextRenderer, node: SceneNode): Uint8Array |
   const bytes = picture.serialize()
   picture.delete()
   return bytes ?? null
+}
+
+/** Offset that places laid-out text of `contentHeight` in the node box by vertical alignment. */
+export function textVerticalOffset(node: SceneNode, contentHeight: number): number {
+  const available = Math.max(0, node.height - contentHeight)
+  if (node.textAlignVertical === 'CENTER') return available / 2
+  if (node.textAlignVertical === 'BOTTOM') return available
+  return 0
 }
 
 function resolveParagraphLayoutWidth(node: ParagraphNode, maxWidth?: number): number {

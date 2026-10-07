@@ -4,6 +4,7 @@ import { computed } from 'vue'
 import { useI18n } from '@open-pencil/vue'
 
 import type { ChatRunPhase, ChatRunState } from '@/app/ai/chat/run-state'
+import AppSpinner from '@/components/ui/feedback/AppSpinner.vue'
 
 const {
   run,
@@ -57,10 +58,7 @@ const label = computed(() => {
     :data-state="phase"
     class="mx-3 mb-2 flex items-center gap-2 rounded-md border border-border bg-panel px-3 py-2 text-xs text-surface"
   >
-    <icon-lucide-loader-circle
-      v-if="phase === 'working'"
-      class="size-3.5 shrink-0 animate-spin text-accent motion-reduce:animate-none"
-    />
+    <AppSpinner v-if="phase === 'working'" class="size-3.5 shrink-0 text-accent" />
     <icon-lucide-circle-check
       v-else-if="phase === 'finished'"
       class="size-4 shrink-0 text-accent"

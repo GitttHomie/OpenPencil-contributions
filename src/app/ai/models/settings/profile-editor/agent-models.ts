@@ -19,7 +19,7 @@ export function useProfileAgentModels(draft: AIModelProfileDraft) {
   )
   const available = computed(() => Boolean(agent.value))
 
-  async function refresh() {
+  async function refresh(fresh = true) {
     const version = ++generation
     operation?.abort()
     operation = new AbortController()
@@ -29,7 +29,15 @@ export function useProfileAgentModels(draft: AIModelProfileDraft) {
     loading.value = Boolean(selected)
     if (!selected) return
     try {
-      const result = await load(selected.definition.id, operation.signal)
+      const result = await load(
+        selected.definition.id,
+        operation.signal,
+        draft.modelID,
+        draft.acpLaunch,
+        fresh,
+        draft.acpIntegration,
+        draft.acpOptions
+      )
       if (version === generation) catalog.value = result
     } catch {
       if (version === generation) failed.value = true
@@ -56,10 +64,32 @@ export function useProfileAgentModels(draft: AIModelProfileDraft) {
     }
     draft.modelID = id
     draft.customModelID = ''
+    draft.acpThinking = undefined
+    draft.acpOptions = undefined
   }
-  watch([() => draft.providerID, () => agent.value?.definition.id], () => void refresh(), {
-    immediate: true
-  })
+  watch(
+    [
+      () => draft.providerID,
+      () => draft.modelID,
+      () => agent.value?.definition.id,
+      () => draft.acpOptions
+    ],
+    () => void refresh(false),
+    {
+      immediate: true
+    }
+  )
+  watch(
+    () => [draft.acpLaunch, draft.acpIntegration],
+    () => {
+      generation++
+      operation?.abort()
+      catalog.value = null
+      loading.value = false
+      failed.value = false
+    },
+    { deep: true }
+  )
   tryOnScopeDispose(() => {
     generation++
     operation?.abort()

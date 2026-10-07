@@ -17,7 +17,7 @@ import {
   vectorHandleId,
   vectorHandleParts,
   vectorNetworkToPath
-} from '#core/vector'
+} from '#core/vector/index'
 
 import type { SkiaRenderer, RenderOverlays } from './renderer'
 

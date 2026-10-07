@@ -1,6 +1,7 @@
 import { tryOnScopeDispose } from '@vueuse/core'
-import { computed, ref, type Ref } from 'vue'
+import { computed, ref, toRaw, watch, type Ref } from 'vue'
 
+import { useAgentModelVerifier } from '@/app/ai/agents/verification'
 import {
   testProviderConnection,
   type ProviderConnectionTestFailureReason
@@ -19,6 +20,8 @@ interface ConnectionOptions {
 }
 
 export function useProfileConnection({ draft, keyInput }: ConnectionOptions) {
+  const verifyAgent = useAgentModelVerifier()
+  let operation: AbortController | null = null
   const keyStatus = ref<CredentialStatus>('missing')
   const connectionTestStatus = ref<'idle' | 'testing' | 'success' | 'error'>('idle')
   const connectionTestReason = ref<ProviderConnectionTestFailureReason | null>(null)
@@ -31,6 +34,7 @@ export function useProfileConnection({ draft, keyInput }: ConnectionOptions) {
   tryOnScopeDispose(() => {
     disposed = true
     version++
+    operation?.abort()
   })
   function current(request: number) {
     return !disposed && request === version
@@ -38,6 +42,7 @@ export function useProfileConnection({ draft, keyInput }: ConnectionOptions) {
 
   function resetConnectionTest(): void {
     version++
+    operation?.abort()
     connectionTestStatus.value = 'idle'
     connectionTestReason.value = null
   }
@@ -60,12 +65,22 @@ export function useProfileConnection({ draft, keyInput }: ConnectionOptions) {
   }
 
   async function testConnection(): Promise<void> {
+    operation?.abort()
+    operation = new AbortController()
+    const signal = operation.signal
     const request = ++version
-    const target = { ...draft }
+    const target = structuredClone(toRaw(draft))
     const replacement = keyInput.value.trim()
     connectionTestStatus.value = 'testing'
     connectionTestReason.value = null
     try {
+      if (target.providerID.startsWith('acp:')) {
+        const result = await verifyAgent(target, signal)
+        if (!current(request)) return
+        connectionTestStatus.value = result.ok ? 'success' : 'error'
+        connectionTestReason.value = result.ok ? null : result.reason
+        return
+      }
       const connection = findModelConnectionForDraft(target)
       const existingKey =
         !replacement && !keyCleared.value && connection
@@ -89,6 +104,23 @@ export function useProfileConnection({ draft, keyInput }: ConnectionOptions) {
       connectionTestReason.value = 'unknown'
     }
   }
+
+  watch(
+    () => [
+      draft.providerID,
+      draft.modelID,
+      draft.customModelID,
+      draft.customBaseURL,
+      draft.customAPIType,
+      draft.acpLaunch,
+      draft.acpIntegration,
+      draft.acpOptions,
+      draft.acpThinking,
+      keyInput.value
+    ],
+    resetConnectionTest,
+    { deep: true, flush: 'sync' }
+  )
 
   return {
     keyCleared,

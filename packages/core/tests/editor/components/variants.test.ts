@@ -38,6 +38,97 @@ function setupVariants() {
 }
 
 describe('variant authoring', () => {
+  for (const direction of ['HORIZONTAL', 'VERTICAL'] as const) {
+    for (const sizing of ['HUG', 'FIXED'] as const) {
+      test(`reflows ${direction} ${sizing} parents when variants grow, shrink, undo and redo`, async () => {
+        const { editor, primarySmall, primaryLarge } = setupVariants()
+        editor.graph.updateNode(primarySmall.id, { width: 80, height: 32 })
+        editor.graph.updateNode(primaryLarge.id, { width: 160, height: 64 })
+        const outer = editor.graph.createNode('FRAME', editor.state.currentPageId, {
+          layoutMode: direction,
+          primaryAxisSizing: 'HUG',
+          counterAxisSizing: 'HUG',
+          paddingLeft: 5,
+          paddingRight: 5,
+          paddingTop: 5,
+          paddingBottom: 5
+        })
+        const parent = editor.graph.createNode('FRAME', outer.id, {
+          width: 400,
+          height: 300,
+          layoutMode: direction,
+          primaryAxisSizing: sizing,
+          counterAxisSizing: sizing,
+          itemSpacing: 12,
+          paddingLeft: 8,
+          paddingRight: 8,
+          paddingTop: 8,
+          paddingBottom: 8
+        })
+        const first = editor.graph.createInstance(primarySmall.id, parent.id)
+        const second = editor.graph.createInstance(primarySmall.id, parent.id)
+        if (!first || !second) throw new Error('Expected instances')
+        // Settle component creation before the edit so its scheduled layout cannot mask a bug.
+        await Promise.resolve()
+        editor.runLayoutForNode(parent.id)
+
+        function expectLayout(large: boolean) {
+          const width = large ? 160 : 80
+          const height = large ? 64 : 32
+          expect(first).toMatchObject({ width, height, x: 8, y: 8 })
+          expect(second).toMatchObject({
+            x: direction === 'HORIZONTAL' ? 8 + width + 12 : 8,
+            y: direction === 'VERTICAL' ? 8 + height + 12 : 8
+          })
+          const parentWidth =
+            sizing === 'FIXED' ? 400 : 16 + width + (direction === 'HORIZONTAL' ? 92 : 0)
+          const parentHeight =
+            sizing === 'FIXED' ? 300 : 16 + height + (direction === 'VERTICAL' ? 44 : 0)
+          expect(parent).toMatchObject({ width: parentWidth, height: parentHeight })
+          expect(outer).toMatchObject({ width: parentWidth + 10, height: parentHeight + 10 })
+        }
+
+        expectLayout(false)
+        editor.setInstanceComponentProperty(first.id, 'variant:size', 'Large')
+        expectLayout(true)
+        await Promise.resolve()
+        expectLayout(true)
+        editor.undo.undo()
+        expectLayout(false)
+        editor.undo.redo()
+        expectLayout(true)
+        editor.setInstanceComponentProperty(first.id, 'variant:size', 'Small')
+        expectLayout(false)
+      })
+    }
+  }
+
+  test('reflows around an explicitly resized instance without replacing its width override', async () => {
+    const { editor, primarySmall, primaryLarge } = setupVariants()
+    editor.graph.updateNode(primarySmall.id, { width: 80, height: 32 })
+    editor.graph.updateNode(primaryLarge.id, { width: 160, height: 64 })
+    const parent = editor.graph.createNode('FRAME', editor.state.currentPageId, {
+      layoutMode: 'HORIZONTAL',
+      primaryAxisSizing: 'HUG',
+      counterAxisSizing: 'HUG',
+      itemSpacing: 12
+    })
+    const first = editor.graph.createInstance(primarySmall.id, parent.id)
+    const second = editor.graph.createInstance(primarySmall.id, parent.id)
+    if (!first || !second) throw new Error('Expected instances')
+    await Promise.resolve()
+    editor.updateNodeWithUndo(first.id, { width: 120 })
+    editor.setInstanceComponentProperty(first.id, 'variant:size', 'Large')
+    expect(first).toMatchObject({ width: 120, height: 64 })
+    expect(second.x).toBe(132)
+    expect(parent).toMatchObject({ width: 212, height: 64 })
+    editor.undo.undo()
+    expect(first).toMatchObject({ width: 120, height: 32 })
+    expect(parent).toMatchObject({ width: 212, height: 32 })
+    editor.undo.redo()
+    expect(parent).toMatchObject({ width: 212, height: 64 })
+  })
+
   test('keeps sparse multidimensional transitions exact and reports unavailable combinations', () => {
     const { editor, primarySmall, primaryLarge } = setupVariants()
     const instance = editor.graph.createInstance(primarySmall.id, editor.state.currentPageId)
@@ -200,7 +291,7 @@ describe('variant authoring', () => {
 
     const duplicateId = editor.duplicateVariant(primarySmall.id)
     expect(duplicateId).toBeString()
-    expect(editor.getComponentSetVariantConflicts(componentSet.id)).toHaveLength(1)
+    expect(editor.getComponentSetVariantConflicts(componentSet.id)).toHaveLength(0)
     editor.undo.undo()
     expect(duplicateId ? editor.graph.getNode(duplicateId) : undefined).toBeUndefined()
     editor.undo.redo()

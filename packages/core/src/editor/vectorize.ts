@@ -7,7 +7,7 @@ import {
   createVectorFrameChildren,
   resolveVectorFramePlacement,
   type SVGVectorizeResult
-} from '#core/vector/vectorize'
+} from '#core/vector/vectorize/index'
 
 function hasRoundedCorners(node: SceneNode): boolean {
   return node.independentCorners

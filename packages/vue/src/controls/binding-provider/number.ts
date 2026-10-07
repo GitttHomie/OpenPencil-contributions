@@ -4,6 +4,10 @@ import type { VariableCollection } from '@open-pencil/scene-graph'
 
 import { useOpenPencilBindingProvider } from '#vue/controls/binding-provider/open-pencil'
 import type { BindingTarget } from '#vue/controls/binding-provider/types'
+import {
+  numberBindingTarget,
+  prepareNumberTargets
+} from '#vue/controls/number-variable-binding/groups'
 
 import { prepareModeEdit } from './mode-edit'
 import { resolveEffectiveBindingValue } from './resolution'
@@ -53,12 +57,17 @@ function resolveNumber(editor: Editor, id: string, target?: BindingTarget) {
   const value = target
     ? resolveEffectiveBindingValue(editor, id, target)
     : editor.resolveNumberVariable(id)
-  return typeof value === 'number' ? value : undefined
+  if (typeof value !== 'number') return undefined
+  return (
+    value * (target ? (editor.getNode(target.nodeId)?.variableBindingScales[target.path] ?? 1) : 1)
+  )
 }
 
 export function useNumberBindingProvider() {
   return useOpenPencilBindingProvider<number>({
     type: 'FLOAT',
+    bindingTarget: numberBindingTarget,
+    prepareTargets: prepareNumberTargets,
     resolve: resolveNumber,
     prepareEdit: (editor, id, target) =>
       prepareModeEdit(editor, id, target, () => resolveNumber(editor, id, target)),

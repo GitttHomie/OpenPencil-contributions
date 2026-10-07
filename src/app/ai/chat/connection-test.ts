@@ -1,6 +1,12 @@
 import { generateText } from 'ai'
 
-import { isInsufficientCreditError, providerErrorStatus } from '@/app/ai/chat/failure'
+import { ACPConfigurationError } from '@/app/ai/acp/configuration/session'
+import { ACPLaunchSettingsError } from '@/app/ai/acp/launch'
+import {
+  isInsufficientCreditError,
+  isModelNotFoundError,
+  providerErrorStatus
+} from '@/app/ai/chat/failure'
 import { createLanguageModel, resolveLanguageModelID, type ModelConfig } from '@/app/ai/chat/model'
 import { isTauri } from '@/app/tauri/env'
 
@@ -20,6 +26,8 @@ export type ProviderConnectionTestFailureReason =
   | 'browser-network'
   | 'network'
   | 'unknown'
+  | 'invalid-launch'
+  | 'invalid-options'
 
 function isCompatibleProvider(providerID: ModelConfig['providerID']): boolean {
   return providerID === 'openai-compatible' || providerID === 'anthropic-compatible'
@@ -52,7 +60,7 @@ function classifyStatus(
   if (status === 401 || status === 403) return 'auth'
   if (status === 404) return 'model-not-found'
   if (status !== 400 && status !== 405) return null
-  if (text.includes('model')) return 'model-not-found'
+  if (isModelNotFoundError(text)) return 'model-not-found'
   if (text.includes('responses') || text.includes('chat') || text.includes('endpoint')) {
     return 'api-type'
   }
@@ -67,7 +75,7 @@ function classifyMessage(text: string): ProviderConnectionTestFailureReason | nu
   ) {
     return 'auth'
   }
-  if (text.includes('model') && (text.includes('not found') || text.includes('does not exist'))) {
+  if (isModelNotFoundError(text)) {
     return 'model-not-found'
   }
   if (
@@ -83,7 +91,9 @@ function classifyMessage(text: string): ProviderConnectionTestFailureReason | nu
   return null
 }
 
-function classifyError(error: unknown): ProviderConnectionTestFailureReason {
+export function classifyConnectionError(error: unknown): ProviderConnectionTestFailureReason {
+  if (error instanceof ACPConfigurationError) return 'invalid-options'
+  if (error instanceof ACPLaunchSettingsError) return 'invalid-launch'
   if (isInsufficientCreditError(error)) return 'insufficient-credit'
   const text = errorText(error).toLowerCase()
   return classifyStatus(providerErrorStatus(error), text) ?? classifyMessage(text) ?? 'unknown'
@@ -100,10 +110,11 @@ export async function testProviderConnection(
       model: createLanguageModel(config),
       prompt: 'Reply with OK.',
       maxOutputTokens: 1,
+      maxRetries: 0,
       abortSignal: AbortSignal.timeout(15_000)
     })
     return { ok: true }
   } catch (error) {
-    return { ok: false, reason: classifyError(error) }
+    return { ok: false, reason: classifyConnectionError(error) }
   }
 }

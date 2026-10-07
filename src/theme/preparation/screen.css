@@ -1,0 +1,32 @@
+:root {
+  --loader-bg: #2a2a2a;
+  --loader-fg: 255, 255, 255;
+  --loader-artwork-size: 96px;
+  --loader-progress-width: 160px;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --loader-bg: #f3f4f6;
+    --loader-fg: 0, 0, 0;
+  }
+}
+
+html[data-theme='dark'] {
+  --loader-bg: #2a2a2a;
+  --loader-fg: 255, 255, 255;
+}
+
+html[data-theme='light'] {
+  --loader-bg: #f3f4f6;
+  --loader-fg: 0, 0, 0;
+}
+
+@keyframes slide {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(350%);
+  }
+}

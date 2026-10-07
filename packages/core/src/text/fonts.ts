@@ -53,8 +53,11 @@ export class FontManager {
   private blockedNodeIds = new Set<string>()
   private fontProvider: TypefaceFontProvider | null = null
   private fontProviders = new Set<TypefaceFontProvider>()
+  private providerCanvasKits = new WeakMap<TypefaceFontProvider, CanvasKit>()
   private registrationGeneration = 0
   private providerRegistrations = new WeakMap<TypefaceFontProvider, Map<string, Set<ArrayBuffer>>>()
+  private renderRegistrations = new Map<string, Map<ArrayBuffer, string>>()
+  private nextRenderFamilyId = 0
   private localFonts: FontInfo[] | null = null
   private localFontLoads = new Map<string, Promise<ArrayBuffer | null>>()
   private localFontAccessState: LocalFontAccessState = IS_BROWSER ? 'prompt' : 'unsupported'
@@ -68,17 +71,23 @@ export class FontManager {
   private arabicFallbackFamilies: string[] = []
   private arabicFallbackPromise: Promise<string[]> | null = null
 
-  attachProvider(_canvasKit: CanvasKit, provider: TypefaceFontProvider): void {
+  attachProvider(canvasKit: CanvasKit, provider: TypefaceFontProvider): void {
     this.fontProviders.add(provider)
+    this.providerCanvasKits.set(provider, canvasKit)
     this.fontProvider = provider
     this.providerRegistrations.set(provider, new Map())
     this.registrationGeneration++
     for (const [cacheKey, data] of this.loadedFamilies) {
       const separator = cacheKey.indexOf('|')
       const family = cacheKey.slice(0, separator)
-      this.registerFontInProvider(provider, family, data)
+      const style = cacheKey.slice(separator + 1)
+      this.registerFontInProvider(provider, this.registrationFamily(family, style, data), data)
       for (const supplemental of this.supplementalFamilyData.get(cacheKey) ?? []) {
-        this.registerFontInProvider(provider, family, supplemental)
+        this.registerFontInProvider(
+          provider,
+          this.registrationFamily(family, style, supplemental),
+          supplemental
+        )
       }
     }
   }
@@ -99,6 +108,15 @@ export class FontManager {
 
   provider(): TypefaceFontProvider | null {
     return this.fontProvider
+  }
+
+  /** The latest attached provider made by `canvasKit`; another build's provider cannot shape with it. */
+  providerFor(canvasKit: CanvasKit): TypefaceFontProvider | null {
+    return (
+      Array.from(this.fontProviders)
+        .reverse()
+        .find((provider) => this.providerCanvasKits.get(provider) === canvasKit) ?? null
+    )
   }
 
   generation(): number {
@@ -264,7 +282,7 @@ export class FontManager {
     const cacheKey = `${family}|${style}`
     const loaded = this.loadedFamilies.get(cacheKey)
     if (loaded) {
-      this.registerFontInCanvasKit(family, loaded)
+      this.registerFontInCanvasKit(this.registrationFamily(family, style, loaded), loaded)
       return loaded
     }
 
@@ -348,7 +366,7 @@ export class FontManager {
     signal?.throwIfAborted()
     const loaded = this.loadedData(family, style)
     if (loaded) {
-      this.registerFontInCanvasKit(family, loaded)
+      this.registerFontInCanvasKit(this.registrationFamily(family, style, loaded), loaded)
       const remoteCoverage = this.remoteCoverage.get(`${family}|${style}`)
       const missingRemoteCoverage = Boolean(
         characters &&
@@ -419,11 +437,40 @@ export class FontManager {
     return byStyle.get(style) ?? null
   }
 
-  renderFamily(family: string, _style: string): string {
-    // CanvasKit can shape metrics but paint no glyphs for some CJK/Arabic faces registered under a
-    // synthetic alias. Keep every shard under the font's source family; character-aware remote
-    // requests already fetch cumulative coverage before replacing the primary buffer.
-    return family
+  renderFamily(family: string, style: string): string {
+    const data = this.loadedData(family, style)
+    return data ? this.registrationFamily(family, style, data) : family
+  }
+
+  renderFamilies(family: string, style: string): string[] {
+    const supplemental = this.supplementalFamilyData.get(`${family}|${style}`) ?? []
+    return [
+      ...new Set([
+        this.renderFamily(family, style),
+        ...supplemental.toReversed().map((data) => this.registrationFamily(family, style, data)),
+        family
+      ])
+    ]
+  }
+
+  private registrationFamily(family: string, style: string, data: ArrayBuffer): string {
+    const key = `${family}|${style}`
+    let registrations = this.renderRegistrations.get(key)
+    if (!registrations) {
+      registrations = new Map()
+      this.renderRegistrations.set(key, registrations)
+    }
+    let alias = registrations.get(data)
+    if (!alias) {
+      // TypefaceFontProvider keeps the first matching face for a family/style. Give later
+      // subsets separate identities so shaping cannot reuse an older, incomplete cmap.
+      alias =
+        registrations.size === 0
+          ? family
+          : `OpenPencil font ${++this.nextRenderFamilyId}: ${family}`
+      registrations.set(data, alias)
+    }
+    return alias
   }
 
   collectFontKeys(graph: SceneGraph, nodeIds: string[]): Array<[string, string]> {
@@ -621,7 +668,7 @@ export class FontManager {
     if (supplemental.includes(buffer)) return
     supplemental.push(buffer)
     this.supplementalFamilyData.set(key, supplemental)
-    this.registerFontInCanvasKit(family, buffer)
+    this.registerFontInCanvasKit(this.registrationFamily(family, style, buffer), buffer)
     this.registerFontInBrowser(family, style, buffer)
   }
 
@@ -635,13 +682,14 @@ export class FontManager {
     const existing = this.loadedFamilies.get(key)
     if (existing === buffer) {
       if (source) this.loadedFamilySources.set(key, source)
-      this.registerFontInCanvasKit(family, buffer)
+      this.registerFontInCanvasKit(this.registrationFamily(family, style, buffer), buffer)
       return buffer
     }
     if (existing) this.registerSupplemental(family, style, existing)
+    const renderFamily = this.registrationFamily(family, style, buffer)
     this.loadedFamilies.set(key, buffer)
     if (source) this.loadedFamilySources.set(key, source)
-    this.registerFontInCanvasKit(family, buffer)
+    this.registerFontInCanvasKit(renderFamily, buffer)
     this.registerFontInBrowser(family, style, buffer)
     return buffer
   }

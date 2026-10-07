@@ -1,12 +1,12 @@
 import { expect, test } from 'bun:test'
 
+import { readFixtureArrayBuffer } from '#core-tests/helpers/fig/fixtures'
+
 import { createEditor } from '@open-pencil/core/editor'
 import { exportFigFile } from '@open-pencil/core/io'
 import { initCodec } from '@open-pencil/core/kiwi'
 import { materializeDocument, parseFigBuffer } from '@open-pencil/fig'
 import type { SceneNode } from '@open-pencil/scene-graph'
-
-import { readFixtureArrayBuffer } from '#core-tests/helpers/fig/fixtures'
 
 test('Gold document exposes effective Boolean assignments and supports editor undo/redo', async () => {
   const parsed = parseFigBuffer(readFixtureArrayBuffer('gold-preview.fig'))
@@ -52,6 +52,9 @@ test('Gold document exposes effective Boolean assignments and supports editor un
   expect(avatar.visible).toBe(true)
   editor.undo.redo()
   expect(avatar.visible).toBe(false)
+  // Hiding the avatar recomputes Hug layout; save the edited dimensions.
+  expect(originalInput.width).toBeLessThan(originalInputSize.width)
+  const editedInputSize = { width: originalInput.width, height: originalInput.height }
   graph.updateNode(inputId, { name: 'Gold edited input' })
   await initCodec()
   const bytes = await exportFigFile(graph)
@@ -95,7 +98,9 @@ test('Gold document exposes effective Boolean assignments and supports editor un
       return avatar?.componentId ? restored.getNode(avatar.componentId)?.name : undefined
     })
   ).toEqual(originalComponents)
-  expect({ width: input.width, height: input.height }).toEqual(originalInputSize)
+  // Layout and .fig dimensions round through float32; one ULP must not fail this round-trip.
+  expect(input.width).toBeCloseTo(editedInputSize.width, 4)
+  expect(input.height).toBeCloseTo(editedInputSize.height, 4)
   expect(
     restoredContents.map((node) => {
       const avatar = restored

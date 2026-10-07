@@ -2,19 +2,22 @@ import * as v from 'valibot'
 
 import type { ACPAgentDef } from '@open-pencil/core/constants'
 
+import { HARNESS_INSTALL_TARGET } from '@/app/ai/harness/companion'
 import { MCP_INSTALL_TARGET } from '@/app/automation/mcp/failure'
 import { resolvePlatformCommand } from '@/app/tauri/command'
 
-const lookupSchema = v.object({
+export const agentLookupSchema = v.object({
   executables: v.record(v.string(), v.nullable(v.string())),
+  /** Versions of OpenPencil's own companions, keyed by package name. */
+  versions: v.optional(v.record(v.string(), v.nullable(v.string())), {}),
   searchPath: v.string()
 })
 
-export type AgentLookup = v.InferOutput<typeof lookupSchema>
+export type AgentLookup = v.InferOutput<typeof agentLookupSchema>
 
 export async function lookupAgents(): Promise<AgentLookup> {
   const { invoke } = await import('@tauri-apps/api/core')
-  return v.parse(lookupSchema, await invoke<unknown>('agent_lookup'))
+  return v.parse(agentLookupSchema, await invoke<unknown>('agent_lookup'))
 }
 
 const INSTALL_TIMEOUT_MS = 120_000
@@ -28,15 +31,19 @@ export async function installCanvasBridge(searchPath: string): Promise<void> {
   await installPackage(MCP_INSTALL_TARGET, searchPath)
 }
 
+export async function installHarnessCompanion(searchPath: string): Promise<void> {
+  await installPackage(HARNESS_INSTALL_TARGET, searchPath)
+}
+
+/** The npm arguments that install a package globally; the desktop shell scope pins them. */
+export function npmInstallArgs(packageName: string): string[] {
+  // These are public packages; a user's private project registry may not mirror them.
+  return ['install', '--global', packageName, '--registry=https://registry.npmjs.org']
+}
+
 async function installPackage(packageName: string, searchPath: string): Promise<void> {
   const { Command } = await import('@tauri-apps/plugin-shell')
-  // These are public packages; a user's private project registry may not mirror them.
-  const resolved = resolvePlatformCommand('npm', [
-    'install',
-    '--global',
-    packageName,
-    '--registry=https://registry.npmjs.org'
-  ])
+  const resolved = resolvePlatformCommand('npm', npmInstallArgs(packageName))
   const command = Command.create(resolved.command, resolved.args, {
     env: { PATH: searchPath }
   })

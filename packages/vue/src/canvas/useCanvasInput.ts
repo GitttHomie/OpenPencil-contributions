@@ -23,6 +23,7 @@ import { cancelMove, handleMoveMove, handleMoveUp } from '#vue/shared/input/move
 import { setupPanZoom } from '#vue/shared/input/pan-zoom'
 import { applyResize, commitResizePreview } from '#vue/shared/input/resize'
 import { updateHoverCursor } from '#vue/shared/input/select'
+import { createSelectionClick } from '#vue/shared/input/select/click'
 import { useSpaceHeld } from '#vue/shared/input/space-key'
 import type { DragState } from '#vue/shared/input/types'
 import { handleNodeEditMove } from '#vue/shared/input/vector'
@@ -47,6 +48,7 @@ export function useCanvasInput(
   const drag = ref<DragState | null>(null)
   const canvasLabelEdit = createCanvasLabelEdit(editor)
   const cursorOverride = ref<string | null>(null)
+  /** Whether the primary button is held on a preview control, such as a slider thumb. */
   const autoLayoutPaddingEdit = ref<{
     nodeId: string
     side: 'top' | 'right' | 'bottom' | 'left'
@@ -69,6 +71,8 @@ export function useCanvasInput(
     hitTestComponentLabel,
     hitTestFrameTitle
   )
+  const selectionClick = createSelectionClick(editor, hitFns)
+  let drilledOnClick = false
 
   function canMeasure() {
     return (
@@ -218,6 +222,8 @@ export function useCanvasInput(
   }
 
   function onDblClick(e: MouseEvent) {
+    if (editor.state.play) return
+    if (drilledOnClick) return
     if (startAutoLayoutPaddingEdit(e)) return
     onTextDblClick(e)
   }
@@ -225,6 +231,11 @@ export function useCanvasInput(
   function onMouseDown(e: MouseEvent) {
     onActivate?.()
     if (!isEnabled()) return
+    // Preview: controls live in islands above the canvas; the canvas itself only pans.
+    if (editor.state.play && e.button === 0 && editor.state.activeTool !== 'HAND') {
+      e.preventDefault()
+      return
+    }
     editor.setMeasurementMode('off')
     const paddingEdit = autoLayoutPaddingEdit.value
     if (paddingEdit) {
@@ -246,6 +257,8 @@ export function useCanvasInput(
     const selectedIdsBeforeMouseDown = new Set(editor.state.selectedIds)
     const clickCount = recordClick(sx, sy)
     if (clickCount === 1) selectedIdsBeforeClickSequence.value = selectedIdsBeforeMouseDown
+    drilledOnClick = false
+    selectionClick.prepare(e, cx, cy)
     handleToolMouseDown({
       event: e,
       cx,
@@ -272,6 +285,8 @@ export function useCanvasInput(
       onCursorMove(coords.cx, coords.cy)
     }
 
+    if (editor.state.play && !drag.value) return
+
     if (!drag.value) {
       const { cx, cy } = coords
       updatePenHover(cx, cy, editor)
@@ -287,7 +302,13 @@ export function useCanvasInput(
       const guideCursor = guideInput.updateHover(sx, sy)
       cursorOverride.value =
         guideCursor ??
-        updateHoverCursor(cx, cy, editor, hitFns, editor.state.measurementMode === 'deep')
+        updateHoverCursor(
+          cx,
+          cy,
+          editor,
+          hitFns,
+          e.metaKey || e.ctrlKey || editor.state.measurementMode === 'deep'
+        )
       editor.setAutoLayoutHover(
         editor.state.measurementMode === 'off' ? resolveAutoLayoutHover(cx, cy, editor) : null
       )
@@ -367,6 +388,7 @@ export function useCanvasInput(
     } else if (d.type === 'move') {
       drag.value = null
       handleMoveUp(d, editor)
+      drilledOnClick = selectionClick.finish(d)
     } else if (d.type === 'text-select') {
       drag.value = null
       return
@@ -515,22 +537,21 @@ export function useCanvasInput(
     editor.setMeasurementMode('off')
     cancelPointerInteraction()
   })
-  const stopPreviewListeners = (
-    ['selection:changed', 'page:changed', 'graph:replaced'] as const
-  ).map((event) =>
-    editor.onEditorEvent(event, () => {
-      if (
-        drag.value?.type === 'draw' ||
-        drag.value?.type === 'rotate' ||
-        drag.value?.type === 'move'
-      )
-        cancelPointerInteraction()
-    })
+  const stopPlayListeners = (['selection:changed', 'page:changed', 'graph:replaced'] as const).map(
+    (event) =>
+      editor.onEditorEvent(event, () => {
+        if (
+          drag.value?.type === 'draw' ||
+          drag.value?.type === 'rotate' ||
+          drag.value?.type === 'move'
+        )
+          cancelPointerInteraction()
+      })
   )
   onScopeDispose(() => {
     stopRotationListener()
     stopToolListener()
-    for (const stop of stopPreviewListeners) stop()
+    for (const stop of stopPlayListeners) stop()
     cancelPointerInteraction()
   })
 

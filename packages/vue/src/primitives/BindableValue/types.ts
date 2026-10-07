@@ -51,6 +51,9 @@ export interface BindableValueActions<V = unknown> {
 
 export interface BindableValueSlotProps<V = unknown> {
   state: BindingState
+  mixedBindings: boolean
+  mixedValues: boolean
+  unresolved: boolean
   /** Stored identity remains available when the variable has been deleted. */
   bindingId: string | undefined
   variable: Variable | undefined

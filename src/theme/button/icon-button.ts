@@ -1,5 +1,5 @@
 export default {
-  base: 'flex cursor-pointer items-center justify-center smooth-corners bg-transparent text-muted outline-none hover:bg-hover hover:text-surface focus-visible:border-panel-focus',
+  base: 'flex shrink-0 cursor-pointer items-center justify-center smooth-corners bg-transparent text-muted outline-none hover:bg-hover hover:text-surface focus-visible:border-panel-focus',
   variants: {
     size: {
       xs: 'size-6 rounded border border-transparent text-sm leading-none',

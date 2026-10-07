@@ -30,3 +30,16 @@ export default meta
 type Story = StoryObj<typeof meta>
 
 export const ReactiveLabels: Story = {}
+
+export const SingleOption: Story = {
+  render: () => ({
+    components: { AppSelect },
+    setup() {
+      return { value: ref('default'), options: [{ value: 'default', label: 'Default' }] }
+    },
+    template: `
+      <div class="w-64">
+        <AppSelect v-model="value" :options="options" label="Single option" />
+      </div>`
+  })
+}

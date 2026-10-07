@@ -11,7 +11,7 @@ import {
 } from 'reka-ui'
 
 import type { LayoutSizing } from '@open-pencil/scene-graph'
-import { useI18n, useLayoutControlsContext, useRetainedPopup } from '@open-pencil/vue'
+import { useI18n, useSelectionLayout, useRetainedPopup } from '@open-pencil/vue'
 import type { SizeLimitProp } from '@open-pencil/vue'
 
 import type { SizeAxisFieldProps } from '@/components/properties/layout/size/types'
@@ -23,13 +23,22 @@ type SizeSelectValue = LayoutSizing | `add-${SizeLimitProp}` | `remove-${SizeLim
 
 const { axis, icon, label } = defineProps<SizeAxisFieldProps>()
 
-const ctx = useLayoutControlsContext()
+const selection = useSelectionLayout()
+const { nodes, merged, setSizeLimit } = selection
 const { open: popupOpen, portalActive } = useRetainedPopup()
 const { panels } = useI18n()
 const selectUI = useSelectUI({ item: 'rounded py-1.5 pr-2 pl-6 text-xs' })
 
-const sizing = () => (axis === 'width' ? ctx.widthSizing : ctx.heightSizing)
-const sizingOptions = () => (axis === 'width' ? ctx.widthSizingOptions : ctx.heightSizingOptions)
+const sizing = () => selection.sizing(axis)
+const sizingOptions = () =>
+  selection.sizingOptions.value.map(({ value }) => ({
+    value,
+    label: {
+      FIXED: panels.value.sizingFixed,
+      HUG: panels.value.sizingHug,
+      FILL: panels.value.sizingFill
+    }[value]
+  }))
 const sizingLabel = () => {
   if (sizing() === 'HUG') return panels.value.sizingHugShort
   if (sizing() === 'FILL') return panels.value.sizingFillShort
@@ -64,13 +73,12 @@ const limitItems = () =>
 
 function handleSelect(value: SizeSelectValue) {
   if (value === 'FIXED' || value === 'HUG' || value === 'FILL') {
-    ctx.setAxisSizing(axis, value)
+    selection.setSizing(axis, value)
     return
   }
 
   const [action, prop] = value.split('-') as ['add' | 'remove', SizeLimitProp]
-  if (action === 'add') ctx.addSizeLimit(prop)
-  else ctx.removeSizeLimit(prop)
+  setSizeLimit(prop, action)
 }
 </script>
 
@@ -79,18 +87,17 @@ function handleSelect(value: SizeSelectValue) {
     <VariableNumberField
       :icon="icon"
       :aria-label="label"
-      :model-value="ctx.node[axis]"
+      :model-value="merged(axis)"
       :min="0"
-      :node-id="ctx.node.id"
+      :node-id="nodes[0]?.id ?? ''"
+      :node-ids="nodes.map((node) => node.id)"
+      edit-properties
       :binding-path="axis"
-      @update:model-value="ctx.updateAxisSize(axis, $event)"
-      @commit="(value: number, previous: number) => ctx.commitAxisSize(axis, value, previous)"
-      @cancel="ctx.cancelPreview"
     >
       <template #after-variable>
         <SelectRoot
           v-model:open="popupOpen"
-          :model-value="sizing()"
+          :model-value="typeof sizing() === 'symbol' ? '' : String(sizing())"
           @update:model-value="handleSelect($event as SizeSelectValue)"
         >
           <SelectTrigger
@@ -126,11 +133,15 @@ function handleSelect(value: SizeSelectValue) {
                 <SelectItem
                   v-for="item in limitItems()"
                   :key="item.prop"
-                  :value="`${ctx.node[item.prop] == null ? 'add' : 'remove'}-${item.prop}`"
+                  :value="`${nodes.some((node) => node[item.prop] == null) ? 'add' : 'remove'}-${item.prop}`"
                   :class="selectUI.item"
                 >
                   <SelectItemText>
-                    {{ ctx.node[item.prop] == null ? item.addLabel : item.removeLabel }}
+                    {{
+                      nodes.some((node) => node[item.prop] == null)
+                        ? item.addLabel
+                        : item.removeLabel
+                    }}
                   </SelectItemText>
                 </SelectItem>
               </SelectViewport>

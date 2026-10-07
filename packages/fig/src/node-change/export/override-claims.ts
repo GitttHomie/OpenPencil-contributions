@@ -1,7 +1,7 @@
 import { SCENE_OVERRIDE_FIELDS } from '#fig/instance-overrides/fields'
 
 import { stringToGuid } from '@open-pencil/kiwi/fig/guid'
-import { forEachInstanceOverride, type SceneNode } from '@open-pencil/scene-graph'
+import { forEachInstanceOverride, ownsSlotContent, type SceneNode } from '@open-pencil/scene-graph'
 import type { GUID, Vector } from '@open-pencil/scene-graph/primitives'
 
 import { instanceExportAddress } from '../instance/geometry'
@@ -17,6 +17,8 @@ import {
   type SceneNodeToKiwiContext,
   type StyleReference
 } from './context'
+import { componentPropertyAssignments } from './property-values'
+import { nodeWithResolvedBindings } from './resolved-bindings'
 
 function exportedTextStyleReference(context: SceneNodeToKiwiContext, id: string): StyleReference {
   context.styleReferences ??= buildStyleReferences(context.graph)
@@ -83,6 +85,7 @@ function registryClaim(
   const { raw, field: definition } = entry
   switch (definition.kind) {
     case 'scalar':
+      if (field === 'strokeWeight') return layoutDistanceClaim(raw, target.strokeWeight, instance)
       return { [raw]: target[field] }
     case 'visible':
       return { visible: target.visible }
@@ -138,11 +141,15 @@ function bindingClaim(
 }
 
 function overrideClaim(
-  input: ClaimInput,
+  claimed: ClaimInput,
   field: string,
   path: GUID[],
   counter: { value: number }
 ): KiwiSymbolOverridePayload | undefined {
+  const input = {
+    ...claimed,
+    target: nodeWithResolvedBindings(claimed.context.graph, claimed.target)
+  }
   if (field === 'componentId')
     return exportedSwapOverride(input.context, input.target, path, counter)
   const claim = field.startsWith('boundVariables/')
@@ -168,6 +175,15 @@ export function serializeRuntimePropertyOverrides(
     return path ? { target, path } : undefined
   }
   const visit = (node: SceneNode): void => {
+    if (node.type === 'INSTANCE' && node.id !== instance.id) {
+      const assignments = componentPropertyAssignments(node, context, localIdCounter)
+      const resolved = assignments.length ? resolveTarget(node, node.id) : undefined
+      if (resolved)
+        result.push({
+          guidPath: { guids: resolved.path },
+          componentPropAssignments: assignments
+        })
+    }
     if (node.type === 'INSTANCE')
       forEachInstanceOverride(node.instanceOverrides, (nodeId, field, value) => {
         const resolved = resolveTarget(node, nodeId)
@@ -180,6 +196,8 @@ export function serializeRuntimePropertyOverrides(
         )
         if (claim) result.push(claim)
       })
+    // Slot content the instance owns carries its own values; it has no component address.
+    if (ownsSlotContent(context.graph, node)) return
     for (const child of context.graph.getChildren(node.id)) visit(child)
   }
   visit(instance)
@@ -191,6 +209,40 @@ function overridePathKey(payload: KiwiSymbolOverridePayload): string | null {
   return guids?.length
     ? guids.map(({ sessionID, localID }) => `${sessionID}:${localID}`).join('/')
     : null
+}
+
+/** A released runtime size claim must not reappear from retained source metadata. */
+export function withoutReleasedSizeClaims(
+  context: SceneNodeToKiwiContext,
+  instance: SceneNode,
+  retained: KiwiSymbolOverridePayload[],
+  runtime: KiwiSymbolOverridePayload[],
+  counter: { value: number }
+): KiwiSymbolOverridePayload[] {
+  const claimed = new Set(
+    runtime.filter((override) => override.size !== undefined).map(overridePathKey)
+  )
+  const editedPaths = new Set<string | null>()
+  const resolveGuid = instanceGuidResolver(context, counter)
+  const visit = (node: SceneNode): void => {
+    if (
+      node.type === 'INSTANCE' &&
+      node.source.editedFields.some((field) => field === 'width' || field === 'height')
+    ) {
+      const path = instanceExportAddress(context.graph, instance, node, resolveGuid)
+      if (path) editedPaths.add(overridePathKey({ guidPath: { guids: path } }))
+    }
+    if (ownsSlotContent(context.graph, node)) return
+    for (const child of context.graph.getChildren(node.id)) visit(child)
+  }
+  visit(instance)
+  return retained.flatMap((override) => {
+    const path = overridePathKey(override)
+    if (!path || !editedPaths.has(path) || override.size === undefined || claimed.has(path))
+      return [override]
+    const { size: _size, ...rest } = override
+    return Object.keys(rest).some((key) => key !== 'guidPath') ? [rest] : []
+  })
 }
 
 export function mergeOverrides(

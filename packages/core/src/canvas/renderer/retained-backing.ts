@@ -12,7 +12,7 @@ import type { SkiaRenderer } from '#core/canvas/renderer'
 import { recordWorldPicture } from '#core/canvas/renderer/picture'
 import { clearSubtreePictureCache } from '#core/canvas/renderer/state'
 import { worldNodeVisualBounds } from '#core/canvas/renderer/visual-bounds'
-import { emitNavigationTrace } from '#core/profiler'
+import { emitNavigationTrace } from '#core/profiler/index'
 
 import { clamp, smoothAverage } from './retained-backing/timing'
 import type { SceneBackingGeometry } from './retained-backing/types'

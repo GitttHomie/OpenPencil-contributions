@@ -1,6 +1,6 @@
 import type { CanvasKit } from 'canvaskit-wasm'
 
-import type { SkiaRenderer } from '#core/canvas'
+import type { SkiaRenderer } from '#core/canvas/index'
 
 export interface PPTXExportStats {
   editable: number

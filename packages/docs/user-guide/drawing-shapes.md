@@ -78,7 +78,7 @@ Click **+** to add an effect. Each effect row is collapsible with inline control
 
 ## Frames and Sections
 
-**Frames** are containers. Drag shapes into a frame to make them children. Frames can clip their content (off by default) and support [auto layout](./auto-layout).
+**Frames** are containers. Drag shapes into a frame to make them children. New frames clip their content by default (turn off **Clip content** to show overflowing children) and support [auto layout](./auto-layout).
 
 Start drawing inside a frame to create a child of that frame. The frame highlights while you draw; the new object's size follows the pointer and it joins the frame when you release. In an auto-layout frame, the starting point determines the insertion slot. Escape cancels creation, and Undo removes the new child in one step.
 

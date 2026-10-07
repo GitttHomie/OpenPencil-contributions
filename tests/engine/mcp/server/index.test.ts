@@ -7,15 +7,18 @@ import { join } from 'node:path'
 
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client'
 
+import { MANAGED_CHAT_HEADER } from '@open-pencil/core/constants'
 import { SceneGraph } from '@open-pencil/scene-graph'
 
 import { startServer } from '#mcp/server'
 import { createToolDescriptors, getMCPToolDefinitions } from '#mcp/tool/manifest'
+import { parseDiscoveryInfo } from '#mcp/transport/discovery'
 
+import { expectDefined } from '#tests/helpers/assert'
 import {
   connectMockBrowser,
+  readHealth,
   waitForBrowserRegistration,
-  type HealthResponse,
   type MockBrowser
 } from '#tests/helpers/mcp/server'
 
@@ -35,7 +38,7 @@ function testSocketPath(): string | null {
   return join(SOCKET_DIR, `mcp-test-${process.pid}-${++testCounter}.sock`)
 }
 
-async function createTestClient(disabledTools: string[] = []) {
+async function createTestClient(disabledTools: string[] = [], chatId?: string) {
   if (isUnix) await mkdir(SOCKET_DIR, { recursive: true })
   const authToken = TEST_CLIENT_AUTH_TOKEN
   const handle = await startServer({
@@ -66,7 +69,12 @@ async function createTestClient(disabledTools: string[] = []) {
     const transport = new StreamableHTTPClientTransport(
       new URL(`http://127.0.0.1:${httpPort}/mcp`),
       {
-        requestInit: { headers: { Authorization: `Bearer ${authToken}` } }
+        requestInit: {
+          headers: {
+            Authorization: `Bearer ${authToken}`,
+            ...(chatId ? { [MANAGED_CHAT_HEADER]: chatId } : {})
+          }
+        }
       }
     )
     await client.connect(transport)
@@ -83,6 +91,7 @@ async function createTestClient(disabledTools: string[] = []) {
     client: safeClient,
     graph,
     handle,
+    browser: safeBrowser,
     close: async () => {
       const errors: unknown[] = []
       try {
@@ -181,9 +190,14 @@ describe('MCP server', () => {
     expect(byName.get('save_file')?.effect).toBe('write')
     expect(byName.get('open_file')?.effect).toBe('read')
     expect(byName.get('open_file')?.capabilities).toEqual(['filesystem:read', 'document:read'])
-    expect(byName.get('close_file')?.effect).toBe('read')
+    expect(byName.get('close_file')?.effect).toBe('write')
     expect(byName.get('update_node')?.effect).toBe('write')
     expect(byName.get('new_document')?.capabilities).toEqual(['document:write', 'filesystem:write'])
+    expect(byName.get('activate_document')?.effect).toBe('read')
+    expect(byName.get('undo')?.capabilities).toEqual(['document:write'])
+    expect(byName.get('redo')?.effect).toBe('write')
+    expect(byName.get('get_settings')?.capabilities).toEqual(['settings:read'])
+    expect(byName.get('update_settings')?.capabilities).toEqual(['settings:write'])
     expect(byName.get('eval')?.availability).toBe('eval')
     expect(byName.get('eval')?.capabilities).toContain('code:execute')
   })
@@ -206,7 +220,7 @@ describe('MCP server', () => {
     const healthResponse = await fetch(`http://127.0.0.1:${ctx.handle.httpPort}/health`, {
       headers: { Authorization: `Bearer ${TEST_CLIENT_AUTH_TOKEN}` }
     })
-    const health = (await healthResponse.json()) as HealthResponse
+    const health = await readHealth(healthResponse)
     const descriptors = health.tools ?? []
     expect(descriptors.find((tool) => tool.name === 'create_shape')?.enabled).toBe(false)
     expect(descriptors.find((tool) => tool.name === 'list_documents')?.enabled).toBe(false)
@@ -228,6 +242,134 @@ describe('MCP server', () => {
       expect(tool.description).toBeTruthy()
       expect(tool.inputSchema).toBeDefined()
     }
+  })
+
+  test('component properties and gradient strokes execute through MCP using shared schemas', async () => {
+    const page = graph.getPages()[0]
+    const component = graph.createNode('COMPONENT', page.id, { name: 'Control' })
+    const label = graph.createNode('TEXT', component.id, { name: 'Label', text: 'Go' })
+    const created = await client.callTool({
+      name: 'create_component_property',
+      arguments: {
+        owner_id: component.id,
+        name: 'Label',
+        type: 'TEXT',
+        default_value: 'Go'
+      }
+    })
+    expect(created.isError).not.toBe(true)
+    const definition = expectDefined(component.componentPropertyDefinitions[0])
+    const bound = await client.callTool({
+      name: 'bind_component_property',
+      arguments: {
+        id: label.id,
+        field: 'TEXT',
+        property_id: definition.id
+      }
+    })
+    expect(bound.isError).not.toBe(true)
+    const instance = expectDefined(graph.createInstance(component.id, page.id))
+    const assigned = await client.callTool({
+      name: 'set_instance_properties',
+      arguments: {
+        id: instance.id,
+        values: { [definition.id]: 'Continue' }
+      }
+    })
+    expect(assigned.isError).not.toBe(true)
+    expect(graph.getChildren(instance.id)[0].text).toBe('Continue')
+    expect(label.text).toBe('Go')
+    const painted = await client.callTool({
+      name: 'set_paint',
+      arguments: {
+        id: component.id,
+        target: 'strokes',
+        operation: 'append',
+        paint: {
+          type: 'GRADIENT_LINEAR',
+          weight: '2',
+          stops: [
+            { color: '#FF0000', position: 0 },
+            { color: '#0000FF', position: 1 }
+          ]
+        }
+      }
+    })
+    expect(painted.isError).not.toBe(true)
+    expect(component.strokes[0]).toMatchObject({ type: 'GRADIENT_LINEAR', weight: 2 })
+    const invalid = await client.callTool({
+      name: 'bind_component_property',
+      arguments: {
+        id: label.id,
+        field: 'VISIBLE',
+        property_id: definition.id
+      }
+    })
+    expect(invalid.isError).toBe(true)
+    expect(label.componentPropertyReferences).toEqual([
+      { propertyId: definition.id, field: 'TEXT' }
+    ])
+    const unbound = await client.callTool({
+      name: 'bind_component_property',
+      arguments: {
+        id: label.id,
+        field: 'TEXT',
+        property_id: null
+      }
+    })
+    expect(unbound.isError).not.toBe(true)
+    expect(label.componentPropertyReferences).toEqual([])
+    const guidance = await client.callTool({
+      name: 'get_design_guidance',
+      arguments: { topics: ['creation'] }
+    })
+    expect(guidance.isError).not.toBe(true)
+  })
+
+  test('render advertises its required JSX field and succeeds on the first tool call', async () => {
+    const { tools } = await client.listTools()
+    const schema = tools.find((tool) => tool.name === 'render')?.inputSchema
+    expect(schema?.required).toContain('jsx')
+    expect(schema?.properties?.jsx).toMatchObject({ type: 'string' })
+    const result = await client.callTool({
+      name: 'render',
+      arguments: { jsx: '<Frame name="First render" w={320} h={200} />' }
+    })
+    expect(result.isError).not.toBe(true)
+    const data = parseResult(result) as { id: string }
+    expect(graph.getNode(data.id)?.name).toBe('First render')
+  })
+
+  test('render rejects a missing JSX field without creating nodes', async () => {
+    const before = graph.getPages()[0].childIds.slice()
+    const result = await client.callTool({
+      name: 'render',
+      arguments: { code: '<Frame name="Wrong argument" w={320} h={200} />' }
+    })
+    expect(result.isError).toBe(true)
+    expect(result.content).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'text', text: expect.stringContaining('jsx') })
+      ])
+    )
+    expect(graph.getPages()[0].childIds).toEqual(before)
+  })
+
+  test('Kiro must forward the render payload inside its dispatcher arguments', async () => {
+    const before = graph.getPages()[0].childIds.slice()
+    const payload = { jsx: '<Frame name="Kiro card" w={320} h={200} />', x: 100, y: 100 }
+    // Observed failed call: Kiro forwards only `arguments`, dropping its sibling fields.
+    const misplaced = { tool_id: 'open-pencil::render', arguments: {}, ...payload }
+    const failed = await client.callTool({ name: 'render', arguments: misplaced.arguments })
+    expect(failed.isError).toBe(true)
+    expect(graph.getPages()[0].childIds).toEqual(before)
+
+    const dispatch = { tool_id: 'open-pencil::render', arguments: payload }
+    const result = await client.callTool({ name: 'render', arguments: dispatch.arguments })
+    expect(result.isError).not.toBe(true)
+    const data = parseResult(result) as { id: string }
+    expect(graph.getNode(data.id)).toMatchObject({ name: 'Kiro card', x: 100, y: 100 })
+    expect(graph.getPages()[0].childIds).toHaveLength(before.length + 1)
   })
 
   test('create_shape creates a node on the live canvas', async () => {
@@ -317,7 +459,7 @@ describe('MCP server', () => {
     })
     expect(result.isError).not.toBe(true)
     expect(parseResult(result)).toMatchObject({
-      version: '1.0.0',
+      version: '1.1.0',
       workflow: expect.any(String),
       guidance: [
         { topic: 'ux', content: expect.any(String) },
@@ -384,20 +526,65 @@ describe('MCP server with mcpRoot', () => {
     })
   })
 
-  test('registers close_file as read-only and forwards its document target', async () => {
+  test('registers close_file as destructive and forwards its unsaved choice and target', async () => {
     await withMCPRootServer(TEST_MCP_ROOT, async (client, browser) => {
       const { tools } = await client.listTools()
       const closeFile = tools.find((tool) => tool.name === 'close_file')
-      expect(closeFile?.annotations?.readOnlyHint).toBe(true)
+      expect(closeFile?.annotations?.destructiveHint).toBe(true)
 
       const result = await client.callTool({
         name: 'close_file',
-        arguments: { document_id: 'doc-1' }
+        arguments: { document_id: 'doc-1', unsaved: 'discard' }
       })
       expect(result.isError).not.toBe(true)
       expect(browser.requests.find((item) => item.command === 'close_file')?.args).toEqual({
-        document_id: 'doc-1'
+        document_id: 'doc-1',
+        unsaved: 'discard'
       })
+    })
+  })
+
+  test('close_file keeps a save path inside mcpRoot', async () => {
+    await withMCPRootServer(TEST_MCP_ROOT, async (client, browser) => {
+      const outside = await client.callTool({
+        name: 'close_file',
+        arguments: { unsaved: 'save', path: '/etc/escape.fig' }
+      })
+      expect(outside.isError).toBe(true)
+      expect(browser.requests.some((item) => item.command === 'close_file')).toBe(false)
+    })
+  })
+
+  test('forwards document activation and history steps with their target', async () => {
+    await withMCPRootServer(TEST_MCP_ROOT, async (client, browser) => {
+      const activated = await client.callTool({
+        name: 'activate_document',
+        arguments: { document_id: 'doc-2', page_id: '0:5' }
+      })
+      expect(activated.isError).not.toBe(true)
+      expect(browser.requests.find((item) => item.command === 'activate_document')?.args).toEqual({
+        document_id: 'doc-2',
+        page_id: '0:5'
+      })
+
+      const undone = await client.callTool({ name: 'undo', arguments: { document_id: 'doc-2' } })
+      expect(undone.isError).not.toBe(true)
+      expect(JSON.stringify(undone.content)).toContain('Agent: mock')
+      expect(browser.requests.find((item) => item.command === 'undo')?.args).toEqual({
+        document_id: 'doc-2'
+      })
+    })
+  })
+
+  test('forwards settings updates and returns the resulting settings', async () => {
+    await withMCPRootServer(TEST_MCP_ROOT, async (client, browser) => {
+      const settings = { appearance: { theme: 'light' } }
+      const result = await client.callTool({ name: 'update_settings', arguments: { settings } })
+      expect(result.isError).not.toBe(true)
+      expect(browser.requests.find((item) => item.command === 'update_settings')?.args).toEqual({
+        settings
+      })
+      expect(JSON.stringify(result.content)).toContain('light')
     })
   })
 
@@ -601,12 +788,8 @@ describe('MCP server concurrent startServer', () => {
       expect(a.httpPort).not.toBe(b.httpPort)
 
       // Each responds on /health with the expected auth state.
-      const aHealth = (await (
-        await fetch(`http://127.0.0.1:${a.httpPort}/health`)
-      ).json()) as HealthResponse
-      const bHealth = (await (
-        await fetch(`http://127.0.0.1:${b.httpPort}/health`)
-      ).json()) as HealthResponse
+      const aHealth = await readHealth(await fetch(`http://127.0.0.1:${a.httpPort}/health`))
+      const bHealth = await readHealth(await fetch(`http://127.0.0.1:${b.httpPort}/health`))
       expect(aHealth.status).toBe('no_app')
       expect(bHealth.status).toBe('no_app')
 
@@ -615,7 +798,7 @@ describe('MCP server concurrent startServer', () => {
       const discoveryPath = await getDiscoveryPath()
       const file = Bun.file(discoveryPath)
       expect(await file.exists()).toBe(true)
-      const info = (await file.json()) as { pid: number; authToken: string }
+      const info = expectDefined(parseDiscoveryInfo(await file.text()), 'discovery file')
       expect(info.pid).toBe(process.pid)
       expect(['token-a', 'token-b']).toContain(info.authToken)
     } finally {
@@ -657,19 +840,38 @@ describe('MCP server concurrent startServer', () => {
       await a.close()
 
       // Server b should still be healthy and reachable.
-      const bHealth = (await (
-        await fetch(`http://127.0.0.1:${b.httpPort}/health`)
-      ).json()) as HealthResponse
+      const bHealth = await readHealth(await fetch(`http://127.0.0.1:${b.httpPort}/health`))
       expect(bHealth.status).toBe('no_app')
 
       // Discovery file should still exist (owned by server b now).
       const discoveryPath = await getDiscoveryPath()
       const file = Bun.file(discoveryPath)
       expect(await file.exists()).toBe(true)
-      const info = (await file.json()) as { authToken: string }
+      const info = expectDefined(parseDiscoveryInfo(await file.text()), 'discovery file')
       expect(info.authToken).toBe('token-b')
     } finally {
       await b.close()
     }
   }, 15000)
+})
+
+test('managed chat identity reaches canvas RPC without becoming a model tool argument', async () => {
+  const managed = await createTestClient([], 'chat-scope-test')
+  try {
+    await managed.client.callTool({ name: 'get_selection', arguments: {} })
+    expect(managed.browser.requests.at(-1)).toMatchObject({
+      command: 'tool',
+      managedChatId: 'chat-scope-test',
+      args: { name: 'get_selection', args: {} }
+    })
+  } finally {
+    await managed.close()
+  }
+  const standalone = await createTestClient()
+  try {
+    await standalone.client.callTool({ name: 'get_selection', arguments: {} })
+    expect(standalone.browser.requests.at(-1)).not.toHaveProperty('managedChatId')
+  } finally {
+    await standalone.close()
+  }
 })

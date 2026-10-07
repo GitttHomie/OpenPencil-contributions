@@ -2,28 +2,74 @@ import type { SessionUpdate } from '@agentclientprotocol/sdk'
 import type { Page } from '@playwright/test'
 import type { UIMessageChunk } from 'ai'
 
-import type * as CanvasPermissionsModule from '@/app/ai/acp/canvas-permissions'
+import type * as ACPAdaptersModule from '@/app/ai/acp/adapters/registry'
 import type * as PermissionModule from '@/app/ai/acp/permission'
 import type * as StreamUpdatesModule from '@/app/ai/acp/stream-updates'
+
+export async function installQueuedPermissionTransport(page: Page) {
+  await page.evaluate(async () => {
+    const permissionsPath = '/src/app/ai/acp/permission.ts'
+    const { requestPermissionFromUser } = (await import(permissionsPath)) as typeof PermissionModule
+    const setTransport = window.openPencil?.setChatTransport
+    if (!setTransport) throw new Error('Chat transport unavailable')
+    setTransport(() => ({
+      async sendMessages() {
+        return new ReadableStream<UIMessageChunk>({
+          async start(controller) {
+            controller.enqueue({ type: 'start' })
+            const responses = await Promise.all(
+              ['First request', '@open-pencil/get_design_guidance'].map((title) =>
+                requestPermissionFromUser({
+                  sessionId: 'queued-test',
+                  toolCall: { toolCallId: title, title, status: 'pending' },
+                  options: [
+                    { optionId: 'accept', kind: 'allow_once', name: 'Allow' },
+                    { optionId: 'reject', kind: 'reject_once', name: 'Deny' }
+                  ]
+                })
+              )
+            )
+            const text = responses
+              .map(({ outcome }) =>
+                outcome.outcome === 'selected' ? outcome.optionId : 'cancelled'
+              )
+              .join(', ')
+            controller.enqueue({ type: 'text-start', id: 'result' })
+            controller.enqueue({ type: 'text-delta', id: 'result', delta: text })
+            controller.enqueue({ type: 'text-end', id: 'result' })
+            controller.enqueue({ type: 'finish', finishReason: 'stop' })
+            controller.close()
+          }
+        })
+      },
+      async reconnectToStream() {
+        return null
+      }
+    }))
+  })
+}
 
 export async function installKiroPermissionTransport(page: Page) {
   await page.evaluate(async () => {
     const streamPath = '/src/app/ai/acp/stream-updates.ts'
     const permissionsPath = '/src/app/ai/acp/permission.ts'
-    const scopePath = '/src/app/ai/acp/canvas-permissions.ts'
+    const adaptersPath = '/src/app/ai/acp/adapters/registry.ts'
     const { createACPUpdateStream } = (await import(streamPath)) as typeof StreamUpdatesModule
     const { requestPermissionFromUser, cancelPermissionsForScope } = (await import(
       permissionsPath
     )) as typeof PermissionModule
-    const { createCanvasPermissionScope } = (await import(
-      scopePath
-    )) as typeof CanvasPermissionsModule
+    const { getACPAgentAdapter } = (await import(adaptersPath)) as typeof ACPAdaptersModule
     const setTransport = window.openPencil?.setChatTransport
     if (!setTransport) throw new Error('Chat transport unavailable')
     setTransport(() => ({
       async sendMessages() {
         const updates = createACPUpdateStream('kiro-test')
-        const scope = createCanvasPermissionScope(true)
+        const { permissions: scope } = getACPAgentAdapter('kiro-cli').createSession({
+          purpose: 'design',
+          mcpServers: [
+            { type: 'http', name: 'open-pencil', url: 'http://localhost/mcp', headers: [] }
+          ]
+        })
         return new ReadableStream<UIMessageChunk>({
           async start(controller) {
             const emit = (update: SessionUpdate) => {

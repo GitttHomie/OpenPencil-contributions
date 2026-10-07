@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { useI18n, useLayoutControlsContext } from '@open-pencil/vue'
+import { useI18n, useLayoutControlsContext, useSelectionLayout } from '@open-pencil/vue'
 
 import type { PaddingProp } from '@/components/properties/layout/types'
 import VariableNumberField from '@/components/properties/VariableNumberField.vue'
 import IconButton from '@/components/ui/button/IconButton.vue'
 
 const ctx = useLayoutControlsContext()
+const { nodes, merged, allFlex, allGrid } = useSelectionLayout()
 const { panels } = useI18n()
 
 const paddingSides: Array<{ prop: PaddingProp; icon: string }> = [
@@ -19,19 +20,16 @@ const paddingSides: Array<{ prop: PaddingProp; icon: string }> = [
 <template>
   <div class="flex items-start gap-1.5">
     <div class="min-w-0 flex-1">
-      <div
-        v-if="!ctx.showIndividualPadding && ctx.hasSymmetricPadding"
-        class="mt-1.5 grid grid-cols-2 gap-1.5"
-      >
+      <div v-if="!ctx.showIndividualPadding" class="mt-1.5 grid grid-cols-2 gap-1.5">
         <VariableNumberField
           data-test-id="layout-horizontal-padding-input"
-          :model-value="Math.round(ctx.node.paddingLeft)"
+          :model-value="merged('paddingLeft')"
           :min="0"
-          :node-id="ctx.node.id"
+          :node-id="nodes[0]?.id ?? ''"
+          :node-ids="nodes.map((node) => node.id)"
           binding-path="paddingLeft"
-          @update:model-value="ctx.setHorizontalPadding"
-          @commit="ctx.commitHorizontalPadding"
-          @cancel="ctx.cancelPreview"
+          :binding-paths="['paddingLeft', 'paddingRight']"
+          edit-properties
         >
           <template #icon>
             <icon-lucide-separator-vertical class="size-3.5" />
@@ -39,13 +37,13 @@ const paddingSides: Array<{ prop: PaddingProp; icon: string }> = [
         </VariableNumberField>
         <VariableNumberField
           data-test-id="layout-vertical-padding-input"
-          :model-value="Math.round(ctx.node.paddingTop)"
+          :model-value="merged('paddingTop')"
           :min="0"
-          :node-id="ctx.node.id"
+          :node-id="nodes[0]?.id ?? ''"
+          :node-ids="nodes.map((node) => node.id)"
           binding-path="paddingTop"
-          @update:model-value="ctx.setVerticalPadding"
-          @commit="ctx.commitVerticalPadding"
-          @cancel="ctx.cancelPreview"
+          :binding-paths="['paddingTop', 'paddingBottom']"
+          edit-properties
         >
           <template #icon>
             <icon-lucide-separator-horizontal class="size-3.5" />
@@ -53,17 +51,16 @@ const paddingSides: Array<{ prop: PaddingProp; icon: string }> = [
         </VariableNumberField>
       </div>
 
-      <div v-else-if="ctx.isGrid || ctx.isFlex" class="mt-1.5 grid grid-cols-2 gap-1.5">
+      <div v-else-if="allGrid || allFlex" class="mt-1.5 grid grid-cols-2 gap-1.5">
         <VariableNumberField
           v-for="side in paddingSides"
           :key="side.prop"
-          :model-value="Math.round(ctx.node[side.prop])"
+          :model-value="merged(side.prop)"
           :min="0"
-          :node-id="ctx.node.id"
+          :node-id="nodes[0]?.id ?? ''"
+          :node-ids="nodes.map((node) => node.id)"
           :binding-path="side.prop"
-          @update:model-value="ctx.updateProp(side.prop, $event)"
-          @commit="(v: number, p: number) => ctx.commitProp(side.prop, v, p)"
-          @cancel="ctx.cancelPreview"
+          edit-properties
         >
           <template #icon>
             <icon-lucide-panel-top v-if="side.icon === 'top'" class="size-3.5" />
@@ -75,7 +72,7 @@ const paddingSides: Array<{ prop: PaddingProp; icon: string }> = [
       </div>
     </div>
     <IconButton
-      v-if="ctx.isFlex || ctx.isGrid"
+      v-if="allFlex || allGrid"
       :label="panels.individualPadding"
       :active="ctx.showIndividualPadding"
       class="mt-1.5"

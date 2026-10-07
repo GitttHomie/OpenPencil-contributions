@@ -9,11 +9,11 @@ import type {
   SceneGraph,
   SceneNode
 } from '@open-pencil/scene-graph'
-import { DEFAULT_STROKE_MITER_LIMIT } from '@open-pencil/scene-graph'
+import { DEFAULT_STROKE_MITER_LIMIT, DEFAULT_STROKE_WEIGHT } from '@open-pencil/scene-graph'
+import { siblingOrderKeys } from '@open-pencil/scene-graph/order-keys'
 import type { GUID, Matrix, Vector } from '@open-pencil/scene-graph/primitives'
 
 /* eslint-disable max-lines */
-import { siblingOrderKeys } from '../basics'
 import { bytesToHex } from '../bytes'
 import { exportCanvasGuides } from '../canvas-guides'
 import { snapshotInstanceGeometry } from '../instance/geometry'
@@ -39,7 +39,20 @@ import {
   type KiwiSymbolOverridePayload,
   type SceneNodeToKiwiContext
 } from './context'
-import { mergeOverrides, serializeRuntimePropertyOverrides } from './override-claims'
+import { nestedPropertyPluginData } from './nested-properties'
+import {
+  mergeOverrides,
+  serializeRuntimePropertyOverrides,
+  withoutReleasedSizeClaims
+} from './override-claims'
+import {
+  componentPropertyValue,
+  componentPropertyVariableValue,
+  componentPropertyAssignments
+} from './property-values'
+import { nodeWithResolvedBindings } from './resolved-bindings'
+import { slotDefinitionFields } from './slots'
+import { variantDefaultPluginData } from './variant-defaults'
 
 export type { KiwiNodeChange, SceneNodeToKiwiContext } from './context'
 
@@ -103,46 +116,6 @@ export function buildAssetRefToVarGuidMap(
 function componentPropertyTypeForKiwi(type: string) {
   if (type === 'BOOLEAN') return 'BOOL'
   return type
-}
-
-function componentPropertyValue(
-  type: string,
-  value: string,
-  context: SceneNodeToKiwiContext,
-  localIdCounter: { value: number }
-) {
-  if (type === 'BOOLEAN') return { boolValue: value === 'true' }
-  if (type === 'INSTANCE_SWAP') {
-    const target = context.graph.getNode(value)
-    const guid = target
-      ? getOrCreateNodeGuid(context, target.id, localIdCounter)
-      : parseGuidOrNull(value)
-    return guid ? { guidValue: guid } : { textValue: { characters: value } }
-  }
-  return { textValue: { characters: value } }
-}
-
-function componentPropertyVariableValue(
-  type: string,
-  value: string,
-  context: SceneNodeToKiwiContext,
-  localIdCounter: { value: number }
-) {
-  const legacy = componentPropertyValue(type, value, context, localIdCounter)
-  if (type === 'BOOLEAN')
-    return {
-      value: { boolValue: value === 'true' },
-      dataType: 'BOOLEAN',
-      resolvedDataType: 'BOOLEAN'
-    }
-  if (type === 'INSTANCE_SWAP' && 'guidValue' in legacy) {
-    return {
-      value: { symbolIdValue: { guid: legacy.guidValue } },
-      dataType: 'SYMBOL_ID',
-      resolvedDataType: 'SYMBOL_ID'
-    }
-  }
-  return { value: { textValue: value }, dataType: 'STRING', resolvedDataType: 'STRING' }
 }
 
 function serializeVariableModes(
@@ -474,7 +447,7 @@ function applyInstancePayload(
   )
   if (symbolID) {
     const symbolData: Record<string, unknown> = { symbolID }
-    const symbolOverrides: KiwiSymbolOverridePayload[] = []
+    let symbolOverrides: KiwiSymbolOverridePayload[] = []
     if (node.source.fig.symbolOverrides.length > 0) {
       symbolOverrides.push(
         ...(materializeFigmaPayload(node.source.fig.symbolOverrides, context.blobs, {
@@ -484,10 +457,16 @@ function applyInstancePayload(
         }) as KiwiSymbolOverridePayload[])
       )
     }
-    mergeOverrides(
-      symbolOverrides,
-      serializeRuntimePropertyOverrides(context, node, localIdCounter)
-    )
+    const runtime = serializeRuntimePropertyOverrides(context, node, localIdCounter)
+    if (node.source.editedFields.includes('instanceOverrides'))
+      symbolOverrides = withoutReleasedSizeClaims(
+        context,
+        node,
+        symbolOverrides,
+        runtime,
+        localIdCounter
+      )
+    mergeOverrides(symbolOverrides, runtime)
     if (symbolOverrides.length > 0) symbolData.symbolOverrides = symbolOverrides
     if (!Number.isFinite(node.componentScale) || node.componentScale <= 0)
       throw new Error('Invalid instance uniform scale')
@@ -535,7 +514,10 @@ function componentPropertyPreferredValues(
   definition: ComponentPropertyDefinition,
   context: SceneNodeToKiwiContext
 ) {
-  if (definition.type === 'INSTANCE_SWAP' && definition.preferredValues?.length) {
+  if (
+    (definition.type === 'INSTANCE_SWAP' || definition.type === 'SLOT') &&
+    definition.preferredValues?.length
+  ) {
     return {
       instanceSwapValues: definition.preferredValues.map((value) => {
         const target = context.graph.getNode(value)
@@ -553,6 +535,7 @@ function componentPropertyPreferredValues(
 function componentPropertyNodeField(field: ComponentPropertyReferenceField): string {
   if (field === 'TEXT') return 'TEXT_DATA'
   if (field === 'INSTANCE_SWAP') return 'OVERRIDDEN_SYMBOL_ID'
+  if (field === 'SLOT_CONTENT') return 'SLOT_CONTENT_ID'
   return 'VISIBLE'
 }
 
@@ -612,7 +595,8 @@ function applyParameterReferences(nc: KiwiNodeChange, refs: ExportedPropertyRefe
   const types: Record<string, string> = {
     VISIBLE: 'BOOLEAN',
     TEXT_DATA: 'STRING',
-    OVERRIDDEN_SYMBOL_ID: 'SYMBOL_ID'
+    OVERRIDDEN_SYMBOL_ID: 'SYMBOL_ID',
+    SLOT_CONTENT_ID: 'SLOT_CONTENT_ID'
   }
   for (const ref of refs)
     entries.push({
@@ -646,38 +630,49 @@ function applyComponentMetadata(
   }
   if (node.symbolDescription) nc.symbolDescription = node.symbolDescription
   if (node.symbolLinks.length > 0) nc.symbolLinks = structuredClone(node.symbolLinks)
-  const componentPropDefs = node.componentPropertyDefinitions.map((def) => ({
-    id: getOrCreatePropertyGuid(context, def.id, localIdCounter),
-    name: def.name,
-    type: componentPropertyTypeForKiwi(def.type),
-    initialValue: componentPropertyValue(def.type, def.defaultValue, context, localIdCounter),
-    varValue: componentPropertyVariableValue(def.type, def.defaultValue, context, localIdCounter),
-    preferredValues: componentPropertyPreferredValues(def, context)
-  }))
+  const componentPropDefs = node.componentPropertyDefinitions.map((def) => {
+    const record: Record<string, unknown> = {
+      id: getOrCreatePropertyGuid(context, def.id, localIdCounter),
+      name: def.name,
+      type: componentPropertyTypeForKiwi(def.type),
+      preferredValues: componentPropertyPreferredValues(def, context)
+    }
+    if (def.type === 'SLOT') Object.assign(record, slotDefinitionFields(def))
+    else {
+      record.initialValue = componentPropertyValue(
+        def.type,
+        def.defaultValue,
+        context,
+        localIdCounter
+      )
+      record.varValue = componentPropertyVariableValue(
+        def.type,
+        def.defaultValue,
+        context,
+        localIdCounter
+      )
+    }
+    if (def.description) record.description = def.description
+    return record
+  })
   if (shouldSerializeRawBackedField(node, 'componentPropDefs', componentPropDefs.length > 0)) {
     nc.componentPropDefs = componentPropDefs
   }
 
-  const componentPropRefs = node.componentPropertyReferences.map((ref) => ({
+  const parameterRefs = node.componentPropertyReferences.map((ref) => ({
     defID: getOrCreatePropertyGuid(context, ref.propertyId, localIdCounter),
     componentPropNodeField: componentPropertyNodeField(ref.field)
   }))
+  // Figma binds a slot frame only through its parameter map, never a legacy property ref.
+  const componentPropRefs = parameterRefs.filter(
+    (ref) => ref.componentPropNodeField !== 'SLOT_CONTENT_ID'
+  )
   if (shouldSerializeRawBackedField(node, 'componentPropRefs', componentPropRefs.length > 0)) {
     nc.componentPropRefs = componentPropRefs
   }
 
-  applyParameterReferences(nc, componentPropRefs)
-  const componentPropAssignments = Object.entries(node.componentPropertyAssignments)
-    .map(([propertyId, value]) => {
-      const definition = context.componentPropertyDefinitionsById.get(propertyId)
-      if (!definition) return null
-      return {
-        defID: getOrCreatePropertyGuid(context, propertyId, localIdCounter),
-        value: componentPropertyValue(definition.type, value, context, localIdCounter),
-        varValue: componentPropertyVariableValue(definition.type, value, context, localIdCounter)
-      }
-    })
-    .filter((assignment): assignment is NonNullable<typeof assignment> => assignment !== null)
+  applyParameterReferences(nc, parameterRefs)
+  const componentPropAssignments = componentPropertyAssignments(node, context, localIdCounter)
   if (
     shouldSerializeRawBackedField(
       node,
@@ -848,12 +843,13 @@ function exportKiwiNodeType(node: SceneNode, context: SceneNodeToKiwiContext): s
 }
 
 export function sceneNodeToKiwiWithContext(
-  node: SceneNode,
+  source: SceneNode,
   parentGuid: GUID,
   childIndex: number,
   localIdCounter: { value: number },
   context: SceneNodeToKiwiContext
 ): KiwiNodeChange[] {
+  const node = nodeWithResolvedBindings(context.graph, source)
   const guid = getOrCreateNodeGuid(context, node.id, localIdCounter) ?? {
     sessionID: 1,
     localID: localIdCounter.value++
@@ -881,13 +877,20 @@ export function sceneNodeToKiwiWithContext(
   if (node.type === 'GROUP') {
     nc.resizeToFit = true
   }
-  // Only set strokeWeight/strokeAlign when the node has strokes in the scene
-  // model. For imported nodes without strokes but with raw strokeWeight data
-  // (e.g. text nodes, instance children with scaled strokes), the raw value
-  // must be allowed to flow through via applyRawFigmaNodeFields.
+  // With strokes, their geometry is the node's. Without, the node keeps its own weight and
+  // alignment, written when set or when the source file carried them.
   if (node.strokes.length > 0) {
     nc.strokeWeight = node.strokes[0].weight
     nc.strokeAlign = node.strokes[0].align
+  } else {
+    const rawNodeFields = effectiveFigmaRawNodeFields(node)
+    if (node.strokeWeight !== DEFAULT_STROKE_WEIGHT || 'strokeWeight' in rawNodeFields) {
+      nc.strokeWeight = node.strokeWeight
+    }
+    // Kiwi reads a missing alignment as centered.
+    if (node.strokeAlign !== 'CENTER' || 'strokeAlign' in rawNodeFields) {
+      nc.strokeAlign = node.strokeAlign
+    }
   }
   if (node.locked) nc.locked = true
 
@@ -915,7 +918,13 @@ export function sceneNodeToKiwiWithContext(
   applyExportSettingsPluginData(node)
   applyLibrarySourcePluginData(node)
   applyTextPathBoxPluginData(node)
-  const pluginData = mergePluginData(node.pluginData)
+  const pluginData = mergePluginData(
+    nestedPropertyPluginData(
+      variantDefaultPluginData(node, context, localIdCounter),
+      context,
+      localIdCounter
+    )
+  )
   if (pluginData.length > 0) nc.pluginData = pluginData
   if (node.pluginRelaunchData.length > 0) {
     nc.pluginRelaunchData = serializePluginRelaunchData(node.pluginRelaunchData)

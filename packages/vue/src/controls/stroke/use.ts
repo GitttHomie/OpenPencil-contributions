@@ -1,5 +1,7 @@
 import { ref } from 'vue'
 
+import { newStrokeGeometry, type Stroke } from '@open-pencil/scene-graph'
+
 import { useNodeProps } from '#vue/controls/node-props/use'
 import {
   BORDER_SIDES,
@@ -53,6 +55,7 @@ export function useStrokeControls() {
   const { selectSide, updateBorderWeight } = createStrokeSideActions(store, sideMenuOpen)
 
   return {
+    nodes,
     alignOptions,
     capOptions,
     joinOptions,
@@ -61,7 +64,11 @@ export function useStrokeControls() {
     sideOptions: SIDE_OPTIONS,
     borderSides: BORDER_SIDES,
     sideMenuOpen,
-    defaultStroke: DEFAULT_STROKE,
+    /** A new stroke for the selection: black, with the weight and alignment its first node keeps. */
+    get defaultStroke(): Stroke {
+      const first = nodes.value.at(0)
+      return { ...DEFAULT_STROKE, ...(first ? newStrokeGeometry(first) : {}) }
+    },
     updateAlign: updateAlign.bind(null, store),
     currentAlign,
     currentSides,

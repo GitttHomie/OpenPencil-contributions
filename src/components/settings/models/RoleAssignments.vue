@@ -4,6 +4,7 @@ import { computed } from 'vue'
 import { useI18n } from '@open-pencil/vue'
 
 import { useModelRoleAssignments } from '@/app/ai/models/settings/assignments'
+import { LAYA_SUPPORTED } from '@/app/ai/routing/preferences'
 import SettingsGroup from '@/components/settings/layout/SettingsGroup.vue'
 import SettingsRow from '@/components/settings/layout/SettingsRow.vue'
 import AppSelect from '@/components/ui/select/AppSelect.vue'
@@ -25,7 +26,16 @@ const roleDefinitions = computed(() => [
     role: 'vision' as const,
     label: ai.value.modelRoleVision,
     description: ai.value.modelRoleVisionDescription
-  }
+  },
+  ...(LAYA_SUPPORTED
+    ? [
+        {
+          role: 'fast' as const,
+          label: ai.value.modelRoleFast,
+          description: ai.value.layaAutomaticHint
+        }
+      ]
+    : [])
 ])
 
 const { assignmentValue, optionsForRole, updateAssignment } = useModelRoleAssignments(ai)

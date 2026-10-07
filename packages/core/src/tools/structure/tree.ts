@@ -1,4 +1,4 @@
-import type { FigmaNodeProxy } from '#core/figma-api'
+import type { FigmaNodeProxy } from '#core/figma-api/index'
 import { nodeTraversalInput, nodeInput } from '#core/tools/input'
 import { defineTool, getRawNodeOrError, nodeNotFound, nodeSummary } from '#core/tools/schema'
 

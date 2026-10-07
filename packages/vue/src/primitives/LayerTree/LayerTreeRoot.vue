@@ -88,7 +88,7 @@ const PATCHABLE_NODE_KEYS = new Set<keyof SceneNode>([
 ])
 
 function patchTreeNode(id: string, changes: Partial<SceneNode>) {
-  if ('childIds' in changes || 'parentId' in changes) {
+  if ('childIds' in changes || 'parentId' in changes || 'type' in changes) {
     rebuildTree()
     return
   }
@@ -138,12 +138,20 @@ function onSelectionChanged(ids: string[]) {
   if (selectionAnchorId) scrollToNode(selectionAnchorId)
 }
 
+function onNodeReparented(nodeId: string) {
+  scheduleTreeRebuild()
+  const movedSelection = [...selectedIds.value].filter(
+    (id) => id === nodeId || editor.graph.isDescendant(id, nodeId)
+  )
+  if (movedSelection.length) onSelectionChanged(movedSelection)
+}
+
 const unsubscribe = [
   editor.onEditorEvent('graph:replaced', rebuildTree),
   editor.onEditorEvent('page:changed', rebuildTree),
   editor.onEditorEvent('node:created', scheduleTreeRebuild),
   editor.onEditorEvent('node:deleted', scheduleTreeRebuild),
-  editor.onEditorEvent('node:reparented', scheduleTreeRebuild),
+  editor.onEditorEvent('node:reparented', onNodeReparented),
   editor.onEditorEvent('node:reordered', scheduleTreeRebuild),
   editor.onEditorEvent('node:updated', patchTreeNode),
   editor.onEditorEvent('selection:changed', onSelectionChanged)

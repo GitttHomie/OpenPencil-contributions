@@ -28,7 +28,7 @@ export function useAgentForDesign(id: ACPAgentID): void {
       customModelID: '',
       customBaseURL: '',
       customAPIType: 'completions',
-      reasoningEffort: '',
+      thinkingLevel: 'default',
       capabilities: ['tools']
     })
   setModelRoleAssignment('design', profile.id)

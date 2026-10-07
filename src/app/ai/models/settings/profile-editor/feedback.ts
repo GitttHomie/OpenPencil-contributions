@@ -3,6 +3,7 @@ import { computed, ref, type Ref } from 'vue'
 import { aiModelSettings } from '@/app/ai/models'
 import { useSettingsValidation } from '@/app/settings/validation/use'
 
+import { useProfileLaunchSettings } from './launch'
 import { modelProfileSchema, type ModelProfileValidationMessages } from './schema'
 import type { useModelProfileEditor } from './use'
 
@@ -12,6 +13,7 @@ export function useModelProfileFeedback(
   messages: Readonly<Ref<ModelProfileValidationMessages>>
 ) {
   const testing = ref(false)
+  const launch = useProfileLaunchSettings(profile.draft)
   const providerKind = computed(() => {
     if (profile.isACP.value) return 'acp'
     return profile.isHarness.value ? 'harness' : 'api'
@@ -44,7 +46,8 @@ export function useModelProfileFeedback(
     ...validation,
     async validate(intent: 'save' | 'test') {
       testing.value = intent === 'test'
-      return validation.validate()
+      const valid = await validation.validate()
+      return valid && launch.valid.value
     }
   }
 }

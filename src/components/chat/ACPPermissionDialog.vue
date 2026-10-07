@@ -1,11 +1,6 @@
 <script setup lang="ts">
-import {
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogDescription,
-  AlertDialogTitle
-} from 'reka-ui'
-import { computed } from 'vue'
+import { AlertDialogDescription, AlertDialogTitle } from 'reka-ui'
+import { computed, useTemplateRef } from 'vue'
 
 import { acpPermissionOptionTestId, useI18n, vTestId } from '@open-pencil/vue'
 
@@ -13,13 +8,21 @@ import {
   currentPermission,
   canAllowCanvasForChat,
   allowCanvasForChat,
-  rejectCurrentPermission,
+  cancelCurrentPermission,
   respondToPermission
 } from '@/app/ai/acp/permission'
+import type AppButton from '@/components/ui/button/AppButton.vue'
 import { AppAlertDialogRoot } from '@/components/ui/dialog'
 
 const open = computed(() => currentPermission.value !== null)
-const { ai } = useI18n()
+const cancelButton = useTemplateRef<InstanceType<typeof AppButton>>('cancelButton')
+function focusCancel(event: Event) {
+  const element: unknown = cancelButton.value?.$el
+  if (!(element instanceof HTMLElement)) return
+  event.preventDefault()
+  element.focus()
+}
+const { ai, common } = useI18n()
 interface ToolCallInfo {
   title?: string
   rawInput?: unknown
@@ -48,10 +51,6 @@ const allowOptions = computed(
 const rejectOptions = computed(
   () => currentPermission.value?.request.options.filter((o) => o.kind.startsWith('reject')) ?? []
 )
-
-function handleDismiss() {
-  rejectCurrentPermission()
-}
 </script>
 
 <template>
@@ -59,8 +58,8 @@ function handleDismiss() {
     :open="open"
     :ui="{ overlay: 'z-50', content: 'w-80 rounded-lg p-4 shadow-xl' }"
     data-test-id="acp-permission-dialog"
-    @overlay-click="handleDismiss"
-    @escape-key-down="handleDismiss"
+    @open-auto-focus="focusCancel"
+    @escape-key-down.prevent
   >
     <AlertDialogTitle class="text-sm font-semibold text-surface">
       {{ ai.permissionRequestTitle }}
@@ -76,35 +75,49 @@ function handleDismiss() {
       >{{ toolInput }}</pre>
 
     <div class="mt-4 flex flex-col gap-2">
-      <AlertDialogAction
+      <!-- Only the permission queue closes this dialog: another request may already be waiting. -->
+      <AppButton
         v-if="canAllowCanvasForChat"
-        class="w-full rounded bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent/90"
+        color="primary"
+        variant="solid"
+        class="w-full"
         @click="allowCanvasForChat"
       >
         {{ ai.allowCanvasForChat }}
-      </AlertDialogAction>
+      </AppButton>
       <p v-if="canAllowCanvasForChat" class="text-[10px] text-muted">
         {{ ai.allowCanvasForChatHint }}
       </p>
-      <AlertDialogAction
+      <AppButton
         v-for="opt in allowOptions"
         :key="opt.optionId"
         v-test-id="acpPermissionOptionTestId(opt.kind)"
-        class="w-full rounded bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent/90"
+        color="primary"
+        variant="solid"
+        class="w-full"
         @click="respondToPermission(opt.optionId)"
       >
         {{ opt.name }}
-      </AlertDialogAction>
+      </AppButton>
 
-      <AlertDialogCancel
+      <AppButton
         v-for="opt in rejectOptions"
         :key="opt.optionId"
         v-test-id="acpPermissionOptionTestId(opt.kind)"
-        class="w-full rounded border border-border bg-canvas px-3 py-1.5 text-xs text-muted hover:bg-hover hover:text-surface"
+        variant="outline"
+        class="w-full"
         @click="respondToPermission(opt.optionId)"
       >
         {{ opt.name }}
-      </AlertDialogCancel>
+      </AppButton>
+      <AppButton
+        ref="cancelButton"
+        variant="outline"
+        class="w-full"
+        @click="cancelCurrentPermission"
+      >
+        {{ common.cancel }}
+      </AppButton>
     </div>
   </AppAlertDialogRoot>
 </template>

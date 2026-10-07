@@ -240,6 +240,8 @@ async function setupFrameChild(rotation: number) {
     store.graph.reparentNode(rectId, frameId)
     store.updateNode(rectId, { x: 65, y: 45 })
     store.select([])
+    // Child hit testing takes place inside the entered frame; the page scope selects the frame.
+    store.state.enteredContainerId = frameId
     store.requestRender()
     return { frameId, rectId }
   }, rotation)

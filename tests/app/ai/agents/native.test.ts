@@ -15,10 +15,16 @@ afterEach(clearTauriMocks)
 test('validates native discovery responses', async () => {
   await mockTauriIPC((command) => {
     expect(command).toBe('agent_lookup')
-    return { executables: { claude: '/bin/claude', npm: null }, searchPath: '/bin' }
+    return {
+      executables: { claude: '/bin/claude', npm: null },
+      versions: { '@open-pencil/mcp': '0.15.1' },
+      searchPath: '/bin'
+    }
   })
-  expect((await lookupAgents()).executables.claude).toBe('/bin/claude')
-  await mockTauriIPC(() => ({ executables: { claude: true }, searchPath: '/bin' }))
+  const lookup = await lookupAgents()
+  expect(lookup.executables.claude).toBe('/bin/claude')
+  expect(lookup.versions['@open-pencil/mcp']).toBe('0.15.1')
+  await mockTauriIPC(() => ({ executables: { claude: true }, versions: {}, searchPath: '/bin' }))
   await expect(lookupAgents()).rejects.toThrow()
 })
 
@@ -59,7 +65,7 @@ test.each([0, 1])('installs the selected adapter and handles exit code %i', asyn
 test('rejects native agents before attempting an adapter install', async () => {
   const kiro = expectDefined(
     ACP_AGENTS.find((agent) => agent.id === 'kiro-cli'),
-    'Kiro'
+    'Kiro CLI'
   )
   await expect(installAgentAdapter(kiro, '/bin')).rejects.toThrow(
     'This agent does not need an adapter.'

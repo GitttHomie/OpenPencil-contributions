@@ -8,12 +8,13 @@ import {
   type GradientHandle,
   type GradientSnapGuide
 } from '@open-pencil/core/geometry'
-import type { Fill, GradientTransform, Vector } from '@open-pencil/scene-graph'
-import { copyFills } from '@open-pencil/scene-graph/copy'
+import type { Fill, GradientTransform, Stroke, Vector } from '@open-pencil/scene-graph'
+import { copyFills, copyStrokes } from '@open-pencil/scene-graph/copy'
 
 export interface GradientTarget {
   nodeId: string
-  fillIndex: number
+  property: 'fills' | 'strokes'
+  index: number
 }
 
 export function createGradientEditing(
@@ -26,7 +27,7 @@ export function createGradientEditing(
   let gesture: {
     handle: GradientHandle
     transform: GradientTransform
-    fills: Fill[]
+    paints: { fills: Fill[] } | { strokes: Stroke[] }
     offset: Vector
     width: number
     height: number
@@ -35,7 +36,7 @@ export function createGradientEditing(
 
   function read() {
     const node = editor.graph.getNode(target.nodeId)
-    const fill = node?.fills[target.fillIndex]
+    const fill = node?.[target.property][target.index]
     if (!node || !fill?.type.startsWith('GRADIENT') || !fill.gradientTransform) return null
     return { node, fill, transform: fill.gradientTransform }
   }
@@ -65,7 +66,10 @@ export function createGradientEditing(
     gesture = {
       handle,
       transform: { ...transform },
-      fills: copyFills(node.fills),
+      paints:
+        target.property === 'fills'
+          ? { fills: copyFills(node.fills) }
+          : { strokes: copyStrokes(node.strokes) },
       offset: { x: position.x - origin.x, y: position.y - origin.y },
       width: node.width,
       height: node.height,
@@ -77,7 +81,7 @@ export function createGradientEditing(
 
   function move(position: Vector, snap = false, zoom = 1, disabled = false) {
     if (!gesture || !preview || preview.closed) return
-    const { handle, transform, fills, offset, width, height, type } = gesture
+    const { handle, transform, paints, offset, width, height, type } = gesture
     const handles = gradientHandles(type, transform, width, height)
     let origin: Vector | null = handles.center
     if (handle === 'center') origin = null
@@ -92,11 +96,11 @@ export function createGradientEditing(
     )
     guides.value = snapped.guides
     const next = moveGradientHandle(type, transform, width, height, handle, snapped.position)
-    const nextFills = copyFills(fills)
-    const fill = nextFills.at(target.fillIndex)
+    const changes = structuredClone(paints)
+    const fill = ('fills' in changes ? changes.fills : changes.strokes).at(target.index)
     if (!fill) return
     fill.gradientTransform = next
-    preview.update(target.nodeId, { fills: nextFills })
+    preview.update(target.nodeId, changes)
   }
 
   function commit() {

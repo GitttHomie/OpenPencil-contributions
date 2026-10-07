@@ -2,21 +2,27 @@ import {
   cloneInstanceOverrideState,
   findInstanceAncestor,
   recordInstanceOverride,
+  slotScope,
   type InstanceOverrideState
 } from '@open-pencil/scene-graph'
 
 import { getNodeEditCapability } from '#core/editor/capabilities'
+import { prepareSlotEdits } from '#core/editor/components/slots/index'
 import type { EditorContext } from '#core/editor/types'
 
 import { type DeletedEntry, restoreDeletedEntries } from './history'
 import { snapshotSubtree } from './subtree-history'
 
-export function deleteSelected(ctx: EditorContext) {
+export function deleteNodes(
+  ctx: EditorContext,
+  nodeIds: Iterable<string>,
+  nextSelection?: ReadonlySet<string>
+) {
   const entries: DeletedEntry[] = []
   const hidden: { id: string; visible: boolean; parentId: string }[] = []
   const overrides = new Map<string, InstanceOverrideState>()
   const selected = new Set(
-    [...ctx.state.selectedIds].filter((id) => {
+    [...nodeIds].filter((id) => {
       const node = ctx.graph.getNode(id)
       return node && !node.locked && getNodeEditCapability(ctx.graph, id).editable
     })
@@ -36,7 +42,7 @@ export function deleteSelected(ctx: EditorContext) {
     if (selectedAncestor) continue
     const parentId = node.parentId ?? ctx.state.currentPageId
     // The whole instance can be removed; its descendants retain the definition's structure.
-    if (node.parentId && findInstanceAncestor(ctx.graph, node.parentId)) {
+    if (slotScope(ctx.graph, parentId).kind === 'locked') {
       if (!node.visible) continue
       hidden.push({ id, visible: node.visible, parentId })
       const owner = findInstanceAncestor(ctx.graph, id)
@@ -53,6 +59,9 @@ export function deleteSelected(ctx: EditorContext) {
     for (const parentId of new Set([...entries, ...hidden].map((entry) => entry.parentId)))
       ctx.runLayoutForNode(parentId)
   }
+  const previousSelection = new Set(ctx.state.selectedIds)
+  const selectionAfter =
+    nextSelection ?? new Set([...previousSelection].filter((id) => !selected.has(id)))
   const forward = () => {
     for (const { id } of hidden) {
       ctx.graph.updateNode(id, { visible: false })
@@ -60,20 +69,33 @@ export function deleteSelected(ctx: EditorContext) {
     }
     for (const { id } of entries) ctx.graph.deleteNode(id)
     relayout()
-    ctx.setSelectedIds(new Set())
+    ctx.setSelectedIds(new Set(selectionAfter))
   }
-  const previousSelection = new Set(ctx.state.selectedIds)
-  forward()
-  ctx.undo.push({
-    label: entries.length === 0 ? 'Hide' : 'Delete',
-    forward,
-    inverse: () => {
-      restoreDeletedEntries(ctx, entries)
-      for (const { id, visible } of hidden) ctx.graph.updateNode(id, { visible })
-      for (const [id, state] of overrides)
-        ctx.graph.updateNode(id, { instanceOverrides: cloneInstanceOverrideState(state) })
-      relayout()
-      ctx.setSelectedIds(previousSelection)
-    }
+  ctx.undo.runBatch(entries.length === 0 ? 'Hide' : 'Delete', () => {
+    if (
+      !prepareSlotEdits(
+        ctx,
+        entries.map((entry) => entry.parentId)
+      )
+    )
+      return
+    for (const entry of entries) entry.subtree = snapshotSubtree(ctx.graph, entry.id)
+    forward()
+    ctx.undo.push({
+      label: entries.length === 0 ? 'Hide' : 'Delete',
+      forward,
+      inverse: () => {
+        restoreDeletedEntries(ctx, entries)
+        for (const { id, visible } of hidden) ctx.graph.updateNode(id, { visible })
+        for (const [id, state] of overrides)
+          ctx.graph.updateNode(id, { instanceOverrides: cloneInstanceOverrideState(state) })
+        relayout()
+        ctx.setSelectedIds(previousSelection)
+      }
+    })
   })
+}
+
+export function deleteSelected(ctx: EditorContext) {
+  deleteNodes(ctx, ctx.state.selectedIds, new Set())
 }

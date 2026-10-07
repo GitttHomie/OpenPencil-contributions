@@ -1,6 +1,6 @@
 import type { GUID, NodeChange } from '@open-pencil/kiwi/fig/codec'
 
-import type { InstanceAssignmentDiagnostic } from './interpret'
+import type { InstanceAssignmentDiagnostic } from './occurrence/types'
 import { symbolOverridesOf, type ComponentPropAssignment } from './types'
 
 /** Mutable per-owner frame shared by the layers an owner declares. */
@@ -40,6 +40,7 @@ export interface PropertyLayer {
 export interface AssignmentGroup {
   readonly assignments: readonly ComponentPropAssignment[]
   readonly rank: number
+  readonly declaredBy?: string
 }
 
 /** Split an owner's saved overrides into structural layers and property claims. */

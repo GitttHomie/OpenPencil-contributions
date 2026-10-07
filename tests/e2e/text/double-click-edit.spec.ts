@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 
 import { CanvasHelper } from '#tests/helpers/canvas'
-import { getEditingTextId } from '#tests/helpers/store'
+import { getEditingTextId, getSelectedNode } from '#tests/helpers/store'
 
 async function addTwoTopLevelTexts(page: Page) {
   return page.evaluate(() => {
@@ -82,7 +82,7 @@ test('double-clicking top-level text enters text edit mode', async ({ page }) =>
   await expect.poll(() => getEditingTextId(page), { timeout: 3000 }).toBe(textId)
 })
 
-test('single-clicking another text switches text edit target', async ({ page }) => {
+test('single-clicking another text selects it; double-clicking edits it', async ({ page }) => {
   await page.goto('/')
   const canvas = new CanvasHelper(page)
   await canvas.waitForInit()
@@ -95,10 +95,13 @@ test('single-clicking another text switches text edit target', async ({ page }) 
   await expect.poll(() => getEditingTextId(page), { timeout: 3000 }).toBe(ids.first)
 
   await canvas.click(250, 265)
+  await expect.poll(() => getEditingTextId(page)).toBeNull()
+  await expect.poll(() => getSelectedNode(page)).toMatchObject({ id: ids.second })
+  await canvas.dblclick(250, 265)
   await expect.poll(() => getEditingTextId(page), { timeout: 3000 }).toBe(ids.second)
 })
 
-test('double-click drill enters nested text edit mode', async ({ page }) => {
+test('single clicks select nested text; a double-click edits it', async ({ page }) => {
   await page.goto('/')
   const canvas = new CanvasHelper(page)
   await canvas.waitForInit()
@@ -108,16 +111,50 @@ test('double-click drill enters nested text edit mode', async ({ page }) => {
   const ids = await addFrameWithNestedText(page)
   await canvas.waitForRender()
 
-  await canvas.dblclick(125, 125)
+  await canvas.click(125, 125)
 
+  await expect.poll(() => getSelectedNode(page)).toMatchObject({ id: ids.textId })
+  await expect.poll(() => getEditingTextId(page)).toBeNull()
+
+  await canvas.click(145, 135)
+  await expect.poll(() => getEditingTextId(page)).toBeNull()
+  await canvas.dblclick(145, 135)
   await expect.poll(() => getEditingTextId(page), { timeout: 3000 }).toBe(ids.textId)
+  await expect.poll(() => getSelectedNode(page)).toMatchObject({ id: ids.textId })
+  await page.keyboard.press('ArrowRight')
+  await page.keyboard.type('!')
   await expect
-    .poll(() =>
-      page.evaluate(() => {
-        const store = window.openPencil?.getStore?.()
-        if (!store) throw new Error('OpenPencil store not initialized')
-        return [...store.state.selectedIds]
-      })
-    )
-    .toEqual([ids.textId])
+    .poll(async () => {
+      const text = (await getSelectedNode(page))?.text ?? ''
+      return { original: text.replace('!', ''), length: text.length }
+    })
+    .toEqual({ original: 'Nested label', length: 'Nested label!'.length })
+})
+
+test('dragging selected nested text moves it without entering text editing', async ({ page }) => {
+  await page.goto('/')
+  const canvas = new CanvasHelper(page)
+  await canvas.waitForInit()
+  await canvas.clearCanvas()
+  const ids = await addFrameWithNestedText(page)
+  await canvas.waitForRender()
+
+  await canvas.click(145, 135)
+  await expect.poll(() => getSelectedNode(page)).toMatchObject({ id: ids.textId })
+  await expect.poll(() => getEditingTextId(page)).toBeNull()
+
+  await canvas.drag(145, 135, 175, 165)
+  await expect
+    .poll(() => getSelectedNode(page))
+    .toMatchObject({
+      id: ids.textId,
+      x: 50,
+      y: 50
+    })
+  await expect.poll(() => getEditingTextId(page)).toBeNull()
+
+  await canvas.click(175, 165)
+  await expect.poll(() => getEditingTextId(page)).toBeNull()
+  await canvas.dblclick(175, 165)
+  await expect.poll(() => getEditingTextId(page)).toBe(ids.textId)
 })

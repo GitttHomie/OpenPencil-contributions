@@ -2,6 +2,12 @@ import { createAndBindNumberVariable } from '#vue/controls/binding-provider/numb
 import { useVariableBinding } from '#vue/controls/variable-binding/use'
 
 export type NumberBindingPath =
+  | 'borderTopWeight'
+  | 'borderRightWeight'
+  | 'borderBottomWeight'
+  | 'borderLeftWeight'
+  | 'gridRowGap'
+  | 'gridColumnGap'
   | 'width'
   | 'height'
   | 'minWidth'

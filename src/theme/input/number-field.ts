@@ -11,12 +11,15 @@ const numberFieldTheme = {
     field:
       'min-w-0 flex-1 cursor-text border-none bg-transparent text-right font-[inherit] text-[11px] text-surface outline-none',
     display: 'flex min-w-0 flex-1 items-center overflow-hidden text-[11px] select-none',
-    mixed: 'flex-1 text-muted',
+    mixed: 'min-w-0 flex-1 truncate text-muted',
     value: 'min-w-0 flex-1 truncate text-right text-surface',
     trailing: 'flex shrink-0 items-center self-stretch',
     suffix: 'shrink-0 pr-1.5 text-muted'
   },
   variants: {
+    leading: {
+      false: { display: 'pl-1.5', field: 'pl-1.5' }
+    },
     suffix: {
       true: { display: 'pr-0', field: 'pr-0' },
       false: { display: 'pr-1.5', field: 'pr-1.5' }

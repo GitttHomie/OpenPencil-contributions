@@ -293,7 +293,7 @@ test('Freeform disables auto layout and a flow option restores it', async () => 
     'off'
   )
   await expect(layout.getByText('Flow', { exact: true })).toBeVisible()
-  await expect(layout.getByRole('checkbox', { name: 'Clip content' })).toBeVisible()
+  await expect(layout.getByRole('switch', { name: 'Clip content' })).toBeVisible()
   await expect(layout.getByRole('button', { name: 'Freeform' })).toHaveAttribute('data-state', 'on')
   await expect(propertySection(page, 'Auto layout')).toHaveCount(0)
 

@@ -54,7 +54,12 @@ export function useComponentProperties() {
   const definitionSets = useSceneComputed(() =>
     instances.value.map((instance) => editor.getInstanceComponentPropertyDefinitions(instance.id))
   )
-  const definitions = computed(() => compatibleComponentPropertyDefinitions(definitionSets.value))
+  // Slots render as their own rows (useSlotProperties), not as value controls.
+  const definitions = computed(() =>
+    compatibleComponentPropertyDefinitions(definitionSets.value).filter(
+      (definition) => definition.type !== 'SLOT'
+    )
+  )
   const active = computed(() => allSelectedAreInstances.value && definitions.value.length > 0)
   const controls = useSceneComputed<ComponentPropertyControl[]>(() => {
     if (!active.value || instances.value.length === 0) return []
@@ -68,12 +73,16 @@ export function useComponentProperties() {
       const value = mergedComponentPropertyValue(values)
       let options: ComponentPropertyOption[] = []
       if (definition.type === 'VARIANT') {
-        options = variantOptions(editor, firstInstance, definition.name)
+        const target = editor.getInstanceComponentPropertyTarget(firstInstance.id, definition.id)
+        if (target) options = variantOptions(editor, target.instance, target.definition.name)
       } else if (definition.type === 'INSTANCE_SWAP') {
         componentNodes ??= [...editor.graph.getAllNodes()]
         options = instanceSwapOptions(componentNodes, definition, value === MIXED ? '' : value)
       }
       return {
+        nested:
+          editor.getInstanceComponentPropertyTarget(firstInstance.id, definition.id)?.instance
+            .id !== firstInstance.id,
         id: definition.id,
         name: definition.name,
         type: definition.type,
@@ -129,5 +138,8 @@ export function useComponentProperties() {
     commitToInstances(edit, propertyId, value)
   }
 
-  return { active, controls, setValue, setTextValue, flush: batch.flush }
+  const empty = computed(
+    () => allSelectedAreInstances.value && definitionSets.value.every((items) => !items.length)
+  )
+  return { active, empty, controls, setValue, setTextValue, flush: batch.flush }
 }

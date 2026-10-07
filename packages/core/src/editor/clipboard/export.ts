@@ -1,7 +1,7 @@
 import { selectionToJSX } from '@open-pencil/design-jsx'
 
 import type { EditorContext } from '#core/editor/types'
-import { renderNodesToSVG } from '#core/io/formats/svg'
+import { renderNodesToSVG } from '#core/io/formats/svg/index'
 
 export function createClipboardExportActions(ctx: EditorContext) {
   function copySelectionAsText(ids: string[]): string {

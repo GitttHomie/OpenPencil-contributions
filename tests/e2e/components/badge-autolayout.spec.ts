@@ -85,7 +85,7 @@ test('badge auto layout and wrapping its number keep one instance text through u
     .toBe('VERTICAL')
   for (const axis of ['width', 'height']) {
     const field = propertyField(page, axis)
-    await field.dblclick()
+    await field.locator('[data-slot="value"]').click()
     await field.getByRole('spinbutton').fill('32')
     await field.getByRole('spinbutton').press('Enter')
   }

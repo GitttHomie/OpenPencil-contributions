@@ -27,6 +27,9 @@ export interface UseFlatReorderDragOptions<TItem extends FlatReorderItem> {
   onMove: (sourceId: string, targetIndex: number) => void
   axis?: FlatReorderAxis
   getId?: (item: TItem) => string
+  handle?: string
+  canDrag?: () => boolean
+  canMove?: (sourceId: string, targetId: string) => boolean
 }
 
 interface RegisteredItem {
@@ -55,12 +58,16 @@ export function useFlatReorderDrag<TItem extends FlatReorderItem>({
   items,
   onMove,
   axis = 'vertical',
-  getId = (item) => item.id
+  getId = (item) => item.id,
+  handle,
+  canDrag = () => true,
+  canMove = () => true
 }: UseFlatReorderDragOptions<TItem>) {
   const draggingId = ref<string | null>(null)
   const instruction = ref<FlatReorderInstruction | null>(null)
   const instructionTargetId = ref<string | null>(null)
   const registered = new Map<string, RegisteredItem>()
+  const scope = Symbol('flat-reorder')
 
   function clearInstruction() {
     instruction.value = null
@@ -83,7 +90,9 @@ export function useFlatReorderDrag<TItem extends FlatReorderItem>({
     const cleanup = combine(
       draggable({
         element,
-        getInitialData: () => ({ id }),
+        dragHandle: handle ? (element.querySelector(handle) ?? undefined) : undefined,
+        canDrag,
+        getInitialData: () => ({ id, scope }),
         onDragStart: () => {
           draggingId.value = id
         },
@@ -106,7 +115,12 @@ export function useFlatReorderDrag<TItem extends FlatReorderItem>({
               }
             }
           ),
-        canDrop: ({ source }) => source.data.id !== id,
+        canDrop: ({ source }) =>
+          source.data.scope === scope &&
+          typeof source.data.id === 'string' &&
+          source.data.id !== id &&
+          canDrag() &&
+          canMove(source.data.id, id),
         onDrag: ({ self }) => {
           const nextInstruction = extractInstruction(self.data)
           if (!isFlatReorderInstruction(nextInstruction)) {
@@ -126,6 +140,7 @@ export function useFlatReorderDrag<TItem extends FlatReorderItem>({
   }
 
   const cleanupMonitor = monitorForElements({
+    canMonitor: ({ source }) => source.data.scope === scope,
     onDrop: ({ source, location }) => {
       const target = location.current.dropTargets.at(0)
       if (!target) return
@@ -140,6 +155,8 @@ export function useFlatReorderDrag<TItem extends FlatReorderItem>({
       const currentItems = items()
       const startIndex = currentItems.findIndex((item) => getId(item) === sourceId)
       const indexOfTarget = currentItems.findIndex((item) => getId(item) === targetId)
+      if (startIndex === -1 || indexOfTarget === -1 || !canDrag() || !canMove(sourceId, targetId))
+        return
       const targetIndex = getReorderDestinationIndex({
         startIndex,
         indexOfTarget,

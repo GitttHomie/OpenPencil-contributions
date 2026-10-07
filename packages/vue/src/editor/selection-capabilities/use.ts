@@ -1,4 +1,4 @@
-import { computed, ref } from 'vue'
+import { computed, shallowRef } from 'vue'
 
 import { canMakeBooleanSourceNode, hasVisibleStrokeSourceNode } from '@open-pencil/core/canvas'
 
@@ -16,11 +16,11 @@ import { useSceneComputed } from '#vue/internal/scene-computed/use'
 export function useSelectionCapabilities() {
   const selection = useSelectionState()
   const { editor, selectedIds, selectedNode, selectedCount, hasSelection } = selection
-  const historyVersion = ref(0)
-  useEditorEvent('history:changed', () => historyVersion.value++)
-  const history = computed(() => {
-    void historyVersion.value
-    return { canUndo: editor.undo.canUndo, canRedo: editor.undo.canRedo }
+  // A change counter, not the undo manager itself: an editor that follows the active document
+  // must answer for the document that is active now.
+  const historyVersion = shallowRef(0)
+  useEditorEvent('history:changed', () => {
+    historyVersion.value++
   })
 
   const selectedNodesCanFlatten = useSceneComputed(() => {
@@ -73,6 +73,7 @@ export function useSelectionCapabilities() {
     }),
     canGoToMainComponent: computed(() => selection.isInstance.value),
     canCreateInstance: computed(() => selectedNode.value?.type === 'COMPONENT'),
+    canCreateSlot: selection.canCreateSlot,
     canMoveToPage: useSceneComputed(() => hasSelection.value && editor.graph.getPages().length > 1),
     canSetOpacity: computed(() => hasSelection.value),
     canSelectAll: useSceneComputed(
@@ -80,8 +81,12 @@ export function useSelectionCapabilities() {
     ),
     // In vector edit mode, undo/redo route to the session-local history —
     // keep the commands enabled so the shortcut reaches them.
-    canUndo: useSceneComputed(() => editor.state.nodeEditState != null || history.value.canUndo),
-    canRedo: useSceneComputed(() => editor.state.nodeEditState != null || history.value.canRedo),
+    canUndo: useSceneComputed(
+      () => historyVersion.value >= 0 && (editor.state.nodeEditState != null || editor.undo.canUndo)
+    ),
+    canRedo: useSceneComputed(
+      () => historyVersion.value >= 0 && (editor.state.nodeEditState != null || editor.undo.canRedo)
+    ),
     canZoomToSelection: computed(() => hasSelection.value)
   }
 }

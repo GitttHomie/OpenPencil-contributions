@@ -2,13 +2,14 @@
 import { computed } from 'vue'
 
 import type { LayoutMode } from '@open-pencil/scene-graph'
-import { useI18n, useLayoutControlsContext } from '@open-pencil/vue'
+import { useI18n, useSelectionLayout } from '@open-pencil/vue'
 
 import IconButton from '@/components/ui/button/IconButton.vue'
 import Tip from '@/components/ui/overlay/Tip.vue'
+import PanelFieldGroup from '@/components/ui/panel/PanelFieldGroup.vue'
 import SegmentedControl from '@/components/ui/select/SegmentedControl.vue'
 
-const ctx = useLayoutControlsContext()
+const { merged, allFlex, setMode, setWrap } = useSelectionLayout()
 const { panels } = useI18n()
 
 const layoutModes = computed<Array<{ value: LayoutMode; label: string }>>(() => [
@@ -19,30 +20,19 @@ const layoutModes = computed<Array<{ value: LayoutMode; label: string }>>(() => 
 ])
 
 function toggleWrap() {
-  const node = ctx.node
-  const enabling = node.layoutWrap !== 'WRAP'
-  ctx.editor.updateNodeWithUndo(
-    node.id,
-    {
-      layoutWrap: enabling ? 'WRAP' : 'NO_WRAP',
-      primaryAxisAlign:
-        enabling && node.primaryAxisAlign === 'SPACE_BETWEEN' ? 'MIN' : node.primaryAxisAlign
-    },
-    'Toggle layout wrap'
-  )
+  setWrap(merged('layoutWrap') !== 'WRAP')
 }
 
 function setLayoutMode(mode: string) {
-  ctx.editor.setLayoutMode(ctx.node.id, mode as LayoutMode)
+  setMode(mode as LayoutMode)
 }
 </script>
 
 <template>
-  <div>
-    <label class="mb-1 block text-[11px] text-muted">{{ panels.flow }}</label>
+  <PanelFieldGroup :label="panels.flow">
     <div class="flex items-center gap-1.5">
       <SegmentedControl
-        :model-value="ctx.node.layoutMode"
+        :model-value="typeof merged('layoutMode') === 'symbol' ? '' : String(merged('layoutMode'))"
         :options="layoutModes"
         :label="panels.flow"
         :ui="{ root: 'flex min-w-0 flex-1' }"
@@ -61,14 +51,14 @@ function setLayoutMode(mode: string) {
       </SegmentedControl>
 
       <IconButton
-        v-if="ctx.isFlex"
+        v-if="allFlex"
         :label="panels.layoutWrap"
         size="xs"
-        :active="ctx.node.layoutWrap === 'WRAP'"
+        :active="merged('layoutWrap') === 'WRAP'"
         @click="toggleWrap"
       >
         <icon-lucide-wrap-text class="size-3.5" />
       </IconButton>
     </div>
-  </div>
+  </PanelFieldGroup>
 </template>

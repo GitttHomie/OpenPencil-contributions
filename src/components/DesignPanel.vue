@@ -1,18 +1,32 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 
-import { useI18n, useSelectionState, useEditorCommands } from '@open-pencil/vue'
+import { isInComponent } from '@open-pencil/scene-graph'
+import {
+  useI18n,
+  useSelectionState,
+  useEditorCommands,
+  useEditorEvent,
+  useSceneComputed
+} from '@open-pencil/vue'
 
 import { useEditorStore } from '@/app/editor/active-store'
-import { COMPONENT_TYPES, nodeIcon } from '@/app/editor/icons'
+import { nodeIcon } from '@/app/editor/icons'
+import { openVariablesDialog } from '@/app/editor/tokens/dialog'
 import { openLibraryReview, useLibraryService } from '@/app/libraries'
+import IconButton from '@/components/ui/button/IconButton.vue'
 import Tip from '@/components/ui/overlay/Tip.vue'
 import PanelHeader from '@/components/ui/panel/PanelHeader.vue'
 
 import AppearanceSection from './properties/AppearanceSection.vue'
+import BooleanOperationsControl from './properties/BooleanOperationsControl.vue'
+import BehaviourPanel from './properties/component-properties/behaviour/BehaviourPanel.vue'
+import ComponentAuthoringSection from './properties/component-properties/ComponentAuthoringSection.vue'
 import ComponentPropertiesSection from './properties/component-properties/ComponentPropertiesSection.vue'
 import InstanceUpdateAction from './properties/component-properties/instance-update/InstanceUpdateAction.vue'
-import VariantAuthoringSection from './properties/component-properties/VariantAuthoringSection.vue'
+import SlotAuthoringSection from './properties/component-properties/slot/SlotAuthoringSection.vue'
+import type { ComponentPropertyFocusRequest } from './properties/component-properties/usePropertyValueFocus'
+import VariantAuthoringSection from './properties/component-properties/variant/VariantAuthoringSection.vue'
 import ConstraintsSection from './properties/constraints/ConstraintsSection.vue'
 import EffectsSection from './properties/EffectsSection.vue'
 import ExportSection from './properties/ExportSection.vue'
@@ -25,25 +39,29 @@ import MaskSection from './properties/MaskSection.vue'
 import PageSection from './properties/PageSection.vue'
 import RetainedPanel from './properties/panel/RetainedPanel.vue'
 import PositionSection from './properties/PositionSection.vue'
-import SelectionActionsControl from './properties/SelectionActionsControl.vue'
+import SelectionTypographySection from './properties/selection/SelectionTypographySection.vue'
 import StrokeSection from './properties/stroke/StrokeSection.vue'
 import TypographySection from './properties/TypographySection.vue'
 import VariablesSection from './properties/VariablesSection.vue'
-import VariablesDialog from './variables/VariablesDialog.vue'
 
-const variablesOpen = ref(false)
+const propertyFocus = ref<ComponentPropertyFocusRequest | null>(null)
+let propertyFocusRequest = 0
+useEditorEvent('selection:changed', () => {
+  propertyFocus.value = null
+})
+useEditorEvent('component-property:edit-requested', (target) => {
+  propertyFocus.value = { ...target, request: ++propertyFocusRequest }
+})
 const store = useEditorStore()
 const libraryService = useLibraryService()
 const activeTool = computed(() => store.state.activeTool)
 const { selectedNode: node, selectedCount: multiCount } = useSelectionState()
-const showBooleanOperations = computed(() => multiCount.value >= 2)
 const { getCommand } = useEditorCommands()
 const goToMainComponent = getCommand('selection.goToMainComponent')
 const detachInstance = getCommand('selection.detachInstance')
-const isComponentType = computed(() => {
-  const type = node.value?.type
-  return type ? COMPONENT_TYPES.has(type) : false
-})
+const isComponentType = useSceneComputed(() =>
+  node.value ? isInComponent(store.graph, node.value.id) : false
+)
 const selectedIcon = computed(() => (node.value ? nodeIcon(node.value) : undefined))
 function openSelectedInstanceReview() {
   const instance = node.value
@@ -88,12 +106,14 @@ const { panels } = useI18n()
         {{ panels.layersCount({ count: String(multiCount) }) }}
       </span>
       <template #actions>
-        <SelectionActionsControl :show-boolean-operations="showBooleanOperations" />
+        <BooleanOperationsControl />
       </template>
     </PanelHeader>
     <ComponentPropertiesSection />
-    <PositionSection />
+    <PositionSection :show-size="false" />
     <ConstraintsSection />
+    <LayoutSection />
+    <SelectionTypographySection />
     <AppearanceSection />
     <FillSection />
     <StrokeSection />
@@ -125,40 +145,31 @@ const { panels } = useI18n()
             :service="libraryService"
             @review="openSelectedInstanceReview"
           />
-          <SelectionActionsControl />
+          <template v-if="node.type === 'INSTANCE'">
+            <IconButton
+              :label="goToMainComponent.label"
+              :disabled="!goToMainComponent.enabled.value"
+              @click="goToMainComponent.run()"
+            >
+              <icon-lucide-component class="size-3.5 text-component" />
+            </IconButton>
+            <IconButton
+              :label="detachInstance.label"
+              :disabled="!detachInstance.enabled.value"
+              @click="detachInstance.run()"
+            >
+              <icon-lucide-unlink class="size-3.5" />
+            </IconButton>
+          </template>
         </template>
       </PanelHeader>
 
-      <!-- Component actions -->
-      <div
-        v-if="node.type === 'INSTANCE'"
-        class="flex flex-col gap-1 border-b border-border px-3 py-2"
-      >
-        <button
-          type="button"
-          class="rounded bg-component/10 px-2 py-1 text-left text-[11px] text-component hover:bg-component/20"
-          @click="goToMainComponent.run()"
-        >
-          {{ panels.goToMainComponent }}
-        </button>
-        <button
-          type="button"
-          class="rounded px-2 py-1 text-left text-[11px] text-muted hover:bg-hover"
-          @click="detachInstance.run()"
-        >
-          {{ panels.detachInstance }}
-        </button>
-      </div>
+      <ComponentPropertiesSection v-if="node.type === 'INSTANCE'" :focus-request="propertyFocus" />
+      <VariantAuthoringSection v-if="node.type === 'COMPONENT_SET' || node.type === 'COMPONENT'" />
+      <ComponentAuthoringSection :focus-request="propertyFocus" />
 
-      <ComponentPropertiesSection v-if="node.type === 'INSTANCE'" />
-      <VariantAuthoringSection
-        v-if="
-          node.type === 'COMPONENT_SET' ||
-          (node.type === 'COMPONENT' &&
-            node.parentId &&
-            store.graph.getNode(node.parentId)?.type === 'COMPONENT_SET')
-        "
-      />
+      <SlotAuthoringSection />
+      <BehaviourPanel v-if="node.type === 'COMPONENT' || node.type === 'COMPONENT_SET'" />
 
       <FramePresetSelect v-if="node.type === 'FRAME'" />
 
@@ -183,9 +194,7 @@ const { panels } = useI18n()
     class="scrollbar-thin flex-1 overflow-x-hidden overflow-y-auto pb-4"
   >
     <PageSection />
-    <VariablesSection @open-dialog="variablesOpen = true" />
+    <VariablesSection @open-dialog="openVariablesDialog(store)" />
     <ExportSection />
   </div>
-
-  <VariablesDialog v-model:open="variablesOpen" />
 </template>

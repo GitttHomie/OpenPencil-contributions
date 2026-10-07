@@ -1,4 +1,4 @@
-import type { LibraryAssetDescriptor, LibrarySummary } from '#core/library'
+import type { LibraryAssetDescriptor, LibrarySummary } from '#core/library/index'
 
 export type ComponentCatalogSource = 'document' | 'libraries' | 'all'
 

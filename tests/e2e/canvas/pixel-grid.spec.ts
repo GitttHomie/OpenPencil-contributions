@@ -6,7 +6,7 @@ import {
   setPixelGridViewport
 } from '#tests/helpers/canvas/pixel-grid'
 
-const editor = useEditorSetupWithClear('/?test&no-rulers')
+const editor = useEditorSetupWithClear('/?test&no-rulers&navigation-benchmark')
 
 test('zoom and View menus share pixel-grid visibility; keyboard toggles it without changing snapping or exports', async () => {
   const { page, canvas } = editor
@@ -36,7 +36,7 @@ test('zoom and View menus share pixel-grid visibility; keyboard toggles it witho
   canvas.assertNoErrors()
 })
 
-test('pixel grid follows fractional zoom and negative pan, and hides below 800%', async () => {
+test('pixel grid follows fractional zoom and negative pan, appears at 400%, and hides below it', async () => {
   const { page, canvas } = editor
   await createPixelGridFixture(page)
   await setPixelGridViewport(page, 10.5, -12.25, 16.25)
@@ -45,6 +45,10 @@ test('pixel grid follows fractional zoom and negative pan, and hides below 800%'
   await expect.poll(() => readPixelGridState(page)).toMatchObject({ visible: true })
   expect(await canvas.screenshotCanvasRegion(320, 240)).toMatchSnapshot('pixel-grid-fractional.png')
   await setPixelGridViewport(page, 4)
+  await page.evaluate(() => window.openPencil?.test?.navigation?.waitForSettlement())
+  expect(await canvas.screenshotCanvasRegion(320, 240)).toMatchSnapshot('pixel-grid-400.png')
+  await setPixelGridViewport(page, 3.99)
+  await page.evaluate(() => window.openPencil?.test?.navigation?.waitForSettlement())
   const lowZoom = await canvas.screenshotCanvasRegion(320, 240)
   await page.keyboard.press('Meta+Shift+p')
   expect(await canvas.screenshotCanvasRegion(320, 240)).toEqual(lowZoom)

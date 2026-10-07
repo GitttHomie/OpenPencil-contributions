@@ -22,6 +22,7 @@ test.each(['app-first', 'sdk-first'])(
         project,
         JSON.stringify({
           extends: join(root, 'tsconfig.json'),
+          compilerOptions: { typeRoots: [join(root, 'node_modules/@types')] },
           include: [],
           files: [
             ...declarations,

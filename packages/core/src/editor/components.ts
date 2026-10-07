@@ -1,15 +1,22 @@
 import type { SceneNode } from '@open-pencil/scene-graph'
-import { deriveSlashVariantProperties } from '@open-pencil/scene-graph/variant-properties'
 
-import { randomHex } from '#core/random'
-
+import { createComponentAuthoringActions } from './components/authoring'
+import { createBehaviourActions } from './components/behaviours'
+import { becomesComponent, componentWrapProps } from './components/create'
 import { createComponentFocusActions } from './components/focus'
 import { createComponentInstanceActions } from './components/instances'
+import { createNestedPropertyActions } from './components/nested-properties'
 import { createComponentPropertyActions } from './components/properties'
+import { createSlotActions } from './components/slots'
+import { createSlotAuthoringActions } from './components/slots/authoring'
 import { createVariantActions } from './components/variants'
+import { createVariantSet } from './components/variants/wrap'
 import type { EditorContext } from './types'
 
-export function createComponentActions(ctx: EditorContext) {
+export function createComponentActions(
+  ctx: EditorContext,
+  wrapInAutoLayout: (nodes: SceneNode[]) => string | null | undefined
+) {
   function createComponentFromSelection(
     selectedNodes: SceneNode[],
     wrapSelectionInContainer: (
@@ -28,7 +35,7 @@ export function createComponentActions(ctx: EditorContext) {
 
       if (node.type === 'COMPONENT') return
 
-      if (node.type === 'FRAME' || node.type === 'GROUP') {
+      if (becomesComponent(node)) {
         ctx.graph.updateNode(node.id, { type: 'COMPONENT' })
         ctx.setSelectedIds(new Set([node.id]))
         ctx.undo.push({
@@ -46,29 +53,12 @@ export function createComponentActions(ctx: EditorContext) {
       }
     }
 
-    wrapSelectionInContainer('COMPONENT', selectedNodes)
+    wrapSelectionInContainer('COMPONENT', selectedNodes, componentWrapProps(selectedNodes))
   }
 
-  function createComponentSetFromComponents(
-    selectedNodes: SceneNode[],
-    wrapSelectionInContainer: (
-      type: 'GROUP' | 'FRAME' | 'COMPONENT' | 'COMPONENT_SET',
-      nodes: SceneNode[],
-      extra?: Partial<SceneNode>
-    ) => string | null
-  ) {
+  function createComponentSetFromComponents(selectedNodes: SceneNode[]) {
     if (selectedNodes.length < 2) return
-    if (!selectedNodes.every((n) => n.type === 'COMPONENT')) return
-    const containerId = wrapSelectionInContainer('COMPONENT_SET', selectedNodes)
-    if (!containerId) return
-
-    const derived = deriveSlashVariantProperties(selectedNodes, () => `prop:${randomHex(8)}`)
-    if (!derived) return
-
-    for (const [nodeId, changes] of derived.variants) {
-      ctx.graph.updateNode(nodeId, changes)
-    }
-    ctx.graph.updateNode(containerId, { componentPropertyDefinitions: derived.definitions })
+    createVariantSet(ctx, selectedNodes)
   }
 
   const focusActions = createComponentFocusActions(ctx)
@@ -85,6 +75,14 @@ export function createComponentActions(ctx: EditorContext) {
     ...instanceActions,
     ...focusActions,
     ...variantActions,
-    ...componentPropertyActions
+    ...componentPropertyActions,
+    ...createNestedPropertyActions(
+      ctx,
+      componentPropertyActions.getInstanceComponentPropertyDefinitions
+    ),
+    ...createComponentAuthoringActions(ctx, componentPropertyActions.setInstanceComponentProperty),
+    ...createSlotActions(ctx),
+    ...createSlotAuthoringActions(ctx, wrapInAutoLayout),
+    ...createBehaviourActions(ctx, variantActions)
   }
 }

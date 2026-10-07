@@ -1,7 +1,8 @@
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
-const repoRoot = join(import.meta.dir, '..', '..')
+const repoRoot = fileURLToPath(new URL('../../', import.meta.url))
 
 export function repoPath(...segments: string[]): string {
   return join(repoRoot, ...segments)

@@ -17,6 +17,8 @@ import { resolveEffectiveBindingValue } from './resolution'
 
 export interface OpenPencilBindingProviderOptions<V> {
   type: VariableType
+  bindingTarget?(editor: Editor, target: BindingTarget): BindingTarget
+  prepareTargets?(editor: Editor, targets: BindingTarget[]): void
   resolve(editor: Editor, variableId: string, target?: BindingTarget): V | undefined
   create?(editor: Editor, target: BindingTarget, value: V, name: string): void
   prepareEdit?(
@@ -51,11 +53,13 @@ export function createOpenPencilBindingProvider<V>(
 
   function getBound(target: BindingTarget): Variable | undefined {
     void revision?.value
+    target = options.bindingTarget?.(editor, target) ?? target
     const variableId = editor.getNode(target.nodeId)?.boundVariables[target.path]
     return variableId ? editor.getVariable(variableId) : undefined
   }
 
   function getState(targets: BindingTarget[]): BindingState {
+    targets = targets.map((target) => options.bindingTarget?.(editor, target) ?? target)
     if (targets.length === 0) return 'unbound'
     const variableIds = new Set(
       targets.map(
@@ -87,10 +91,21 @@ export function createOpenPencilBindingProvider<V>(
     revision,
     listVariables: variables,
     filterVariables,
-    getBindingId: (target) => editor.getNode(target.nodeId)?.boundVariables[target.path],
+    getBindingId: (target) => {
+      target = options.bindingTarget?.(editor, target) ?? target
+      return editor.getNode(target.nodeId)?.boundVariables[target.path]
+    },
     getBound,
     getState,
-    resolve: (variableId, target) => options.resolve(editor, variableId, target),
+    resolve: (variableId, target) =>
+      options.resolve(
+        editor,
+        variableId,
+        target ? (options.bindingTarget?.(editor, target) ?? target) : undefined
+      ),
+    prepareTargets: options.prepareTargets
+      ? (targets) => options.prepareTargets?.(editor, targets)
+      : undefined,
     bind: (target, variableId) => editor.bindVariable(target.nodeId, target.path, variableId),
     unbind: (target) => editor.unbindVariable(target.nodeId, target.path),
     create: options.create

@@ -29,7 +29,8 @@ export function createDefaultEditorViewState(pageId: string): EditorViewState {
     enteredContainerId: null,
     nodeEditState: null,
     cursorCanvasX: null,
-    cursorCanvasY: null
+    cursorCanvasY: null,
+    play: null
   }
 }
 

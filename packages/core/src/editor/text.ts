@@ -6,6 +6,7 @@ import {
 } from '@open-pencil/scene-graph'
 import { copyDerivedGlyphs, copyGeometryPaths } from '@open-pencil/scene-graph/copy'
 
+import { componentPropertyEditTarget } from '#core/editor/components/authoring/binding'
 import { weightToStyle } from '#core/text/fonts'
 import { hasGlyphOutlines } from '#core/text/opentype'
 
@@ -107,6 +108,7 @@ export function createTextActions(ctx: EditorContext) {
   function updateTextEditNode(nodeId: string, changes: Partial<SceneNode>) {
     const node = ctx.graph.getNode(nodeId)
     if (!node) return
+    if (node.componentPropertyReferences.some((item) => item.field === 'TEXT')) return
     ctx.graph.updateNode(nodeId, {
       ...textAutoResizeChanges(node, changes),
       ...changes,
@@ -120,6 +122,16 @@ export function createTextActions(ctx: EditorContext) {
     if (ctx.state.editingTextId) commitTextEdit()
     const node = ctx.graph.getNode(nodeId)
     if (!node) return
+    if (node.componentPropertyReferences.some((item) => item.field === 'TEXT')) {
+      const target = componentPropertyEditTarget(ctx.graph, nodeId, 'TEXT')
+      if (target) {
+        ctx.setSelectedIds(new Set([target.nodeId]))
+        ctx.setActiveTool('SELECT')
+        ctx.emitEditorEvent('component-property:edit-requested', target)
+        ctx.requestRender()
+      }
+      return
+    }
     // Font-gated: unavailable-font path text stays a non-editable baked graphic.
     if (!isPathTextEditable(node)) return
     activeSession = createTextEditSession(node)
@@ -150,6 +162,13 @@ export function createTextActions(ctx: EditorContext) {
     const before = activeSession?.before ?? { text: '', styleRuns: [], size: {} }
     const beforePathText = activeSession?.beforePathText ?? null
     const node = ctx.graph.getNode(result.nodeId)
+    if (node?.componentPropertyReferences.some((item) => item.field === 'TEXT')) {
+      te.stop()
+      ctx.state.editingTextId = null
+      activeSession = null
+      ctx.requestRender()
+      return
+    }
     const after = snapshotTextNode(node, result.text)
     after.text = result.text
     const sizeChanges =

@@ -1,12 +1,13 @@
 import type { SceneGraph, SceneNode, Vector } from '@open-pencil/scene-graph'
 import Matrix from '@open-pencil/scene-graph/matrix'
 
+import { LABEL_FONT_SIZE } from '#core/constants'
 import {
   createSceneGeometry,
   viewportMatrix,
   type RotationPreview,
   type ViewportTransform
-} from '#core/geometry'
+} from '#core/geometry/index'
 
 /** Labels use a world-space anchor and orientation, but retain screen-sized typography. */
 export function labelTransform(
@@ -51,6 +52,20 @@ export function frameLabelPlacement(
 }
 
 type LabelTransform = ReturnType<typeof labelTransform>
+
+/** A vertical line or point still needs room for its name without changing its geometry. */
+export function nodeTitlePlacement(
+  node: SceneNode,
+  graph: SceneGraph,
+  preview: RotationPreview | null | undefined,
+  zoom: number
+) {
+  const placement = frameLabelPlacement(node, graph, preview)
+  return {
+    ...placement,
+    width: placement.width || Math.max(placement.height, LABEL_FONT_SIZE / zoom)
+  }
+}
 
 function labelWorldMatrix(transform: LabelTransform, zoom: number) {
   return Matrix.multiply(

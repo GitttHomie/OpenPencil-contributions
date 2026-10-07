@@ -19,6 +19,7 @@ export interface AppearanceControlsActions {
 
 export interface AppearanceControlsRootSlotProps {
   node: SceneNode | null
+  nodes: SceneNode[]
   isMulti: boolean
   active: boolean
   hasCornerRadius: boolean
@@ -30,6 +31,10 @@ export interface AppearanceControlsRootSlotProps {
   opacityPercent: MixedValue<number>
   blendModeValue: MixedValue<BlendMode>
   visibilityState: 'visible' | 'hidden' | 'mixed'
+  /** True when any selected layer's visibility is controlled by a component property. */
+  visibilityLinked: boolean
+  /** Names of the component properties controlling the selected layers' visibility. */
+  visibilityPropertyNames: string[]
   actions: AppearanceControlsActions
 }
 

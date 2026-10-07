@@ -18,7 +18,7 @@ function setJoin(value: string) {
 </script>
 
 <template>
-  <div class="flex flex-col gap-3">
+  <div class="flex flex-col gap-field-group">
     <PanelFieldGroup :label="panels.strokeCap">
       <SegmentedControl
         :model-value="cap === MIXED ? 'MIXED' : cap"

@@ -1,6 +1,6 @@
 import { resolveNodeTextDirection } from '@open-pencil/scene-graph/text-direction'
 
-import { computeContentBounds } from '#core/io/formats/raster'
+import { computeContentBounds } from '#core/io/formats/raster/index'
 
 import {
   nextDefId,

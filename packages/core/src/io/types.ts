@@ -3,7 +3,7 @@ import type { CanvasKit } from 'canvaskit-wasm'
 import type { SceneGraph } from '@open-pencil/scene-graph'
 import type { RenderColorSpace } from '@open-pencil/scene-graph/color'
 
-import type { SkiaRenderer } from '#core/canvas'
+import type { SkiaRenderer } from '#core/canvas/index'
 
 import type { RasterExportFormat } from './formats/raster'
 

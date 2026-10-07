@@ -1,20 +1,37 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, watch } from 'vue'
 
 import { useI18n } from '@open-pencil/vue'
 
 import { useProfileAgentModels } from '@/app/ai/models/settings/profile-editor/agent-models'
+import { useProfileSessionOptions } from '@/app/ai/models/settings/profile-editor/session'
 import type { AIModelProfileDraft } from '@/app/ai/models/types'
+import ACPThinkingSelect from '@/components/chat/ACPThinkingSelect.vue'
 import ProviderSettingsField from '@/components/settings/provider/ProviderSettingsField.vue'
 import AppButton from '@/components/ui/button/AppButton.vue'
 import AppAlert from '@/components/ui/feedback/AppAlert.vue'
 import AppCombobox from '@/components/ui/select/AppCombobox.vue'
+import AppSelect from '@/components/ui/select/AppSelect.vue'
 
 const { draft } = defineProps<{ draft: AIModelProfileDraft }>()
+const emit = defineEmits<{ refresh: []; validity: [valid: boolean] }>()
 const { ai, common } = useI18n()
 const { catalog, loading, failed, available, unknownSelection, refresh, selectModel } =
   useProfileAgentModels(draft)
+const session = useProfileSessionOptions(
+  draft,
+  catalog,
+  computed(() => ({ default: ai.value.cliUseDefault, unavailable: common.value.unavailable }))
+)
+const controls = session.controls
+watch(controls, (value) => emit('validity', !value.some((control) => control.invalid)), {
+  immediate: true
+})
 const DEFAULT_MODEL = '__cli_default__'
+function refreshModels() {
+  emit('refresh')
+  void refresh()
+}
 const selected = computed({
   get: () => draft.modelID || DEFAULT_MODEL,
   set: (value: string) => selectModel(value === DEFAULT_MODEL ? '' : value)
@@ -60,7 +77,7 @@ const options = computed(() => {
             :disabled="loading"
           />
         </div>
-        <AppButton size="xs" :disabled="!available" :loading="loading" @click="refresh">
+        <AppButton size="xs" :disabled="!available" :loading="loading" @click="refreshModels">
           {{ ai.refreshCLIModels }}
         </AppButton>
       </div>
@@ -70,5 +87,28 @@ const options = computed(() => {
     <p v-else-if="catalog && !catalog.selector" class="text-[11px] text-muted">
       {{ ai.cliModelUnsupported }}
     </p>
+    <ProviderSettingsField
+      v-for="control in controls"
+      :key="control.id"
+      v-slot="{ control: binding }"
+      :label="control.name"
+      :hint="control.description"
+      :error="control.invalid ? ai.cliOptionUnavailable : undefined"
+    >
+      <AppSelect
+        v-bind="binding"
+        :model-value="control.selected"
+        :options="control.options"
+        :disabled="loading"
+        @update:model-value="session.update(control.id, $event)"
+      />
+    </ProviderSettingsField>
+    <ProviderSettingsField v-if="catalog?.thinking || draft.acpThinking" :label="ai.thinkingLevel">
+      <ACPThinkingSelect
+        v-model="draft.acpThinking"
+        :control="catalog?.thinking"
+        :disabled="loading"
+      />
+    </ProviderSettingsField>
   </div>
 </template>

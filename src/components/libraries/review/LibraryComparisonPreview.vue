@@ -6,6 +6,7 @@ import { renderNodesToImage } from '@open-pencil/core/io'
 import type { SceneGraph } from '@open-pencil/scene-graph'
 
 import { useEditorStore } from '@/app/editor/active-store'
+import AppSpinner from '@/components/ui/feedback/AppSpinner.vue'
 
 const { graph, nodeId, alt } = defineProps<{ graph: SceneGraph; nodeId: string; alt: string }>()
 const editor = useEditorStore()
@@ -34,5 +35,5 @@ watch(
 
 <template>
   <img v-if="url" :src="url" :alt="alt" class="max-h-[60vh] max-w-[80%] object-contain" />
-  <icon-lucide-loader-2 v-else class="size-5 animate-spin motion-reduce:animate-none text-muted" />
+  <AppSpinner v-else class="size-5 text-muted" />
 </template>

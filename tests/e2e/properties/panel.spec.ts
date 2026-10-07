@@ -41,34 +41,29 @@ test('appearance fields share control height and show variable actions', async (
   await applyVariable.hover()
   await expect(applyVariable).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
 
+  // The shared picker opens beside the panel, to the left of its trigger, like Figma's.
   await applyVariable.click()
-  const search = editor.page.locator('input[data-slot="search"]')
-  const picker = editor.page.locator('[data-slot=content]').filter({ has: search })
+  const picker = editor.page.getByRole('dialog', { name: 'Apply variable' })
   await expect(picker).toBeVisible()
+  await expect(picker).toHaveAttribute('data-side', 'left')
   const triggerBox = expectDefined(await applyVariable.boundingBox(), 'variable trigger bounds')
   const pickerBox = expectDefined(await picker.boundingBox(), 'variable picker bounds')
-  await expect(picker).toHaveAttribute('data-side', 'bottom')
-  expect(pickerBox.y).toBeGreaterThanOrEqual(triggerBox.y + triggerBox.height)
-  expect(Math.abs(pickerBox.x + pickerBox.width - (triggerBox.x + triggerBox.width))).toBeLessThan(
-    4
-  )
-  await search.press('Escape')
+  expect(pickerBox.x + pickerBox.width).toBeLessThanOrEqual(triggerBox.x)
+  await editor.page.keyboard.press('Escape')
+  await expect(picker).toBeHidden()
 
-  // Move the anchor near the bottom without changing its actual panel layout.
+  // Near the bottom of the window it shifts up to stay fully visible.
   const viewport = editor.page.viewportSize()
   if (!viewport) throw new Error('Viewport unavailable')
-  await editor.page.setViewportSize({
-    width: viewport.width,
-    height: Math.ceil(triggerBox.y + triggerBox.height + 24)
-  })
+  const height = Math.ceil(triggerBox.y + triggerBox.height + 24)
+  await editor.page.setViewportSize({ width: viewport.width, height })
   try {
     await applyVariable.click()
-    await expect(picker).toHaveAttribute('data-side', 'top')
-    const flipped = expectDefined(await picker.boundingBox(), 'flipped picker bounds')
-    const anchor = expectDefined(await applyVariable.boundingBox(), 'edge trigger bounds')
-    expect(flipped.y).toBeGreaterThanOrEqual(8)
-    expect(flipped.y + flipped.height).toBeLessThanOrEqual(anchor.y)
-    await search.press('Escape')
+    await expect(picker).toBeVisible()
+    const shifted = expectDefined(await picker.boundingBox(), 'shifted picker bounds')
+    expect(shifted.y).toBeGreaterThanOrEqual(0)
+    expect(shifted.y + shifted.height).toBeLessThanOrEqual(height)
+    await editor.page.keyboard.press('Escape')
   } finally {
     await editor.page.setViewportSize(viewport)
   }
@@ -492,20 +487,20 @@ test('flip horizontal sets flipX', async () => {
   editor.canvas.assertNoErrors()
 })
 
-test('clip content checkbox toggles clipsContent', async () => {
+test('clip content switch toggles clipsContent', async () => {
   await editor.canvas.clearCanvas()
   await editor.canvas.pressKey('f')
   await editor.canvas.drag(100, 100, 300, 300)
   await editor.canvas.waitForRender()
 
-  // Enable auto-layout so the clip-content checkbox is visible
+  // Exercise the switch in the auto-layout panel.
   await editor.canvas.pressKey('Shift+a')
   await editor.canvas.waitForRender()
 
   const before = expectDefined(await getSelectedNode(editor.page), 'selected frame before clipping')
   const initialValue = before.clipsContent
 
-  await editor.page.getByTestId('clip-content-checkbox').click()
+  await editor.page.getByRole('switch', { name: 'Clip content', exact: true }).click()
   await editor.canvas.waitForRender()
 
   const after = await getSelectedNode(editor.page)

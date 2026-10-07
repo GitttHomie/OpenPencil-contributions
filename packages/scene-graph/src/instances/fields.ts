@@ -26,6 +26,8 @@ export const INSTANCE_SYNC_PROPS: (keyof SceneNode)[] = [
   'maxHeight',
   'fills',
   'strokes',
+  'strokeWeight',
+  'strokeAlign',
   'effects',
   'opacity',
   'cornerRadius',

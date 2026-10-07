@@ -1,6 +1,10 @@
 import type { SceneGraph } from '../index'
 import { getInstanceOverride, setInstanceOverride } from '../instance-overrides'
 import { findInstanceAncestor } from '../instances'
+import { instanceMainComponent } from '../instances/main-component'
+import { readPluginData, withPluginData } from '../plugin-data/field'
+import { OPEN_PENCIL_PLUGIN_DATA } from '../plugin-data/fields'
+import { randomHex } from '../random'
 import type {
   ComponentPropertyDefinition,
   ComponentPropertyReferenceField,
@@ -14,8 +18,8 @@ export interface ComponentPropertyTarget {
 }
 
 export function componentPropertyOwners(graph: SceneGraph, instance: SceneNode): SceneNode[] {
-  if (instance.type !== 'INSTANCE' || !instance.componentId) return []
-  const component = graph.getNode(instance.componentId)
+  if (instance.type !== 'INSTANCE') return []
+  const component = instanceMainComponent(graph, instance)
   if (!component) return []
   const parent = component.parentId ? graph.getNode(component.parentId) : null
   return parent?.type === 'COMPONENT_SET' ? [parent, component] : [component]
@@ -31,7 +35,15 @@ export function componentPropertyDefinitions(
       if (!definitions.has(definition.id)) definitions.set(definition.id, definition)
     }
   }
-  return [...definitions.values()]
+  const component = instanceMainComponent(graph, instance)
+  const defaults = component
+    ? (readPluginData(component.pluginData, OPEN_PENCIL_PLUGIN_DATA.componentVariantDefaults) ?? {})
+    : {}
+  return [...definitions.values()].map((definition) =>
+    Object.hasOwn(defaults, definition.id)
+      ? { ...definition, defaultValue: defaults[definition.id] }
+      : definition
+  )
 }
 
 export function resolveComponentPropertyValue(graph: SceneGraph, value: string): SceneNode | null {
@@ -207,6 +219,19 @@ function componentInstances(graph: SceneGraph, componentId: string): SceneNode[]
 }
 
 function removePropertyFromNode(graph: SceneGraph, node: SceneNode, propertyId: string): void {
+  const defaults = readPluginData(node.pluginData, OPEN_PENCIL_PLUGIN_DATA.componentVariantDefaults)
+  if (defaults && Object.hasOwn(defaults, propertyId)) {
+    const remaining = Object.fromEntries(
+      Object.entries(defaults).filter(([id]) => id !== propertyId)
+    )
+    graph.updateNode(node.id, {
+      pluginData: withPluginData(
+        node.pluginData,
+        OPEN_PENCIL_PLUGIN_DATA.componentVariantDefaults,
+        remaining
+      )
+    })
+  }
   if (node.componentPropertyReferences.some((reference) => reference.propertyId === propertyId)) {
     graph.updateNode(node.id, {
       componentPropertyReferences: node.componentPropertyReferences.filter(
@@ -247,4 +272,9 @@ export function removeComponentProperty(
   ]
   for (const node of nodes) removePropertyFromNode(graph, node, propertyId)
   return true
+}
+
+/** A new component property ID, in the `prop:` form the editor, plugin API, and design JSX share. */
+export function createComponentPropertyId(): string {
+  return `prop:${randomHex(8)}`
 }

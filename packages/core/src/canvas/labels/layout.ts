@@ -29,7 +29,18 @@ export interface LabelLayout {
 }
 
 export function hasFrameTitle(node: SceneNode, parent?: SceneNode | null): boolean {
-  return node.type === 'FRAME' && (!parent || parent.type === 'CANVAS' || parent.type === 'SECTION')
+  return (
+    hasPersistentNodeTitle(node, parent) ||
+    (node.type === 'FRAME' && (!parent || parent.type === 'SECTION'))
+  )
+}
+
+/** Sections and component types already have dedicated persistent labels. */
+export function hasPersistentNodeTitle(node: SceneNode, parent?: SceneNode | null): boolean {
+  return (
+    parent?.type === 'CANVAS' &&
+    !['SECTION', 'COMPONENT', 'COMPONENT_SET', 'INSTANCE'].includes(node.type)
+  )
 }
 
 function sectionLabelLayout(
@@ -98,5 +109,30 @@ export function labelLayout(
     fontSize,
     fontWeight: 400,
     maxTextWidth
+  }
+}
+
+/** How far, in screen pixels, a label can reach outside the node it names. */
+const LABEL_REACH = Math.max(
+  LABEL_OFFSET_Y + LABEL_FONT_SIZE,
+  SECTION_TITLE_HEIGHT + SECTION_TITLE_GAP,
+  COMPONENT_LABEL_GAP + COMPONENT_LABEL_FONT_SIZE
+)
+
+/**
+ * The viewport widened by how far labels reach outside their nodes, so a node just outside the
+ * view whose name is inside it still has its name drawn and clickable.
+ */
+export function labelViewport<T extends { x: number; y: number; w: number; h: number }>(
+  viewport: T,
+  zoom: number
+): T {
+  const reach = LABEL_REACH / zoom
+  return {
+    ...viewport,
+    x: viewport.x - reach,
+    y: viewport.y - reach,
+    w: viewport.w + reach * 2,
+    h: viewport.h + reach * 2
   }
 }

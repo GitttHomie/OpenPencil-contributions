@@ -1,7 +1,7 @@
 import type { SkiaRenderer } from '#core/canvas/renderer'
 import type { RenderLayer } from '#core/canvas/renderer/pipeline'
 import { clamp, smoothAverage } from '#core/canvas/renderer/retained-backing/timing'
-import { emitNavigationTrace } from '#core/profiler'
+import { emitNavigationTrace } from '#core/profiler/index'
 
 const now = typeof performance !== 'undefined' ? () => performance.now() : () => 0
 const FRAME_BUDGET_60HZ_MS = 1000 / 60

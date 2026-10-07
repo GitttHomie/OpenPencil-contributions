@@ -31,6 +31,7 @@ function reviewer(vision = false): DirectAIModelRuntime {
         modelID: 'test',
         customModelID: '',
         maxOutputTokens: 4000,
+        thinkingLevel: 'high',
         capabilities: vision ? ['vision'] : []
       },
       connection: {
@@ -81,6 +82,7 @@ for (const vision of [false, true]) {
       expect(result.nodeIds).toEqual([frame.id])
       expect(result.text).toContain('primary action')
       expect(model.doGenerateCalls[0].tools ?? []).toHaveLength(0)
+      expect(model.doGenerateCalls[0].reasoning).toBe('high')
       expect(JSON.stringify(model.doGenerateCalls[0].prompt)).toContain('Checkout')
       expect(JSON.stringify(model.doGenerateCalls[0].prompt)).not.toContain(unrelated.name)
       expect([...store.graph.getAllNodes()]).toEqual(before)

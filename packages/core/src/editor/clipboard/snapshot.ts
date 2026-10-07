@@ -49,18 +49,28 @@ export function captureClipboardSnapshot(
   const nodes = roots.map(capture)
   const componentDependencies = new Map<string, ClipboardNodeTree>()
   function captureComponent(id: string) {
-    if (componentDependencies.has(id) || selectedIds.has(id)) return
+    if (selectedIds.has(id)) return
     const component = graph.getNode(id)
     if (!component || (component.type !== 'COMPONENT' && component.type !== 'COMPONENT_SET')) return
-    const tree = capture(component)
-    componentDependencies.set(id, tree)
+    const parent = component.parentId ? graph.getNode(component.parentId) : undefined
+    const owner =
+      component.type === 'COMPONENT' && parent?.type === 'COMPONENT_SET' ? parent : component
+    if (componentDependencies.has(owner.id) || selectedIds.has(owner.id)) return
+    const tree = capture(owner)
+    componentDependencies.set(owner.id, tree)
     visitReferences(tree)
   }
   function visitReferences(node: ClipboardNodeTree) {
     if (node.componentId) captureComponent(node.componentId)
     for (const child of node.children ?? []) visitReferences(child)
   }
-  for (const node of nodes) visitReferences(node)
+  for (const node of nodes) {
+    if (node.type === 'COMPONENT' && node.parentId) {
+      const parent = graph.getNode(node.parentId)
+      if (parent?.type === 'COMPONENT_SET') captureComponent(parent.id)
+    }
+    visitReferences(node)
+  }
   const styleIds = referencedStyleIds(capturedNodes)
   const styleDefinitions: SceneNode[] = []
   for (const node of graph.getAllNodes()) {

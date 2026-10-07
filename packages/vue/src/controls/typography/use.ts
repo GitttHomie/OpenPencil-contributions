@@ -29,7 +29,11 @@ export function useTypography(options: UseTypographyOptions = {}) {
   const editor = useEditor()
   const typographyState = createTypographyState(editor)
   const actions = createTypographyActions({ editor, ...typographyState, options })
-  const styleOptions = useFontStyleOptions(typographyState.node, options.fontLoader)
+  const styleOptions = useFontStyleOptions(
+    typographyState.node,
+    options.fontLoader,
+    typographyState.nodes
+  )
 
   return {
     editor,

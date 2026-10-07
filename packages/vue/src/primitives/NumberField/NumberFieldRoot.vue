@@ -52,7 +52,9 @@ const inputRef = ref<HTMLInputElement | null>(null)
 const invalidReason = ref<NumberExpressionError | null>(null)
 const workingValue = ref(0)
 
-const isMixed = computed(() => binding?.state.value === 'mixed' || typeof modelValue === 'symbol')
+const isMixed = computed(
+  () => typeof modelValue === 'symbol' || binding?.slotProps.value.mixedValues === true
+)
 const numericValue = computed(() => {
   const resolved = binding?.resolvedValue.value
   if (binding?.state.value === 'bound' && typeof resolved === 'number') return resolved
@@ -64,7 +66,7 @@ const displayValue = computed(() => {
 })
 const disabled = computed(() => disabledProp)
 const bound = computed(() =>
-  binding ? binding.state.value === 'bound' || binding.state.value === 'unresolved' : boundProp
+  binding ? Boolean(binding.variable.value) || binding.state.value === 'unresolved' : boundProp
 )
 const effectiveEditPolicy = computed<NumberFieldEditPolicy>(() => {
   if (!binding) return editPolicy
@@ -93,6 +95,7 @@ function canMutate(): boolean {
 
 function requestMutation(source: NumberFieldMutationSource): boolean {
   if (mutationRequested) return true
+  if (source !== 'edit' && isMixed.value) return false
   if (!canMutate()) return false
   if (binding && !binding.actions.beginMutation(source)) return false
   if (!binding && bound.value && effectiveEditPolicy.value === 'detach-on-edit') {
@@ -128,6 +131,13 @@ function restoreInteractionValue() {
 }
 
 function finishCommit(value: number) {
+  if (!mutationRequested && (value !== interactionStartValue || interactionStartedMixed)) {
+    if (!requestMutation('edit')) return
+  }
+  if (!mutationRequested) {
+    editing.value = false
+    return
+  }
   updateValue(value)
   editing.value = false
   if (
@@ -174,8 +184,8 @@ function commitEdit() {
     invalidReason.value = result.error
     restoreInteractionValue()
     editing.value = false
-    binding?.actions.cancelMutation()
     emit('cancel')
+    binding?.actions.cancelMutation()
     emit('invalid', expression, result.error)
     return
   }
@@ -187,8 +197,8 @@ function cancelEdit() {
   restoreInteractionValue()
   invalidReason.value = null
   editing.value = false
-  binding?.actions.cancelMutation()
   emit('cancel')
+  binding?.actions.cancelMutation()
 }
 
 function stopScrubListeners() {
@@ -241,8 +251,8 @@ function startScrub(event: PointerEvent) {
     scrubbing.value = false
     if (cancelled) {
       restoreInteractionValue()
-      binding?.actions.cancelMutation()
       emit('cancel')
+      binding?.actions.cancelMutation()
       return
     }
     if (!hasMoved) {
@@ -402,8 +412,8 @@ function cancelDetachedInteraction() {
     restoreInteractionValue()
     editing.value = false
     scrubbing.value = false
-    binding?.actions.cancelMutation()
     emit('cancel')
+    binding?.actions.cancelMutation()
   }
 }
 

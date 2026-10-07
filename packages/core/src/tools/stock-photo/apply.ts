@@ -1,12 +1,14 @@
-import type { Fill, SceneNode } from '@open-pencil/scene-graph'
+import type { Fill } from '@open-pencil/scene-graph'
 
-import type { FigmaAPI } from '#core/figma-api'
+import type { FigmaAPI } from '#core/figma-api/index'
+import type { FigmaNodeProxy } from '#core/figma-api/proxy'
 import { withImageFill } from '#core/tools/modify/fill-stack'
 
 import type { StockPhotoProvider, StockPhotoResult } from './providers'
 
-const STOCK_PHOTO_TARGET_TYPES: ReadonlySet<SceneNode['type']> = new Set([
+const STOCK_PHOTO_TARGET_TYPES: ReadonlySet<FigmaNodeProxy['type']> = new Set([
   'FRAME',
+  'SLOT',
   'COMPONENT',
   'INSTANCE'
 ])

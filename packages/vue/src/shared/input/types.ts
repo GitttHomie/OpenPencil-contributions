@@ -16,6 +16,7 @@ export type HandlePosition = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w'
 export type CornerPosition = 'nw' | 'ne' | 'se' | 'sw'
 
 export interface DragDraw {
+  line?: boolean
   type: 'draw'
   startX: number
   startY: number

@@ -1,9 +1,12 @@
 import type { NodeChange } from '@open-pencil/kiwi/fig/codec'
 import { SceneGraph, type SceneNode } from '@open-pencil/scene-graph'
 
-import type { InstanceOccurrence, InterpretInstanceOptions } from '../instance-overrides/interpret'
 import { reconcileLiveComponentEdits } from '../instance-overrides/live-component-edits'
 import { materializeInstance } from '../instance-overrides/materialize-instance'
+import type {
+  InstanceOccurrence,
+  InterpretInstanceOptions
+} from '../instance-overrides/occurrence/types'
 import {
   reconcileOccurrenceStructure,
   linkInstanceSourceChildren,
@@ -20,6 +23,7 @@ import {
   restoreComponentCheckpoint,
   type ComponentCheckpoint
 } from './component/checkpoint'
+import { linkNestedPropertyExposures } from './component/nested-properties'
 import { linkComponentPropertyValues, resolveVariantPropertyValues } from './component/values'
 import { loadPageTransaction } from './load-transaction'
 import { applyDocumentMetadata } from './metadata'
@@ -281,6 +285,7 @@ function materializeReader(
   // These passes apply to the nodes this page added, not to the whole graph.
   const materialized = [...graph.nodes.values()].filter((node) => !existingNodeIds.has(node.id))
   state.definitionTypes ??= seedDefinitionTypes(graph)
+  linkNestedPropertyExposures(sources, components, materialized)
   linkComponentPropertyValues(graph, sources, materialized, state.definitionTypes)
   graph.preserveSourceMetadataDuring(() => {
     resolveVariantPropertyValues(graph, materialized)

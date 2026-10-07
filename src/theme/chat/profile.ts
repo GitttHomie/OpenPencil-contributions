@@ -1,13 +1,16 @@
 import { tv } from 'tailwind-variants'
 
+import { controlHeight } from '@/theme/control'
+
+import { motionStyles } from '../motion/styles'
+
 export const chatProfileTheme = tv({
   slots: {
-    trigger:
-      'min-w-0 max-w-full gap-1 rounded border-none bg-transparent px-1.5 py-0.5 text-[10px] text-muted',
-    triggerIcon: 'size-3 shrink-0',
-    triggerValue: 'min-w-0 truncate',
-    triggerChevron: 'size-2.5 shrink-0',
-    content: 'w-72 max-w-[calc(100vw-1rem)] overflow-hidden',
+    trigger: `flex ${controlHeight.sm} min-w-0 max-w-full flex-1 items-center gap-1.5 rounded-md smooth-corners border border-transparent bg-transparent px-2 py-0 text-xs text-muted outline-none hover:bg-hover hover:text-surface focus-visible:border-panel-focus disabled:cursor-not-allowed disabled:opacity-60`,
+    triggerIcon: 'size-3.5 shrink-0',
+    triggerValue: 'min-w-0 flex-1 truncate text-left',
+    triggerChevron: 'size-3 shrink-0',
+    content: ['w-72 max-w-[calc(100vw-1rem)] overflow-hidden', motionStyles.floating],
     viewport: 'max-h-72 p-1',
     header: 'px-2 pt-1.5 pb-2',
     headerLabel: 'text-[9px] font-medium tracking-wide text-muted uppercase',

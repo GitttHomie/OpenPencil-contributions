@@ -4,8 +4,10 @@ import type { ComputedRef } from 'vue'
 import type { Editor } from '@open-pencil/core/editor'
 import { FONT_WEIGHT_NAMES, weightToStyle } from '@open-pencil/core/text'
 import { parseFontStyle } from '@open-pencil/scene-graph'
-import type { SceneNode, TextDecoration } from '@open-pencil/scene-graph'
+import type { SceneNode } from '@open-pencil/scene-graph'
 
+import { useNodePreview } from '#vue/controls/node-preview/use'
+import { createNodePropSelectionState } from '#vue/controls/node-props/helpers'
 import type { UseTypographyOptions } from '#vue/controls/typography/use'
 import { useSceneComputed } from '#vue/internal/scene-computed/use'
 import { useNodeFontStatus } from '#vue/shared/font-status/use'
@@ -22,6 +24,10 @@ export const TYPOGRAPHY_WEIGHTS = Object.entries(FONT_WEIGHT_NAMES).map(([value,
 }))
 
 export function createTypographyState(editor: Editor) {
+  const selection = createNodePropSelectionState(editor)
+  const nodes = computed(() =>
+    selection.nodes.value.every((node) => node.type === 'TEXT') ? selection.nodes.value : []
+  )
   const node = useSceneComputed<SceneNode | null>(() => editor.getSelectedNode() ?? null)
   const { missingFonts, hasMissingFonts } = useNodeFontStatus(() => node.value)
   const fontFamily = computed(() => node.value?.fontFamily ?? '')
@@ -43,6 +49,8 @@ export function createTypographyState(editor: Editor) {
 
   return {
     node,
+    nodes,
+    merged: selection.merged,
     fontFamily,
     fontWeight,
     fontSize,
@@ -56,6 +64,7 @@ export function createTypographyState(editor: Editor) {
 type TypographyActionOptions = {
   editor: Editor
   node: ComputedRef<SceneNode | null>
+  nodes?: ComputedRef<SceneNode[]>
   currentWeightLabel: ComputedRef<string>
   activeFormatting: ComputedRef<string[]>
   options: UseTypographyOptions
@@ -64,134 +73,136 @@ type TypographyActionOptions = {
 export function createTypographyActions({
   editor,
   node,
+  nodes,
   activeFormatting,
   options
 }: TypographyActionOptions) {
-  let propBeforePreview:
-    | { key: keyof SceneNode; value: SceneNode[keyof SceneNode]; textStyleId: string | null }
-    | undefined
+  const preview = useNodePreview(editor)
 
-  async function setFont(
-    changes: Partial<Pick<SceneNode, 'fontFamily' | 'fontWeight' | 'italic'>>,
+  const targets = () => nodes?.value ?? (node.value ? [node.value] : [])
+  function apply(
+    patch: Partial<SceneNode> | ((target: SceneNode) => Partial<SceneNode>),
     label: string
   ) {
-    const target = node.value
-    if (!target) return
+    const selected = [...targets()]
+    editor.undo.runBatch(label, () => {
+      for (const target of selected)
+        editor.updateNodeWithUndo(
+          target.id,
+          typeof patch === 'function' ? patch(target) : patch,
+          label
+        )
+    })
+  }
+
+  type FontChanges = Partial<Pick<SceneNode, 'fontFamily' | 'fontWeight' | 'italic'>>
+  async function setFont(
+    changes: FontChanges | ((target: SceneNode) => FontChanges),
+    label: string
+  ) {
     const graph = editor.graph
-    const id = target.id
-    const next = {
-      fontFamily: target.fontFamily,
-      fontWeight: target.fontWeight,
-      italic: target.italic,
-      ...changes
-    }
-    const styles = options.fontLoader?.styles?.(next.fontFamily) ?? []
+    const updates = targets().map((target) => {
+      const patch = typeof changes === 'function' ? changes(target) : changes
+      return {
+        target,
+        patch,
+        next: {
+          fontFamily: target.fontFamily,
+          fontWeight: target.fontWeight,
+          italic: target.italic,
+          ...patch
+        }
+      }
+    })
     if (
-      styles.length > 0 &&
-      !styles.some((style) => {
-        const face = parseFontStyle(style)
-        return face.weight === next.fontWeight && face.italic === next.italic
+      updates.some(({ next }) => {
+        const styles = options.fontLoader?.styles?.(next.fontFamily) ?? []
+        return (
+          styles.length > 0 &&
+          !styles.some((style) => {
+            const face = parseFontStyle(style)
+            return face.weight === next.fontWeight && face.italic === next.italic
+          })
+        )
       })
     )
       return
-    const loading = options.fontLoader?.load(
-      next.fontFamily,
-      weightToStyle(next.fontWeight, next.italic),
-      target.text
+    const loading = updates.map(({ target, next }) =>
+      options.fontLoader?.load(
+        next.fontFamily,
+        weightToStyle(next.fontWeight, next.italic),
+        target.text
+      )
     )
-    editor.updateNodeWithUndo(id, changes, label)
-    // Completion only repaints. It must not undo a newer choice or target another selection.
+    editor.undo.runBatch(label, () => {
+      for (const { target, patch } of updates) editor.updateNodeWithUndo(target.id, patch, label)
+    })
     try {
-      await loading
+      await Promise.all(loading)
     } finally {
-      if (editor.graph === graph && graph.getNode(id) === target) editor.requestRender()
+      if (editor.graph === graph) editor.requestRender()
     }
   }
 
-  async function setFamily(family: string) {
-    const target = node.value
-    if (!target) return
-    const styles = options.fontLoader?.styles?.(family) ?? []
-    const nearest = styles
-      .map(parseFontStyle)
-      .sort(
-        (a, b) =>
-          Number(a.italic !== target.italic) - Number(b.italic !== target.italic) ||
-          Math.abs(a.weight - target.fontWeight) - Math.abs(b.weight - target.fontWeight) ||
-          a.weight - b.weight
-      )
-      .at(0)
-    if (nearest) {
-      return setFont(
-        { fontFamily: family, fontWeight: nearest.weight, italic: nearest.italic },
-        'Change font'
-      )
-    }
-    return setFont({ fontFamily: family }, 'Change font')
+  function setFamily(family: string) {
+    return setFont((target) => {
+      const nearest = (options.fontLoader?.styles?.(family) ?? [])
+        .map(parseFontStyle)
+        .sort(
+          (a, b) =>
+            Number(a.italic !== target.italic) - Number(b.italic !== target.italic) ||
+            Math.abs(a.weight - target.fontWeight) - Math.abs(b.weight - target.fontWeight) ||
+            a.weight - b.weight
+        )
+        .at(0)
+      return nearest
+        ? { fontFamily: family, fontWeight: nearest.weight, italic: nearest.italic }
+        : { fontFamily: family }
+    }, 'Change font')
   }
-
   function setWeight(weight: number) {
     return setFont({ fontWeight: weight }, 'Change font weight')
   }
-
   function setAlign(align: TextAlign) {
-    if (!node.value) return
-    editor.updateNodeWithUndo(
-      node.value.id,
-      { textAlignHorizontal: align },
-      'Change text alignment'
-    )
+    apply({ textAlignHorizontal: align }, 'Change text alignment')
   }
-
   function setDirection(direction: TextDirection) {
-    if (!node.value) return
-    editor.updateNodeWithUndo(node.value.id, { textDirection: direction }, 'Change text direction')
+    apply({ textDirection: direction }, 'Change text direction')
   }
-
   function setVerticalAlign(align: TextVerticalAlign) {
-    if (!node.value) return
-    editor.updateNodeWithUndo(
-      node.value.id,
-      { textAlignVertical: align },
-      'Change vertical text alignment'
+    apply({ textAlignVertical: align }, 'Change vertical text alignment')
+  }
+  function setTextCase(textCase: TextCase) {
+    apply({ textCase }, 'Change text case')
+  }
+  function setTruncation(textTruncation: TextTruncation) {
+    apply({ textTruncation }, 'Change text truncation')
+  }
+  function setFontFeature(tag: string, enabled: boolean) {
+    apply(
+      (target) => ({
+        fontFeatures: [
+          ...target.fontFeatures.filter((feature) => feature.tag !== tag),
+          { tag, enabled }
+        ]
+      }),
+      `Change ${tag} feature`
     )
   }
-
-  function setTextCase(textCase: TextCase) {
-    if (!node.value) return
-    editor.updateNodeWithUndo(node.value.id, { textCase }, 'Change text case')
+  function setItalic(italic: boolean) {
+    return setFont({ italic }, 'Change italic')
   }
-
-  function setTruncation(textTruncation: TextTruncation) {
-    if (!node.value) return
-    editor.updateNodeWithUndo(node.value.id, { textTruncation }, 'Change text truncation')
-  }
-
-  function setFontFeature(tag: string, enabled: boolean) {
-    if (!node.value) return
-    const fontFeatures = node.value.fontFeatures.filter((feature) => feature.tag !== tag)
-    fontFeatures.push({ tag, enabled })
-    editor.updateNodeWithUndo(node.value.id, { fontFeatures }, `Change ${tag} feature`)
-  }
-
   function toggleBold() {
-    if (!node.value) return
-    void setWeight(node.value.fontWeight >= 700 ? 400 : 700)
+    void setWeight(targets().every((target) => target.fontWeight >= 700) ? 400 : 700)
   }
 
   function toggleItalic() {
-    if (!node.value) return
-    void setFont({ italic: !node.value.italic }, 'Toggle italic')
+    void setItalic(!targets().every((target) => target.italic))
   }
 
   function toggleDecoration(deco: 'UNDERLINE' | 'STRIKETHROUGH') {
-    if (!node.value) return
-    const current = node.value.textDecoration
-    editor.updateNodeWithUndo(
-      node.value.id,
-      { textDecoration: (current === deco ? 'NONE' : deco) as TextDecoration },
-      `Toggle ${deco.toLowerCase()}`
-    )
+    const current = targets().every((target) => target.textDecoration === deco)
+    apply({ textDecoration: current ? 'NONE' : deco }, `Toggle ${deco.toLowerCase()}`)
   }
 
   function onFormattingChange(values: string[]) {
@@ -208,37 +219,24 @@ export function createTypographyActions({
   }
 
   function updateProp(key: keyof SceneNode, value: number | string | null) {
-    if (!node.value) return
-    if (!propBeforePreview || propBeforePreview.key !== key) {
-      propBeforePreview = {
-        key,
-        value: node.value[key],
-        textStyleId: node.value.textStyleId
-      }
-    }
-    editor.updateNode(node.value.id, { [key]: value } as Partial<SceneNode>)
+    preview.update(
+      targets().map((target) => target.id),
+      { [key]: value },
+      `Change ${String(key)}`
+    )
   }
 
   function commitProp(
-    key: keyof SceneNode,
+    _key: keyof SceneNode,
     _value: number | string | null,
-    previous: number | string | null
+    _previous: number | string | null
   ) {
-    if (!node.value) return
-    const snapshot = propBeforePreview?.key === key ? propBeforePreview : undefined
-    editor.commitNodeUpdate(
-      node.value.id,
-      {
-        [key]: snapshot ? snapshot.value : previous,
-        ...(snapshot ? { textStyleId: snapshot.textStyleId } : {})
-      } as Partial<SceneNode>,
-      `Change ${String(key)}`
-    )
-    propBeforePreview = undefined
+    preview.commit()
   }
 
   return {
     setFamily,
+    setItalic,
     setWeight,
     setAlign,
     setDirection,
@@ -251,6 +249,7 @@ export function createTypographyActions({
     toggleDecoration,
     onFormattingChange,
     updateProp,
+    cancelProp: preview.cancel,
     commitProp
   }
 }

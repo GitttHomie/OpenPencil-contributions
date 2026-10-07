@@ -29,3 +29,8 @@ export function commitPaintMutation(actions: BindableValueActions<Color>) {
 export function cancelPaintMutation(actions: BindableValueActions<Color>) {
   actions.cancelMutation()
 }
+
+export function startCanvasPaintGesture(actions: BindableValueActions<Color>, flush: () => void) {
+  flush()
+  commitPaintMutation(actions)
+}

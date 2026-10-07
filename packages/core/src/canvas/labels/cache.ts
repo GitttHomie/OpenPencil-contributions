@@ -1,7 +1,15 @@
 import type { SceneGraph, SceneNode } from '@open-pencil/scene-graph'
 
 import type { RenderOverlays } from '#core/canvas/renderer'
-import { createSceneGeometry } from '#core/geometry'
+import { createSceneGeometry } from '#core/geometry/index'
+
+import { hasFrameTitle } from './layout'
+
+interface CachedNodeLabel {
+  nodeId: string
+  absX: number
+  absY: number
+}
 
 export interface CachedSection {
   nodeId: string
@@ -25,7 +33,7 @@ interface Viewport {
 }
 
 const LABEL_TYPES = new Set(['COMPONENT', 'COMPONENT_SET', 'INSTANCE'])
-const COMPONENT_LABEL_PARENT_TYPES = new Set(['CANVAS', 'SECTION', 'COMPONENT_SET'])
+const COMPONENT_LABEL_PARENT_TYPES = new Set(['CANVAS', 'SECTION'])
 
 function isInViewport(absX: number, absY: number, w: number, h: number, vp: Viewport): boolean {
   return absX + w >= vp.x && absY + h >= vp.y && absX <= vp.x + vp.w && absY <= vp.y + vp.h
@@ -57,6 +65,7 @@ function collectVisibleLabels<
 export class LabelCache {
   private sections: CachedSection[] = []
   private components: CachedComponent[] = []
+  private nodeLabels: CachedNodeLabel[] = []
   private cachedSceneVersion = -1
   private cachedPositionPreviewVersion = -1
   private cachedPageId: string | null = null
@@ -86,6 +95,7 @@ export class LabelCache {
     this.cachedPageId = null
     this.sections = []
     this.components = []
+    this.nodeLabels = []
   }
 
   getSections(
@@ -128,9 +138,18 @@ export class LabelCache {
     return this.components
   }
 
+  getFrames(graph: SceneGraph, viewport: Viewport, preview?: RenderOverlays['rotationPreview']) {
+    return collectVisibleLabels(graph, viewport, this.nodeLabels, () => ({}), preview)
+  }
+
+  getAllFrames(): readonly CachedNodeLabel[] {
+    return this.nodeLabels
+  }
+
   private rebuild(graph: SceneGraph, pageId: string | null): void {
     this.sections = []
     this.components = []
+    this.nodeLabels = []
 
     const pageNode = graph.getNode(pageId ?? graph.rootId)
     if (!pageNode) return
@@ -146,6 +165,10 @@ export class LabelCache {
     for (const childId of parent.childIds) {
       const child = graph.getNode(childId)
       if (!child || !child.visible) continue
+      if (hasFrameTitle(child, parent)) {
+        const origin = graph.getAbsolutePosition(childId)
+        this.nodeLabels.push({ nodeId: childId, absX: origin.x, absY: origin.y })
+      }
 
       if (child.type === 'SECTION') {
         const origin = graph.getAbsolutePosition(childId)

@@ -13,7 +13,8 @@ test('pixel boundaries follow positive and negative pans at integer and fraction
 })
 
 test('the grid disappears below inspection zoom and rejects invalid viewports', () => {
-  expect(pixelGridLines(0, 7.99, 100, 2)).toEqual([])
+  expect(pixelGridLines(0, 3.99, 100, 2)).toEqual([])
+  expect(pixelGridLines(0, 4, 24, 2)).toEqual([0, 4, 8, 12, 16, 20, 24])
   expect(pixelGridLines(0, 8, 0, 2)).toEqual([])
   expect(pixelGridLines(0, 8, 100, 0)).toEqual([])
   expect(pixelGridLines(Infinity, 8, 100, 2)).toEqual([])

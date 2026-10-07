@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 
 import type { SceneNode } from '@open-pencil/scene-graph'
-import { useI18n, useLayoutControlsContext } from '@open-pencil/vue'
+import { useI18n, useSelectionLayout } from '@open-pencil/vue'
 
 import Tip from '@/components/ui/overlay/Tip.vue'
 import PanelFieldGroup from '@/components/ui/panel/PanelFieldGroup.vue'
@@ -10,7 +10,7 @@ import SegmentedControl from '@/components/ui/select/SegmentedControl.vue'
 
 type TextResizeMode = 'AUTO_WIDTH' | 'AUTO_HEIGHT' | 'FIXED'
 
-const ctx = useLayoutControlsContext()
+const { nodes, updateAllWithUndo } = useSelectionLayout()
 const { panels } = useI18n()
 
 function modeFor(node: SceneNode | null): TextResizeMode {
@@ -19,7 +19,10 @@ function modeFor(node: SceneNode | null): TextResizeMode {
   return 'FIXED'
 }
 
-const mode = computed<TextResizeMode>(() => modeFor(ctx.node))
+const mode = computed(() => {
+  const modes = nodes.value.map(modeFor)
+  return modes.every((value) => value === modes[0]) ? modes[0] : ''
+})
 
 const options = computed(() => [
   { value: 'AUTO_WIDTH' as const, label: panels.value.resizeAutoWidth },
@@ -28,19 +31,17 @@ const options = computed(() => [
 ])
 
 function setMode(value: TextResizeMode) {
-  const node = ctx.node
-  if (!node) return
   const byMode: Record<TextResizeMode, SceneNode['textAutoResize']> = {
     AUTO_WIDTH: 'WIDTH_AND_HEIGHT',
     AUTO_HEIGHT: 'HEIGHT',
     FIXED: 'NONE'
   }
-  ctx.editor.updateNodeWithUndo(node.id, { textAutoResize: byMode[value] }, 'Set text resizing')
+  updateAllWithUndo({ textAutoResize: byMode[value] }, 'Set text resizing')
 }
 </script>
 
 <template>
-  <PanelFieldGroup :label="panels.resizing" class="mb-3">
+  <PanelFieldGroup :label="panels.resizing" class="mb-field-group">
     <SegmentedControl
       :model-value="mode"
       :options="options"

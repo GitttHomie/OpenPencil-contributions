@@ -1,4 +1,5 @@
 import { promiseTimeout } from '@vueuse/core'
+import * as v from 'valibot'
 
 import { AUTOMATION_HTTP_PORT } from '@open-pencil/core/constants'
 import { randomHex } from '@open-pencil/core/random'
@@ -9,6 +10,7 @@ import {
   type ToolDescriptor
 } from '@open-pencil/mcp/tools'
 
+import { APP_VERSION } from '@/app/runtime/version'
 import { decodeTauriStderr } from '@/app/shell/ui'
 import { resolvePlatformCommand } from '@/app/tauri/command'
 import { isTauri } from '@/app/tauri/env'
@@ -49,8 +51,6 @@ const DEV_AUTOMATION_AUTH_TOKEN =
   import.meta.env.DEV && typeof __OPENPENCIL_LOCAL_AUTOMATION_TOKEN__ === 'string'
     ? __OPENPENCIL_LOCAL_AUTOMATION_TOKEN__
     : null
-const APP_VERSION =
-  typeof __OPENPENCIL_APP_VERSION__ === 'string' ? __OPENPENCIL_APP_VERSION__ : '0.0.0-test'
 const noop = () => undefined
 const MAX_STARTUP_STDERR_LENGTH = 8_192
 const MCP_EXECUTABLE = 'openpencil-mcp-http'
@@ -117,6 +117,13 @@ function rememberStartupError(error: unknown): null {
   return null
 }
 
+/** The one discovery-file field the app reads; the MCP package validates the whole file. */
+const DiscoveryTokenJSON = v.pipe(
+  v.string(),
+  v.parseJson(),
+  v.looseObject({ authToken: v.optional(v.nullable(v.string())) })
+) satisfies v.GenericSchema<string, Partial<Pick<DiscoveryInfo, 'authToken'>>>
+
 /**
  * Reads the auth token from the MCP discovery file via Tauri's FS plugin.
  * The discovery file path is computed locally (not from the /health endpoint)
@@ -126,9 +133,8 @@ function rememberStartupError(error: unknown): null {
 async function readDiscoveryToken(discoveryPath: string): Promise<string | null> {
   try {
     const { readTextFile } = await import('@tauri-apps/plugin-fs')
-    const raw = await readTextFile(discoveryPath)
-    const info = JSON.parse(raw) as DiscoveryInfo
-    return info.authToken ?? null
+    const info = v.safeParse(DiscoveryTokenJSON, await readTextFile(discoveryPath))
+    return info.success ? (info.output.authToken ?? null) : null
   } catch {
     return null
   }

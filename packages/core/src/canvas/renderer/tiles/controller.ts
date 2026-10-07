@@ -7,7 +7,7 @@ import {
   nodeRequiresAtomicChunk,
   RenderChunkIndex,
   RenderChunkPictureCache
-} from '#core/canvas/renderer/chunks'
+} from '#core/canvas/renderer/chunks/index'
 
 import { TileImageCache } from './cache'
 import { TILE_DEVICE_SIZE, tileLevel, tileWorldBounds, type TileWorldBounds } from './geometry'

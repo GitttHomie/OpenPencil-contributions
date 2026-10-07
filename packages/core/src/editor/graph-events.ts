@@ -7,6 +7,8 @@ import {
 
 import type { SkiaRenderer } from '#core/canvas/renderer'
 
+import type { ComponentSyncChange } from './component-sync'
+
 type EmittedGraphEventName = keyof SceneGraphEvents
 
 /** The renderer surface graph events invalidate; tests provide a double of just this. */
@@ -20,7 +22,7 @@ export type GraphEventRenderer = Pick<
 type GraphEventOptions = {
   getGraph: () => SceneGraph
   getRenderers: () => Iterable<GraphEventRenderer>
-  scheduleComponentSync: (nodeId: string) => void
+  scheduleComponentSync: (nodeId: string, change?: ComponentSyncChange) => void
   requestRender: () => void
   emitEditorEvent: <K extends EmittedGraphEventName>(
     event: K,
@@ -101,12 +103,12 @@ export function createGraphEventSubscription(options: GraphEventOptions) {
     options.emitEditorEvent('node:previewUpdated', id, changes)
   }
 
-  function onNodeStructureChanged(nodeId: string) {
+  function onNodeStructureChanged(nodeId: string, change: ComponentSyncChange = 'structure') {
     for (const renderer of options.getRenderers()) {
       renderer.invalidateNodePicture(nodeId)
       renderer.tiledScene.invalidateStructure()
     }
-    options.scheduleComponentSync(nodeId)
+    options.scheduleComponentSync(nodeId, change)
     options.requestRender()
   }
 
@@ -117,23 +119,23 @@ export function createGraphEventSubscription(options: GraphEventOptions) {
       previewUpdated: onNodePreviewUpdated,
       created: (node) => {
         options.emitEditorEvent('node:created', node)
-        onNodeStructureChanged(node.id)
+        onNodeStructureChanged(node.id, 'creation')
       },
       deleted: (id, parentId) => {
         options.emitEditorEvent('node:deleted', id, parentId)
         onNodeStructureChanged(id)
-        if (parentId) options.scheduleComponentSync(parentId)
+        if (parentId) options.scheduleComponentSync(parentId, 'structure')
       },
       reparented: (nodeId, oldParentId, newParentId) => {
         options.emitEditorEvent('node:reparented', nodeId, oldParentId, newParentId)
         onNodeStructureChanged(nodeId)
-        if (oldParentId) options.scheduleComponentSync(oldParentId)
+        if (oldParentId) options.scheduleComponentSync(oldParentId, 'structure')
       },
       reordered: (nodeId, parentId, index, previousParentId) => {
         options.emitEditorEvent('node:reordered', nodeId, parentId, index, previousParentId)
         onNodeStructureChanged(nodeId)
         if (previousParentId && previousParentId !== parentId)
-          options.scheduleComponentSync(previousParentId)
+          options.scheduleComponentSync(previousParentId, 'structure')
       }
     })
   }

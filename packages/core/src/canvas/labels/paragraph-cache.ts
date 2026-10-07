@@ -15,7 +15,7 @@ import { resolveParagraphFontFamilies } from '#core/canvas/text/font-families'
 import { DEFAULT_FONT_FAMILY } from '#core/constants'
 import { textHasFallbackScript } from '#core/text/coverage'
 import { weightToStyle } from '#core/text/fonts'
-import { missingGlyphOccurrences, type MissingGlyphOccurrence } from '#core/text/resolver'
+import { missingGlyphOccurrences, type MissingGlyphOccurrence } from '#core/text/resolver/index'
 
 export type LabelParagraphMetrics = Readonly<Size>
 

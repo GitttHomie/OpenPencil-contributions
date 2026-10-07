@@ -1,9 +1,11 @@
 import type { SceneGraph, SceneNode } from '@open-pencil/scene-graph'
+import { colorToHex, normalizeColor } from '@open-pencil/scene-graph/color'
 
 import { presets } from './presets'
 import { allRules } from './rules'
 import type {
   LintConfig,
+  LintVariables,
   LintMessage,
   LintNode,
   LintResult,
@@ -18,6 +20,10 @@ export class Linter {
   private ruleConfigs = new Map<string, { severity: Severity; options?: Record<string, unknown> }>()
   private messages: LintMessage[] = []
   private nodes = new Map<string, LintNode>()
+  private variables: LintVariables = {
+    counts: { COLOR: 0, FLOAT: 0, STRING: 0, BOOLEAN: 0 },
+    colorsByHex: new Map()
+  }
 
   constructor(options: { config?: LintConfig; preset?: string; rules?: string[] } = {}) {
     let baseConfig: Record<
@@ -46,8 +52,12 @@ export class Linter {
   lintGraph(graph: SceneGraph, rootIds?: string[]): LintResult {
     this.messages = []
     this.nodes.clear()
+    this.variables = describeVariables(graph)
     const roots = rootIds && rootIds.length > 0 ? rootIds : graph.getPages().map((p) => p.id)
-    for (const id of roots) this.capture(graph, id, undefined)
+    for (const id of roots) {
+      const parentId = graph.getNode(id)?.parentId
+      this.capture(graph, id, parentId ? this.captureAncestor(graph, parentId) : undefined)
+    }
     for (const id of roots) this.lintNode(id)
     return {
       messages: this.messages,
@@ -57,16 +67,39 @@ export class Linter {
     }
   }
 
+  /** Background context for a selection, without traversing or linting its siblings. */
+  private captureAncestor(graph: SceneGraph, id: string): LintNode | undefined {
+    const cached = this.nodes.get(id)
+    if (cached) return cached
+    const raw = graph.getNode(id)
+    if (!raw || id === graph.rootId) return undefined
+    const node = this.toLintNode(graph, raw)
+    this.nodes.set(id, node)
+    node.parent = raw.parentId ? this.captureAncestor(graph, raw.parentId) : undefined
+    return node
+  }
+
   private capture(graph: SceneGraph, id: string, parent?: LintNode) {
     const raw = graph.getNode(id)
     if (!raw) return
-    const node = this.toLintNode(raw)
+    const node = this.nodes.get(id) ?? this.toLintNode(graph, raw)
     node.parent = parent
     this.nodes.set(id, node)
     for (const childId of raw.childIds) this.capture(graph, childId, node)
   }
 
-  private toLintNode(raw: SceneNode): LintNode {
+  private toLintNode(graph: SceneGraph, raw: SceneNode): LintNode {
+    // Rules see the color a paint renders with, including a bound variable in this node's mode.
+    const paintColor = (
+      field: 'fills' | 'strokes',
+      index: number,
+      color: SceneNode['fills'][number]['color']
+    ) => {
+      const variableId = raw.boundVariables[`${field}/${index}/color`]
+      return normalizeColor(
+        (variableId && graph.resolveColorVariableForNode(raw.id, variableId)) || color
+      )
+    }
     return {
       id: raw.id,
       name: raw.name,
@@ -77,8 +110,16 @@ export class Linter {
       y: raw.y,
       rotation: raw.rotation,
       visible: raw.visible,
+      opacity: raw.opacity,
+      blendMode: raw.blendMode,
       locked: raw.locked,
       layoutMode: raw.layoutMode,
+      layoutPositioning: raw.layoutPositioning,
+      layoutGrow: raw.layoutGrow,
+      layoutAlignSelf: raw.layoutAlignSelf,
+      primaryAxisSizing: raw.primaryAxisSizing,
+      counterAxisSizing: raw.counterAxisSizing,
+      textAutoResize: raw.textAutoResize,
       itemSpacing: raw.itemSpacing,
       paddingTop: raw.paddingTop,
       paddingRight: raw.paddingRight,
@@ -91,16 +132,17 @@ export class Linter {
       fontSize: raw.fontSize,
       styleRunCount: raw.styleRuns.length,
       boundVariables: raw.boundVariables,
-      fills: raw.fills.map((f) => ({
+      fills: raw.fills.map((f, index) => ({
         type: f.type,
         visible: f.visible,
         opacity: f.opacity,
-        color: f.type === 'SOLID' ? f.color : undefined
+        blendMode: f.blendMode,
+        color: f.type === 'SOLID' ? paintColor('fills', index, f.color) : undefined
       })),
-      strokes: raw.strokes.map((stroke) => ({
+      strokes: raw.strokes.map((stroke, index) => ({
         visible: stroke.visible,
         opacity: stroke.opacity,
-        color: stroke.color
+        color: paintColor('strokes', index, stroke.color)
       })),
       effects: raw.effects.map((effect) => ({
         type: effect.type,
@@ -118,7 +160,8 @@ export class Linter {
       const config = this.ruleConfigs.get(ruleId)
       if (!config || config.severity === 'off') continue
       const context: RuleContext = {
-        report: ({ node, message, suggest }) => {
+        variables: this.variables,
+        report: ({ node, message, suggest, data, fix, suggestions }) => {
           this.messages.push({
             ruleId,
             severity: config.severity as Exclude<Severity, 'off'>,
@@ -126,7 +169,10 @@ export class Linter {
             nodeId: node.id,
             nodeName: node.name,
             nodePath: getNodePath(this.nodes.get(node.id) ?? node),
-            suggest
+            suggest,
+            data,
+            fix,
+            suggestions
           })
         },
         getConfig: () => config.options,
@@ -138,8 +184,25 @@ export class Linter {
       }
       rule.check(node, context)
     }
+    // Instance sublayers mirror their main component: issues there are fixed once in the
+    // component, so reporting every placed copy only multiplies the same finding.
+    if (node.type === 'INSTANCE') return
     for (const childId of node.childIds) this.lintNode(childId)
   }
+}
+
+function describeVariables(graph: SceneGraph): LintVariables {
+  const counts = { COLOR: 0, FLOAT: 0, STRING: 0, BOOLEAN: 0 }
+  const colorsByHex = new Map<string, { id: string; name: string }>()
+  for (const variable of graph.variables.values()) {
+    counts[variable.type]++
+    if (variable.type !== 'COLOR') continue
+    const color = graph.resolveColorVariable(variable.id)
+    if (!color || color.a < 1) continue
+    const hex = colorToHex(color)
+    if (!colorsByHex.has(hex)) colorsByHex.set(hex, { id: variable.id, name: variable.name })
+  }
+  return { counts, colorsByHex }
 }
 
 export function createLinter(options?: { config?: LintConfig; preset?: string; rules?: string[] }) {

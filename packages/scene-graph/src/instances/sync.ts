@@ -6,12 +6,22 @@ import { cloneNodeProps, copyEffects, copyFills, copyStrokes, copyStyleRuns } fr
 import type { NodeCloneMode } from '../copy'
 import {
   hasInstanceOverride as hasNodeInstanceOverride,
+  createInstanceOverrideState,
   setInstanceOverride,
   type InstanceOverrideState
 } from '../instance-overrides'
+import { sourceForNumberGroups } from '../numeric-properties'
 import { scaleNodeChanges } from '../scaling/node'
+import { ownsSlotContent, slotPropertyId } from '../slots/frames'
+import { isNumericVariableBindingField } from '../variables/fields'
 import { scaleVariableBindingUnits } from '../variables/units'
-import { INSTANCE_SYNC_FIELDS } from './fields'
+import { INSTANCE_SYNC_FIELDS, INSTANCE_SYNC_PROPS } from './fields'
+import { instanceMainComponent } from './main-component'
+import {
+  enclosingAssignment,
+  applyEnclosingAssignments,
+  propertyDrivenFields
+} from './property-values'
 import {
   createInstanceStructureSync,
   mappedComponentChild,
@@ -79,7 +89,11 @@ export function syncBindingFields(
     ...Object.keys(target.boundVariables),
     ...Object.keys(target.variableBindingScales)
   ])) {
-    if (!protectedField(`boundVariables/${field}`)) continue
+    if (
+      !protectedField(`boundVariables/${field}`) &&
+      !(isNumericVariableBindingField(field) && protectedField(field))
+    )
+      continue
     if (!Object.hasOwn(target.boundVariables, field)) Reflect.deleteProperty(bindings, field)
     else bindings[field] = target.boundVariables[field]
     if (target.variableBindingScales[field] === undefined) Reflect.deleteProperty(scales, field)
@@ -134,10 +148,14 @@ function cloneChildInCoordinates(
 ): SceneNode {
   const componentScale =
     (src.componentScale * targetParent.componentScale) / sourceParent.componentScale
-  return graph.createNode(src.type, targetParent.id, {
-    ...cloneNodeProps(sourceInTargetCoordinates(src, componentScale), src.id, mode),
-    componentScale
-  })
+  const props = cloneNodeProps(sourceInTargetCoordinates(src, componentScale), src.id, mode)
+  // Source assignments and overrides remain inherited; cloning them would make
+  // a new occurrence look locally overridden before the user changes anything.
+  if (src.type === 'INSTANCE' && mode === 'deep') {
+    props.componentPropertyAssignments = {}
+    props.instanceOverrides = createInstanceOverrideState()
+  }
+  return graph.createNode(src.type, targetParent.id, { ...props, componentScale })
 }
 
 export function cloneChildrenWithMapping(
@@ -271,7 +289,13 @@ function sortInstanceChildren(
     const componentIndex = mapped ? orderMap.get(mapped) : undefined
     ranks.set(childId, componentIndex ?? compChildOrder.length + index)
   }
-  instParent.childIds.sort((left, right) => (ranks.get(left) ?? 0) - (ranks.get(right) ?? 0))
+  const sorted = instParent.childIds.toSorted(
+    (left, right) => (ranks.get(left) ?? 0) - (ranks.get(right) ?? 0)
+  )
+  // Move through the graph so the reorder is reported, as collaboration syncs it.
+  sorted.forEach((childId, index) => {
+    if (instParent.childIds[index] !== childId) graph.insertChildAt(childId, instParentId, index)
+  })
 }
 
 /** True when syncing `compParentId` into `instParentId` would form a cycle. */
@@ -380,6 +404,7 @@ function syncChildTree(
       const src = graph.nodes.get(compChildId)
       if (!src) continue
       const clone = cloneChildInCoordinates(graph, src, compParent, instParent)
+      applyEnclosingAssignments(graph, clone)
       instChildMap.set(compChildId, clone)
       structure.claim(clone.id)
     }
@@ -391,25 +416,91 @@ function syncChildTree(
     const instChild = instChildMap.get(compChildId)
     if (!compChild || !instChild) continue
 
-    const protectedField = childBindingProtection(graph, instChild, overrides)
-    const componentScale =
-      (compChild.componentScale * instParent.componentScale) / compParent.componentScale
-    const source = sourceInTargetCoordinates(compChild, componentScale)
-    const updates: Partial<SceneNode> = { componentScale }
-    syncBindingFields(instChild, source, updates, protectedField)
-    for (const key of INSTANCE_SYNC_FIELDS) {
-      if (key === 'boundVariables') continue
-      if (isProtectedSyncField(instChild, key, protectedField)) continue
+    const swapped = syncChildProperties(
+      graph,
+      compChild,
+      instChild,
+      compParent,
+      instParent,
+      overrides
+    )
 
-      copyProp(updates, source, key)
-    }
-    updateSyncedProps(graph, instChild, updates)
-
-    if (!hasNodeInstanceOverride(overrides, instParentId, instChild.id, 'componentId')) {
+    if (inheritsChildren(graph, compChild, instChild, instParentId, overrides)) {
       syncChildTree(graph, compChildId, instChild.id, overrides, structure)
     }
+    if (swapped) applyEnclosingAssignments(graph, instChild)
   }
 
   // Pass 5: Sort instance children to match component child order
   sortInstanceChildren(graph, instParent, instParentId, compParent.childIds, overrides)
+}
+
+function inheritsChildren(
+  graph: SceneGraph,
+  component: SceneNode,
+  instance: SceneNode,
+  parentId: string,
+  overrides: InstanceOverrideState
+): boolean {
+  // The main component identifies the slot; its assigned instance content owns the children.
+  return (
+    component.childIds.length > 0 &&
+    !hasNodeInstanceOverride(overrides, parentId, instance.id, 'componentId') &&
+    !ownsSlotContent(graph, instance, slotPropertyId(component))
+  )
+}
+
+/** Sync an occurrence's values, using its selected component after a nested swap. */
+function syncChildProperties(
+  graph: SceneGraph,
+  compChild: SceneNode,
+  instChild: SceneNode,
+  compParent: SceneNode,
+  instParent: SceneNode,
+  overrides: InstanceOverrideState
+): boolean {
+  const protectedField = childBindingProtection(graph, instChild, overrides)
+  const driven = propertyDrivenFields(graph, instChild, compChild)
+  const componentScale =
+    (compChild.componentScale * instParent.componentScale) / compParent.componentScale
+  const source = sourceForNumberGroups(
+    sourceInTargetCoordinates(compChild, componentScale),
+    instChild,
+    protectedField
+  )
+  // A swapped occurrence keeps its placement in the outer component, but its
+  // appearance and intrinsic size belong to the selected inner component.
+  const swapped =
+    instChild.type === 'INSTANCE' && protectedField('componentId')
+      ? instanceMainComponent(graph, instChild)
+      : undefined
+  const selectedSource = swapped
+    ? sourceForNumberGroups(
+        sourceInTargetCoordinates(swapped, componentScale),
+        instChild,
+        protectedField
+      )
+    : source
+  // Which properties a layer serves is the component's to say; a slot or exposed layer
+  // created on the component becomes one in every instance.
+  const updates: Partial<SceneNode> = {
+    componentScale,
+    componentPropertyReferences: structuredClone(compChild.componentPropertyReferences)
+  }
+  for (const reference of compChild.componentPropertyReferences) {
+    const value = enclosingAssignment(graph, instChild, reference.propertyId)
+    if (value === undefined) continue
+    if (reference.field === 'TEXT') updates.text = value
+    if (reference.field === 'VISIBLE') updates.visible = value === 'true'
+  }
+  syncBindingFields(instChild, selectedSource, updates, protectedField)
+  for (const key of INSTANCE_SYNC_FIELDS) {
+    if (key === 'boundVariables') continue
+    if (driven.has(key)) continue
+    if (isProtectedSyncField(instChild, key, protectedField)) continue
+
+    copyProp(updates, swapped && INSTANCE_SYNC_PROPS.includes(key) ? selectedSource : source, key)
+  }
+  updateSyncedProps(graph, instChild, updates)
+  return Boolean(swapped)
 }

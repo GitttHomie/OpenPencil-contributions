@@ -3,7 +3,8 @@ import type { Color, Rect, Vector } from '@open-pencil/scene-graph/primitives'
 import type { SnapGuide } from '@open-pencil/scene-graph/snap'
 
 import type { GuideOverlayState } from '#core/canvas/guides/types'
-import type { RotationPreview } from '#core/geometry'
+import type { DesignIssueOverlay } from '#core/canvas/issues/types'
+import type { RotationPreview } from '#core/geometry/index'
 import type { TextEditor } from '#core/text/editor'
 
 export interface RulerTheme {
@@ -15,8 +16,28 @@ export interface RulerTheme {
 
 export type MeasurementMode = 'off' | 'shallow' | 'deep'
 
+/** Where a collaborator or an agent is working, in world coordinates. */
+export interface PresenceCursor {
+  /** Stable identity for presentation effects; names can change or repeat. */
+  id?: string
+  kind: 'person' | 'agent'
+  name: string
+  /** A person's color, or the color of the person who runs the agent. */
+  color: Color
+  x: number
+  y: number
+  selection?: string[]
+  /** False when a host draws the pointer/name separately; selection outlines still render. */
+  pointerVisible?: boolean
+}
+
 export interface RenderOverlays {
   showPixelGrid?: boolean
+  /** Whether the canvas previews: it draws the design without labels or editing outlines. */
+  playing?: boolean
+  /** Nodes a previewing canvas draws from its preview session instead of the document. */
+  /** Layers a previewing canvas leaves to its live islands. */
+  playIslands?: ReadonlySet<string>
   hoveredNodeId?: string | null
   measurementMode?: MeasurementMode
   enteredContainerId?: string | null
@@ -68,11 +89,7 @@ export interface RenderOverlays {
     selectedHandles?: Set<number>
     hoveredHandleInfo?: { segmentIndex: number; tangentField: 'tangentStart' | 'tangentEnd' } | null
   } | null
-  remoteCursors?: Array<{
-    name: string
-    color: Color
-    x: number
-    y: number
-    selection?: string[]
-  }>
+  presenceCursors?: PresenceCursor[]
+  designIssues?: DesignIssueOverlay | null
+  codeFocusNodeId?: string | null
 }

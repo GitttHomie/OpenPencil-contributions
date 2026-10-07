@@ -21,6 +21,7 @@ const {
   error,
   npmAvailable,
   canvasBridgeAvailable,
+  canvasBridgeOutdated,
   setupCanvasBridge,
   busy,
   refresh,
@@ -61,20 +62,32 @@ const selectedAgents = computed(() =>
         "
       />
       <AppAlert
-        v-if="agents.length && (!canvasBridgeAvailable || error === 'canvas-start')"
-        :heading="ai.localAgentsCanvasRequired"
+        v-if="
+          agents.length &&
+          (!canvasBridgeAvailable || canvasBridgeOutdated || error === 'canvas-start')
+        "
+        :heading="canvasBridgeOutdated ? ai.aiSetupAgentUpdateMCP : ai.localAgentsCanvasRequired"
         :description="ai.localAgentsCanvasHint"
       >
         <template #actions>
           <AppButton
             size="xs"
             variant="outline"
-            :disabled="busy || (!canvasBridgeAvailable && !npmAvailable)"
+            :disabled="busy || ((!canvasBridgeAvailable || canvasBridgeOutdated) && !npmAvailable)"
             :loading="installing === 'canvas'"
             @click="setupCanvasBridge"
-            >{{ canvasBridgeAvailable ? common.retry : ai.localAgentsCanvasInstall }}</AppButton
+            >{{
+              canvasBridgeOutdated
+                ? ai.aiSetupAgentUpdateMCP
+                : canvasBridgeAvailable
+                  ? common.connect
+                  : ai.localAgentsCanvasInstall
+            }}</AppButton
           >
-          <p v-if="!canvasBridgeAvailable && !npmAvailable" class="text-[11px] text-muted">
+          <p
+            v-if="(!canvasBridgeAvailable || canvasBridgeOutdated) && !npmAvailable"
+            class="text-[11px] text-muted"
+          >
             {{ ai.localAgentsNpmRequired }}
           </p>
         </template>

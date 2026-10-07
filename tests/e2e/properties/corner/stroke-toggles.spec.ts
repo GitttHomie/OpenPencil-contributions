@@ -57,7 +57,7 @@ test('independent corners toggle shows per-corner inputs', async () => {
   await toggle.click()
   await canvas.waitForRender()
 
-  expect((await getSelectedNodeFlags())?.independentCorners).toBe(true)
+  expect((await getSelectedNodeFlags())?.independentCorners).toBe(false)
   const grid = page.locator('[data-corner-grid]')
   await expect(grid).toBeVisible()
   const cornerInputs = grid.getByRole('spinbutton')
@@ -68,7 +68,7 @@ test('independent corners toggle shows per-corner inputs', async () => {
   await expect(grid).not.toBeVisible()
 })
 
-test('multi-selection independent corners toggle is one undo step', async () => {
+test('multi-selection corner controls expand without editing the nodes', async () => {
   await canvas.clearCanvas()
   await drawFrame(80, 80, 100, 70)
   await drawFrame(240, 80, 100, 70)
@@ -89,9 +89,9 @@ test('multi-selection independent corners toggle is one undo step', async () => 
   })
   await toggle.click()
   await canvas.waitForRender()
-  expect(await independentStates()).toEqual([true, true])
+  expect(await independentStates()).toEqual([false, false])
 
-  await canvas.pressKey('Meta+z')
+  await toggle.click()
   await canvas.waitForRender()
   expect(await independentStates()).toEqual([false, false])
 })

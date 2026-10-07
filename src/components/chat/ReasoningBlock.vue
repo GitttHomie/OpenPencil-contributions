@@ -5,6 +5,7 @@ import { computed, ref, watch } from 'vue'
 
 import type { ReasoningDisplay } from '@/app/settings/preferences/store'
 import ChatMarkdown from '@/components/chat/ChatMarkdown.vue'
+import AppSpinner from '@/components/ui/feedback/AppSpinner.vue'
 import { collapsibleContentMotion } from '@/theme/collapsible/collapsible'
 
 const {
@@ -12,18 +13,28 @@ const {
   text,
   streaming = false,
   thinkingLabel,
-  reasoningLabel
+  reasoningLabel,
+  durationLabel
 } = defineProps<{
   display?: ReasoningDisplay
   text: string
   streaming?: boolean
   thinkingLabel: string
   reasoningLabel: string
+  /** Formats the duration measured while this block streamed; restored history has none. */
+  durationLabel?: (seconds: number) => string
 }>()
 
 const open = ref(display === 'expanded' || (display === 'while-thinking' && streaming))
 const userChangedOpen = ref(false)
 const markdownMode = computed(() => (streaming ? 'streaming' : 'static'))
+const startedAt = ref(streaming ? performance.now() : null)
+const durationSeconds = ref<number | null>(null)
+const finishedLabel = computed(() =>
+  durationSeconds.value !== null && durationLabel
+    ? durationLabel(durationSeconds.value)
+    : reasoningLabel
+)
 const { start: scheduleClose, stop: cancelClose } = useTimeoutFn(
   () => {
     if (display === 'while-thinking' && !streaming && !userChangedOpen.value) open.value = false
@@ -35,6 +46,9 @@ const { start: scheduleClose, stop: cancelClose } = useTimeoutFn(
 watch(
   () => streaming,
   (isStreaming, wasStreaming) => {
+    if (isStreaming) startedAt.value ??= performance.now()
+    else if (wasStreaming && startedAt.value !== null)
+      durationSeconds.value = Math.max(1, Math.round((performance.now() - startedAt.value) / 1000))
     cancelClose()
     if (userChangedOpen.value) return
     if (isStreaming) {
@@ -70,15 +84,11 @@ function updateOpen(value: boolean): void {
   >
     <CollapsibleTrigger
       data-slot="chat-reasoning-trigger"
-      class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[11px] text-muted hover:bg-hover hover:text-surface"
+      class="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left text-[11px] text-muted hover:bg-hover hover:text-surface"
     >
       <icon-lucide-brain class="size-3.5 shrink-0 text-accent" aria-hidden="true" />
-      <span class="flex-1">{{ streaming ? thinkingLabel : reasoningLabel }}</span>
-      <icon-lucide-loader-circle
-        v-if="streaming"
-        class="size-3 animate-spin motion-reduce:animate-none"
-        aria-hidden="true"
-      />
+      <span class="flex-1">{{ streaming ? thinkingLabel : finishedLabel }}</span>
+      <AppSpinner v-if="streaming" class="size-3" aria-hidden="true" />
       <icon-lucide-chevron-down
         v-else
         class="size-3 transition-transform motion-reduce:transition-none [[data-state=open]>&]:rotate-180"

@@ -30,6 +30,8 @@ export const OVERRIDE_FIELDS = {
   styleIdForText: { scene: ['textStyleId'], kind: 'text-style' },
   fillPaints: { scene: ['fills'], kind: 'paint' },
   strokePaints: { scene: ['strokes'], kind: 'paint' },
+  strokeWeight: { scene: ['strokeWeight'], kind: 'scalar', length: true },
+  strokeAlign: { scene: ['strokeAlign'], kind: 'scalar' },
   size: { scene: ['width', 'height'], kind: 'size', length: true },
   stackSpacing: { scene: ['itemSpacing'], kind: 'layout-distance', length: true },
   stackCounterSpacing: { scene: ['counterAxisSpacing'], kind: 'layout-distance', length: true },

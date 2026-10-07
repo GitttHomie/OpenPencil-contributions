@@ -13,7 +13,7 @@ import type {
 
 import { ResourceCache } from '#core/cache/resource'
 import type { SkiaRenderer } from '#core/canvas/renderer'
-import { geometryBlobToPath } from '#core/vector'
+import { geometryBlobToPath } from '#core/vector/index'
 
 const MAX_GLYPH_SILHOUETTES = 512
 

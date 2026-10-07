@@ -1,5 +1,6 @@
 import { isEqual } from 'es-toolkit'
 
+import { fitEnclosingGroups } from '@open-pencil/scene-graph'
 import type { SceneNode } from '@open-pencil/scene-graph'
 import { getWorldMatrix } from '@open-pencil/scene-graph/coordinate'
 import Matrix from '@open-pencil/scene-graph/matrix'
@@ -97,6 +98,16 @@ function reorderedChildren(
   )
 }
 
+function fitNudgedGroups(ctx: EditorContext, before: Map<string, MoveState>) {
+  const parents = [...before.values()].map((state) => state.parentId)
+  const fit = fitEnclosingGroups(ctx.graph, parents)
+  for (const [id, placement] of fit?.before ?? []) {
+    const node = ctx.graph.getNode(id)
+    if (node && !before.has(id))
+      before.set(id, { ...captureMoveState(ctx.graph, node), ...placement })
+  }
+}
+
 export function createNudgeActions(ctx: EditorContext) {
   let sequence = 0
   let previousTime = 0
@@ -138,6 +149,7 @@ export function createNudgeActions(ctx: EditorContext) {
       ctx.runLayoutForNode(parentId)
     }
     if (before.size === 0) return
+    fitNudgedGroups(ctx, before)
     const after = new Map<string, MoveState>()
     for (const id of before.keys()) {
       const node = ctx.graph.getNode(id)

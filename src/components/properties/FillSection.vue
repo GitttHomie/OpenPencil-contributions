@@ -23,7 +23,8 @@ import {
   applyPaintMutation,
   cancelPaintMutation,
   commitPaintMutation,
-  paintBindingTargets
+  paintBindingTargets,
+  startCanvasPaintGesture
 } from '@/components/properties/paint/binding'
 import { createFillOkhclAdapter } from '@/components/properties/paint/okhcl'
 import PaintField from '@/components/properties/paint/PaintField.vue'
@@ -71,11 +72,6 @@ function updateSolidColor(
   if (fill.type !== 'SOLID') return
   if (applyPaintMutation(binding, flush, () => update({ ...fill, color })))
     commitPaintMutation(binding)
-}
-
-function startCanvasGesture(binding: BindableValueActions<Color>, flush: () => void) {
-  flush()
-  commitPaintMutation(binding)
 }
 </script>
 
@@ -142,11 +138,11 @@ function startCanvasGesture(binding: BindableValueActions<Color>, flush: () => v
                   :fill="displayFill(fill, binding.resolvedValue)"
                   :gradient-target="
                     selectedNodeIds.length === 1 && activeNode
-                      ? { nodeId: activeNode.id, fillIndex: index }
+                      ? { nodeId: activeNode.id, property: 'fills', index }
                       : undefined
                   "
                   :okhcl="createFillOkhclAdapter(okhcl, activeNode, index)"
-                  @canvas-gesture="startCanvasGesture(binding.actions, flush)"
+                  @canvas-gesture="startCanvasPaintGesture(binding.actions, flush)"
                   @update="
                     updatePickerFill(binding.actions, flush, $event, (next) =>
                       actions.update(index, next)

@@ -7,7 +7,7 @@ const appButton = tv({
       'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50',
       'disabled:cursor-not-allowed disabled:opacity-50'
     ],
-    icon: 'size-3.5 shrink-0'
+    icon: 'flex size-3.5 shrink-0 items-center justify-center [&>svg]:size-full'
   },
   variants: {
     color: {

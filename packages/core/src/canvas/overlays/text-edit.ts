@@ -1,6 +1,6 @@
 import type { Canvas } from 'canvaskit-wasm'
 
-import type { SceneNode } from '@open-pencil/scene-graph'
+import { isInComponent, type SceneGraph, type SceneNode } from '@open-pencil/scene-graph'
 
 import type { SkiaRenderer } from '#core/canvas/renderer'
 import { TEXT_CARET_COLOR, TEXT_CARET_WIDTH, TEXT_SELECTION_COLOR } from '#core/constants'
@@ -10,7 +10,8 @@ export function drawTextEditOverlay(
   r: SkiaRenderer,
   canvas: Canvas,
   node: SceneNode,
-  editor: TextEditor
+  editor: TextEditor,
+  graph?: SceneGraph
 ): void {
   // Path text lays the paragraph out flat and then maps each glyph onto the
   // path. The flat caret / selection rects are in that flat space, so painting
@@ -18,24 +19,26 @@ export function drawTextEditOverlay(
   // the on-path glyphs. Draw an on-path caret instead (the curved selection band
   // + path stay visible via drawSelection).
   if (node.textPathData !== null) {
-    drawPathTextCaret(r, canvas, node, editor)
+    drawPathTextCaret(r, canvas, node, editor, graph)
     return
   }
 
   r.auxStroke.setStrokeWidth(1 / r.zoom)
-  r.auxStroke.setColor(r.selColor())
+  r.auxStroke.setColor(r.outlineColor(node, graph))
   r.auxStroke.setPathEffect(null)
   canvas.drawRect(r.ck.LTRBRect(0, 0, node.width, node.height), r.auxStroke)
 
   const selRects = editor.getSelectionRects()
   if (selRects.length > 0) {
     r.auxFill.setColor(
-      r.ck.Color4f(
-        TEXT_SELECTION_COLOR.r,
-        TEXT_SELECTION_COLOR.g,
-        TEXT_SELECTION_COLOR.b,
-        TEXT_SELECTION_COLOR.a
-      )
+      graph && isInComponent(graph, node.id)
+        ? r.compColor(TEXT_SELECTION_COLOR.a)
+        : r.ck.Color4f(
+            TEXT_SELECTION_COLOR.r,
+            TEXT_SELECTION_COLOR.g,
+            TEXT_SELECTION_COLOR.b,
+            TEXT_SELECTION_COLOR.a
+          )
     )
     for (const sel of selRects) {
       canvas.drawRect(r.ck.LTRBRect(sel.x, sel.y, sel.x + sel.width, sel.y + sel.height), r.auxFill)
@@ -66,7 +69,8 @@ function drawPathTextCaret(
   r: SkiaRenderer,
   canvas: Canvas,
   node: SceneNode,
-  editor: TextEditor
+  editor: TextEditor,
+  graph?: SceneGraph
 ): void {
   if (!editor.caretVisible || editor.hasSelection()) return
   const glyphs = node.derivedTextGlyphs
@@ -80,7 +84,7 @@ function drawPathTextCaret(
   const ux = -Math.sin(rot)
   const uy = -Math.cos(rot)
   r.auxStroke.setStrokeWidth((TEXT_CARET_WIDTH * 1.5) / r.zoom)
-  r.auxStroke.setColor(r.selColor())
+  r.auxStroke.setColor(r.outlineColor(node, graph))
   r.auxStroke.setPathEffect(null)
   canvas.drawLine(g.x, g.y, g.x + ux * fontSize * 0.72, g.y + uy * fontSize * 0.72, r.auxStroke)
 }

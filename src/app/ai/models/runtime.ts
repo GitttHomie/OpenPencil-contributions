@@ -1,4 +1,5 @@
 import type { LanguageModel } from 'ai'
+import { ref } from 'vue'
 
 import { createLanguageModel } from '@/app/ai/chat/model'
 import { modelConnection, resolveAIModelRole } from '@/app/ai/models/store'
@@ -40,13 +41,20 @@ export async function modelConnectionCredentialStatus(
   return appCredentialServices.manager.status(modelConnectionCredentialRef(connection))
 }
 
+/** Changes whenever a model connection's key is saved or cleared, so status views can refresh. */
+export const modelCredentialRevision = ref(0)
+
 export async function setModelConnectionAPIKey(connectionId: string, value: string): Promise<void> {
   const connection = modelConnection(connectionId)
   if (!connection || connection.providerID.startsWith('acp:')) return
   const reference = modelConnectionCredentialRef(connection)
   const key = value.trim()
-  if (key) await appCredentialServices.manager.set(reference, key)
-  else await appCredentialServices.manager.clear(reference)
+  try {
+    if (key) await appCredentialServices.manager.set(reference, key)
+    else await appCredentialServices.manager.clear(reference)
+  } finally {
+    modelCredentialRevision.value++
+  }
 }
 
 export async function resolveModelConnectionAPIKey(connectionId: string): Promise<string | null> {
@@ -59,7 +67,7 @@ export async function resolveModelConnectionAPIKey(connectionId: string): Promis
 export async function createAIModelRuntime(role: AIModelRole): Promise<AIModelRuntime | null> {
   const resolved = resolveAIModelRole(role)
   if (!resolved) return null
-  if (role === 'design' && !resolved.profile.capabilities.includes('tools')) {
+  if ((role === 'design' || role === 'fast') && !resolved.profile.capabilities.includes('tools')) {
     throw new Error('The Design model must support tools')
   }
   if (role === 'vision' && !resolved.profile.capabilities.includes('vision')) {
@@ -72,8 +80,8 @@ export async function createAIModelRuntime(role: AIModelRole): Promise<AIModelRu
     return { kind: 'harness', role: resolved }
   }
   if (resolved.connection.providerID.startsWith('acp:')) {
-    if (role !== 'design' && role !== 'review') {
-      throw new Error('ACP agents support the Design and Review roles')
+    if (role !== 'design' && role !== 'review' && role !== 'fast') {
+      throw new Error('ACP agents support the Design, Review, and Fast tasks roles')
     }
     return { kind: 'acp', role: resolved }
   }

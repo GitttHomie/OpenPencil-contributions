@@ -31,9 +31,13 @@ test('drag previews are live, retain other fills and geometry, and commit as one
       ]
     })
     let flushed = 0
-    const editing = createGradientEditing(editor, { nodeId: node.id, fillIndex: 1 }, () => {
-      flushed++
-    })
+    const editing = createGradientEditing(
+      editor,
+      { nodeId: node.id, property: 'fills', index: 1 },
+      () => {
+        flushed++
+      }
+    )
     expect(editing.begin('start', { x: 200, y: 0 })).toBe(true)
     editing.move({ x: 140, y: 40 })
     expect(node.fills[1].gradientTransform?.m00).toBe(0.7)
@@ -63,7 +67,7 @@ test('cancelling a drag restores the original fill and ignores trailing pointer 
     })
     const editing = createGradientEditing(
       editor,
-      { nodeId: node.id, fillIndex: 0 },
+      { nodeId: node.id, property: 'fills', index: 0 },
       () => undefined
     )
     editing.begin('center', { x: 102, y: 2 })
@@ -77,3 +81,53 @@ test('cancelling a drag restores the original fill and ignores trailing pointer 
     editor.dispose()
   }
 })
+
+for (const type of [
+  'GRADIENT_LINEAR',
+  'GRADIENT_RADIAL',
+  'GRADIENT_ANGULAR',
+  'GRADIENT_DIAMOND'
+] as const) {
+  test(`${type} stroke handles preserve geometry, other paints, and undo/cancel`, () => {
+    const editor = createEditor()
+    try {
+      const node = editor.graph.createNode('FRAME', editor.state.currentPageId, {
+        width: 200,
+        height: 100,
+        fills: [structuredClone(gradient)],
+        strokes: [
+          { ...structuredClone(gradient), type: 'SOLID', weight: 2, align: 'OUTSIDE' },
+          { ...structuredClone(gradient), type, weight: 8, align: 'INSIDE', opacity: 0.7 }
+        ]
+      })
+      const before = structuredClone({ fills: node.fills, strokes: node.strokes })
+      const editing = createGradientEditing(
+        editor,
+        { nodeId: node.id, property: 'strokes', index: 1 },
+        () => undefined
+      )
+      const center = type === 'GRADIENT_LINEAR' ? { x: 100, y: 0 } : { x: 100, y: 50 }
+      expect(editing.begin('center', center)).toBe(true)
+      editing.move({ x: center.x + 40, y: center.y + 20 })
+      editing.commit()
+      expect(node.strokes[1].gradientTransform?.m02).toBeCloseTo(0.2)
+      expect(node.strokes[1]).toMatchObject({ weight: 8, align: 'INSIDE', opacity: 0.7 })
+      expect(node.fills).toEqual(before.fills)
+      expect(node.strokes[0]).toEqual(before.strokes[0])
+      editor.undoAction()
+      expect(node.strokes).toEqual(before.strokes)
+      editor.redoAction()
+      expect(node.strokes[1].gradientTransform?.m02).toBeCloseTo(0.2)
+      editor.undoAction()
+      editing.begin('center', center)
+      editing.move({ x: center.x + 70, y: center.y + 30 })
+      editing.cancel()
+      editing.move({ x: 500, y: 500 })
+      editing.commit()
+      expect(node.strokes).toEqual(before.strokes)
+      expect(node.fills).toEqual(before.fills)
+    } finally {
+      editor.dispose()
+    }
+  })
+}

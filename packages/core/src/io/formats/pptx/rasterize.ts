@@ -35,7 +35,7 @@ export function makeIsolatedRasterize(
       }
     }
 
-    const raster = await import('#core/io/formats/raster')
+    const raster = await import('#core/io/formats/raster/index')
     const ck = context?.canvasKit
     const renderer = context?.renderer
     if (ck && renderer) {

@@ -8,6 +8,8 @@ import { resolveCommand } from 'package-manager-detector/commands'
 import { detect, getUserAgent } from 'package-manager-detector/detect'
 import { WebSocketServer, type WebSocket } from 'ws'
 
+import { MANAGED_CHAT_HEADER } from '@open-pencil/core/constants'
+
 import { bearerToken, isAuthorized, mcpRequestToken } from '#mcp/auth'
 import { createBrowserRPCBridge } from '#mcp/browser-rpc'
 import { MCP_CORS_HEADERS, MCP_CORS_METHODS, MCP_EXPOSED_HEADERS } from '#mcp/http-options'
@@ -217,7 +219,10 @@ function createHonoApp(options: {
       mcpSessions.touch(sessionId, existing)
       return existing.handleRequest(c.req.raw)
     }
-    const transport = await mcpSessions.resolveTransport(undefined)
+    const transport = await mcpSessions.resolveTransport(
+      undefined,
+      c.req.header(MANAGED_CHAT_HEADER)
+    )
     if ('error' in transport) {
       if (transport.error === 'closed') {
         return c.json({ error: 'MCP server is shutting down' }, 503)
@@ -315,8 +320,16 @@ function buildServerContext(options: ServerOptions) {
 
   const mcpSessions = createMCPSessionManager({
     serverVersion: MCP_VERSION,
-    registerTools: (mcpServer: McpServer) =>
-      registerTools(mcpServer, { policy: toolPolicy, mcpRoot, sendRPC: sendToBrowser })
+    registerTools: (mcpServer: McpServer, chatId?: string) =>
+      registerTools(mcpServer, {
+        policy: toolPolicy,
+        mcpRoot,
+        sendRPC: (body) =>
+          sendToBrowser({
+            ...body,
+            ...(chatId ? { managedChatId: chatId } : {})
+          })
+      })
   })
   const browserRPC = createBrowserRPCBridge({
     authToken,

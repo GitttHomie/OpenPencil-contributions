@@ -170,7 +170,8 @@ export async function ensureGraphFonts(
   nodeIds: string[],
   renderer?: FontRenderInvalidator | null
 ): Promise<boolean> {
-  fontManager.blockNodesUntilFontsResolve(nodeIds)
+  // Live edits may pass every root on the page. Keep those subtrees drawable;
+  // renderText already waits for each text node's unresolved fonts.
   try {
     const generationBefore = fontManager.generation()
     const fontKeys = fontManager.collectFontKeys(graph, nodeIds)
@@ -190,7 +191,6 @@ export async function ensureGraphFonts(
     }
     return fontManager.generation() !== generationBefore || fallbackScripts.length > 0
   } finally {
-    fontManager.unblockNodes(nodeIds)
     renderer?.invalidateAllPictures()
   }
 }
@@ -230,4 +230,16 @@ export async function loadFont(
 ): Promise<ArrayBuffer | null> {
   configureTauriFontCache()
   return fontManager.loadFont(family, style, characters, signal)
+}
+
+/** Online previews never request access to installed fonts. */
+export async function loadWebFontPreview(family: string): Promise<ArrayBuffer | null> {
+  configureTauriFontCache()
+  const loaded = fontManager.loadedData(family, 'Regular')
+  if (loaded && !fontManager.remoteStyleNeedsCoverage(family, 'Regular', Array.from(family)))
+    return loaded
+  return (
+    (await fontManager.loadCachedFont(family, 'Regular', family)) ??
+    (await fontManager.loadRemoteFont(family, 'Regular', family))
+  )
 }

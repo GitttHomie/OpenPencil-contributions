@@ -145,6 +145,7 @@ export const setStroke = defineTool({
     const c = parseColor(color)
     node.strokes = [
       {
+        type: 'SOLID',
         color: c,
         weight: weight,
         opacity: 1,

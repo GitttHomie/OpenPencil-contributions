@@ -1,6 +1,6 @@
 import * as v from 'valibot'
 
-import type { FigmaNodeProxy } from '#core/figma-api'
+import type { FigmaNodeProxy } from '#core/figma-api/index'
 import { defineTool, nodeToResult } from '#core/tools/schema'
 
 export const getSelection = defineTool({

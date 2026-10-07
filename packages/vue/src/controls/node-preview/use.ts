@@ -9,14 +9,22 @@ export function useNodePreview(editor: Editor) {
   let preview: NodePreview | undefined
   let targets: readonly string[] = []
 
-  function update(ids: readonly string[], changes: Partial<SceneNode>, label: string) {
+  function update(
+    ids: readonly string[],
+    changes: Partial<SceneNode> | ((id: string) => Partial<SceneNode>),
+    label: string
+  ) {
     if (!preview) {
       if (!ids.length) return
       targets = [...ids]
       preview = editor.beginNodePreview(label)
     }
     try {
-      for (const id of targets) preview.update(id, changes)
+      const updates = targets.map((id) => ({
+        id,
+        changes: typeof changes === 'function' ? changes(id) : changes
+      }))
+      for (const update of updates) preview.update(update.id, update.changes)
     } catch (error) {
       cancel()
       throw error

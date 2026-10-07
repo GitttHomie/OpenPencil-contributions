@@ -2,6 +2,7 @@ import type { LayoutMode, SceneNode } from '@open-pencil/scene-graph'
 import { getAxisAlignedBoundsInParent } from '@open-pencil/scene-graph/coordinate'
 
 import { assertNodeEditable } from '#core/editor/capabilities'
+import { prepareSlotEdits } from '#core/editor/components/slots/index'
 import { applyMoveStates, captureMoveState } from '#core/editor/history/move'
 import type { NodePreview } from '#core/editor/node-preview'
 import type { EditorContext } from '#core/editor/types'
@@ -11,13 +12,13 @@ export function wrapInAutoLayout(
   selectedNodes: SceneNode[],
   beginNodePreview: (label: string) => NodePreview
 ) {
-  if (selectedNodes.length === 0) return
+  if (selectedNodes.length === 0) return null
 
   const parentId = selectedNodes[0].parentId ?? ctx.state.currentPageId
   if (!selectedNodes.every((node) => (node.parentId ?? ctx.state.currentPageId) === parentId))
-    return
+    return null
   const parent = ctx.graph.getNode(parentId)
-  if (!parent) return
+  if (!parent) return null
   assertNodeEditable(ctx.graph, parentId)
   for (const node of selectedNodes) assertNodeEditable(ctx.graph, node.id)
 
@@ -34,7 +35,9 @@ export function wrapInAutoLayout(
     .sort((a, b) => a.pos.y - b.pos.y || a.pos.x - b.pos.x)
     .map((node) => node.id)
 
+  let frameId: string | null = null
   ctx.undo.runBatch('Wrap in auto layout', () => {
+    if (!prepareSlotEdits(ctx, [parentId])) return
     const frame = ctx.graph.createNode('FRAME', parentId, {
       name: 'Frame',
       x: bounds.x,
@@ -48,12 +51,13 @@ export function wrapInAutoLayout(
       counterAxisAlign: 'MIN',
       fills: []
     })
-    const frameId = frame.id
+    frameId = frame.id
+    const createdId = frame.id
     // The redo template must not retain the live frame's mutated child list or dimensions.
     const template = structuredClone(frame)
     function attachChildren() {
-      ctx.graph.insertChildAt(frameId, parentId, firstIndex)
-      for (const id of sortedIds) ctx.graph.reparentNode(id, frameId)
+      ctx.graph.insertChildAt(createdId, parentId, firstIndex)
+      for (const id of sortedIds) ctx.graph.reparentNode(id, createdId)
     }
     attachChildren()
     ctx.undo.push({
@@ -61,18 +65,19 @@ export function wrapInAutoLayout(
       forward: () => {
         ctx.graph.createNode('FRAME', parentId, structuredClone(template))
         attachChildren()
-        ctx.setSelectedIds(new Set([frameId]))
+        ctx.setSelectedIds(new Set([createdId]))
       },
       inverse: () => {
         // The layout entry restores geometry first; do not recalculate it while unwrapping.
         applyMoveStates(ctx, originals, { runLayout: false })
-        ctx.graph.deleteNode(frameId)
+        ctx.graph.deleteNode(createdId)
         ctx.setSelectedIds(new Set(prevSelection))
       }
     })
     const layout = beginNodePreview('Layout wrapped selection')
-    layout.update(frameId, { layoutMode: direction })
+    layout.update(createdId, { layoutMode: direction })
     layout.commit()
-    ctx.setSelectedIds(new Set([frameId]))
+    ctx.setSelectedIds(new Set([createdId]))
   })
+  return frameId
 }

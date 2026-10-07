@@ -14,10 +14,13 @@ export function createHiddenTextArea() {
 
 export function focusTextAreaOnCanvasPointerDown(
   textareaRef: ShallowRef<HTMLTextAreaElement | null>,
-  store: Editor
+  store: Editor,
+  event: MouseEvent
 ) {
   if (store.state.editingTextId && textareaRef.value) {
-    requestAnimationFrame(() => textareaRef.value?.focus())
+    // Keep the canvas default focus action from stealing the next key from text editing.
+    event.preventDefault()
+    textareaRef.value.focus({ preventScroll: true })
   }
 }
 

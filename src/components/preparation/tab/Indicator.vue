@@ -3,7 +3,7 @@ import { computed } from 'vue'
 
 import type { EditorPreparationProgress } from '@/app/editor/preparation/types'
 import { preparationPercent } from '@/components/preparation/presentation'
-import { motionStyles } from '@/theme/motion/styles'
+import AppSpinner from '@/components/ui/feedback/AppSpinner.vue'
 
 const { progress } = defineProps<{
   progress: EditorPreparationProgress | null
@@ -21,6 +21,6 @@ const percent = computed(() => preparationPercent(progress))
     aria-label="Preparing document"
     class="relative flex size-3 shrink-0 items-center justify-center text-accent"
   >
-    <icon-lucide-loader-circle class="size-3" :class="motionStyles.spinner" />
+    <AppSpinner class="size-3" />
   </span>
 </template>

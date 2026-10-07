@@ -5,13 +5,24 @@ import {
   registerComponentCatalog,
   isAtomicTool,
   isToolExposed,
-  renderDesignTree
+  renderDesignTree,
+  toolChangesDocument
 } from '@open-pencil/core/tools'
 import type { TreeNode } from '@open-pencil/design-jsx'
 import type { JSONObject } from '@open-pencil/scene-graph/primitives'
 
+import {
+  canvasSessionBaseline,
+  captureCanvasTool,
+  moveCanvasSession
+} from '@/app/ai/acp/canvas/session'
 import type { AutomationTarget } from '@/app/automation/bridge/target'
-import { executeAtomicEditorTool } from '@/app/automation/execution/editor'
+import {
+  AUTOMATION_UNDO_LABEL,
+  automationUndoLabel,
+  executeAtomicEditorTool,
+  executeWithPageUndo
+} from '@/app/automation/execution/editor'
 import { ensureGraphFonts } from '@/app/editor/fonts'
 import { useLibraryService } from '@/app/libraries'
 
@@ -25,16 +36,20 @@ export function createAutomationToolHandler(makeFigma: FigmaFactory) {
     const store = target.store
     const tree = toolArgs.tree as TreeNode
     const figma = makeFigma(store, target.pageId)
-    const result = await store.runMutationWithLayout(
-      () => renderDesignTree(figma, tree, toolArgs as RenderPlacementInput),
-      target.pageId,
-      async (node) => {
-        await ensureGraphFonts(
-          store.graph,
-          [node.id, ...(node.siblings?.map((sibling) => sibling.id) ?? [])],
-          store.renderer
-        )
-      }
+    const parentId = (toolArgs.parent_id as string | undefined) ?? target.pageId
+    const undoPageId = pageIdOf(store.graph, parentId) ?? target.pageId
+    const result = await executeWithPageUndo(store, undoPageId, automationUndoLabel('render'), () =>
+      store.runMutationWithLayout(
+        () => renderDesignTree(figma, tree, toolArgs as RenderPlacementInput),
+        target.pageId,
+        async (node) => {
+          await ensureGraphFonts(
+            store.graph,
+            [node.id, ...(node.siblings?.map((sibling) => sibling.id) ?? [])],
+            store.renderer
+          )
+        }
+      )
     )
     store.requestRender()
     store.flashNodes([result.id])
@@ -44,7 +59,11 @@ export function createAutomationToolHandler(makeFigma: FigmaFactory) {
     }
   }
 
-  return async function handleTool(target: AutomationTarget, args: unknown): Promise<unknown> {
+  async function executeTool(
+    target: AutomationTarget,
+    args: unknown,
+    chatId?: string
+  ): Promise<unknown> {
     const toolName = (args as { name?: string }).name
     const toolArgs = (args as { args?: Record<string, unknown> }).args ?? {}
     if (!toolName) throw new Error('Missing "name" in args')
@@ -60,18 +79,27 @@ export function createAutomationToolHandler(makeFigma: FigmaFactory) {
     libraryService.bindEditor(store)
     registerComponentCatalog(store.graph, libraryService)
     const figma = makeFigma(store, target.pageId)
+    canvasSessionBaseline(chatId, figma)
     let result: unknown
     if (isAtomicTool(def)) {
-      result = await executeAtomicEditorTool(store, figma, def, toolArgs)
+      result = await executeAtomicEditorTool(store, figma, def, toolArgs, {
+        label: AUTOMATION_UNDO_LABEL
+      })
     } else if (def.mutates) {
-      result = await store.runMutationWithLayout(
-        () => def.execute(figma, toolArgs),
-        figma.currentPageId,
-        async () => {
-          const pageNode = store.graph.getNode(figma.currentPageId)
-          if (pageNode) await ensureGraphFonts(store.graph, pageNode.childIds, store.renderer)
-        }
-      )
+      const pageId = figma.currentPageId
+      const mutate = () =>
+        store.runMutationWithLayout(
+          () => def.execute(figma, toolArgs),
+          figma.currentPageId,
+          async () => {
+            const pageNode = store.graph.getNode(figma.currentPageId)
+            if (pageNode) await ensureGraphFonts(store.graph, pageNode.childIds, store.renderer)
+          }
+        )
+      // View tools (selection, viewport, pages) leave the document and its history alone.
+      result = toolChangesDocument(def)
+        ? await executeWithPageUndo(store, pageId, automationUndoLabel(def.name), mutate)
+        : await mutate()
     } else {
       result = await def.execute(figma, toolArgs)
     }
@@ -80,8 +108,23 @@ export function createAutomationToolHandler(makeFigma: FigmaFactory) {
       store.requestRender()
       store.flashNodes(extractNodeIds(result))
     }
+    moveCanvasSession(chatId, figma.currentPageId)
     return { ok: true, result }
   }
+
+  return async function handleTool(target: AutomationTarget, args: unknown, chatId?: string) {
+    const name = (args as { name?: string }).name
+    const def = ALL_TOOLS.find((tool) => tool.name === name && isToolExposed(tool, 'mcp'))
+    const execute = () => executeTool(target, args, chatId)
+    return def ? captureCanvasTool(chatId, target.store, target.pageId, def, execute) : execute()
+  }
+}
+
+function pageIdOf(graph: AutomationTarget['store']['graph'], nodeId: string): string | null {
+  let node = graph.getNode(nodeId)
+  while (node && node.type !== 'CANVAS')
+    node = node.parentId ? graph.getNode(node.parentId) : undefined
+  return node?.id ?? null
 }
 
 function extractNodeIds(result: unknown): string[] {

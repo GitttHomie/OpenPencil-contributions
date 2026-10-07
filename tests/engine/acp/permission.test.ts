@@ -7,7 +7,7 @@ import {
   currentPermission,
   requestPermissionFromUser,
   respondToPermission,
-  rejectCurrentPermission
+  cancelCurrentPermission
 } from '@/app/ai/acp/permission'
 
 function makeRequest(
@@ -53,17 +53,17 @@ describe('acp-permission', () => {
     expect(permissionQueue.value).toHaveLength(0)
   })
 
-  test('rejectCurrentPermission picks reject option', async () => {
+  test('an explicit rejection returns the selected reject option', async () => {
     const promise = requestPermissionFromUser(makeRequest())
-    rejectCurrentPermission()
+    respondToPermission('reject')
     const result = await promise
     expect(result.outcome.optionId).toBe('reject')
   })
 
-  test('rejectCurrentPermission cancels when no reject option is offered', async () => {
+  test('cancelCurrentPermission cancels when no reject option is offered', async () => {
     const req = makeRequest([{ optionId: 'only-allow', kind: 'allow_once', name: 'Allow' }])
     const promise = requestPermissionFromUser(req)
-    rejectCurrentPermission()
+    cancelCurrentPermission()
     const result = await promise
     expect(result.outcome.outcome).toBe('cancelled')
   })
@@ -95,51 +95,21 @@ describe('acp-permission', () => {
     expect(permissionQueue.value).toHaveLength(0)
   })
 
-  test('rejectCurrentPermission is no-op when queue is empty', () => {
+  test('cancelCurrentPermission is no-op when queue is empty', () => {
     expect(permissionQueue.value).toHaveLength(0)
-    rejectCurrentPermission()
-    expect(permissionQueue.value).toHaveLength(0)
-  })
-
-  test('timer cleared on manual resolution (no double resolve)', async () => {
-    const promise = requestPermissionFromUser(makeRequest())
-    respondToPermission('allow')
-    const result = await promise
-    expect(result.outcome.optionId).toBe('allow')
-    // Timer should be cleared — wait to ensure no stale timeout fires
-    await new Promise((resolve) => {
-      setTimeout(resolve, 50)
-    })
+    cancelCurrentPermission()
     expect(permissionQueue.value).toHaveLength(0)
   })
 
-  test('timeout auto-rejects after delay', async () => {
-    const req = makeRequest()
-    // Override timeout for test speed by creating request and manually triggering the timer
-    const promise = requestPermissionFromUser(req)
-    const entry = permissionQueue.value[0]
-    expect(entry).toBeDefined()
-
-    // Fast-forward: manually fire the timer callback
-    clearTimeout(entry.timer)
-    const timerFn = () => {
-      const idx = permissionQueue.value.indexOf(entry)
-      if (idx === -1) return
-      permissionQueue.value = permissionQueue.value.filter((e) => e !== entry)
-      entry.resolve({
-        outcome: {
-          outcome: 'selected',
-          optionId:
-            req.options.find((o) => o.kind.startsWith('reject'))?.optionId ??
-            req.options[0]?.optionId ??
-            ''
-        }
-      })
-    }
-    timerFn()
-
-    const result = await promise
-    expect(result.outcome.optionId).toBe('reject')
+  test('cancelling does not select rejection even when permanent rejection is offered first', async () => {
+    const promise = requestPermissionFromUser(
+      makeRequest([
+        { optionId: 'never', kind: 'reject_always', name: 'Never allow' },
+        { optionId: 'once', kind: 'allow_once', name: 'Allow' }
+      ])
+    )
+    cancelCurrentPermission()
+    expect(await promise).toEqual({ outcome: { outcome: 'cancelled' } })
     expect(permissionQueue.value).toHaveLength(0)
   })
 })

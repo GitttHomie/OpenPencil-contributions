@@ -8,7 +8,7 @@ import type { Vector } from '@open-pencil/scene-graph/primitives'
 
 import { BLACK } from '#core/constants'
 import type { EditorContext } from '#core/editor/types'
-import { computeAccurateBounds } from '#core/vector'
+import { computeAccurateBounds } from '#core/vector/index'
 
 export interface PenDragOptions {
   keepOpposite?: boolean
@@ -26,6 +26,7 @@ type CreateShape = (
 ) => string
 
 const PEN_DEFAULT_STROKE: SceneNode['strokes'][number] = {
+  type: 'SOLID',
   color: BLACK,
   weight: 2,
   opacity: 1,

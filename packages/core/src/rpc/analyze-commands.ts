@@ -9,11 +9,11 @@ import {
   computeOverlaps,
   type AnalyzeOverlapsArgs,
   type AnalyzeOverlapsResult
-} from '#core/tools/analyze/overlaps'
+} from '#core/tools/analyze/overlaps/index'
 
 import type { RPCCommand } from './types'
 
-export type { AnalyzeOverlapsArgs, AnalyzeOverlapsResult } from '#core/tools/analyze/overlaps'
+export type { AnalyzeOverlapsArgs, AnalyzeOverlapsResult } from '#core/tools/analyze/overlaps/index'
 
 // ── analyze colors ──
 

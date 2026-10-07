@@ -4,9 +4,12 @@ import { expect, userEvent, within } from 'storybook/test'
 
 import AppButton from '@/components/ui/button/AppButton.vue'
 import AppSelect from '@/components/ui/select/AppSelect.vue'
+import { chatComposerTheme } from '@/theme/chat/composer'
+import { chatProfileTheme } from '@/theme/chat/profile'
 
 import ChatComposer from './ChatComposer.vue'
 import ChatHistory from './ChatHistory.vue'
+import ChatThinkingSelect from './ChatThinkingSelect.vue'
 import ChatTranscript from './ChatTranscript.vue'
 import { useConversations } from './stories/useConversations'
 
@@ -29,13 +32,19 @@ const meta = {
     components: {
       ChatHistory,
       ChatComposer,
+      ChatThinkingSelect,
       ChatTranscript,
       TooltipProvider,
       AppSelect,
       AppButton
     },
     setup() {
-      return { args, ...useConversations(args.initialChat) }
+      return {
+        args,
+        composerUI: chatComposerTheme(),
+        profileUI: chatProfileTheme(),
+        ...useConversations(args.initialChat)
+      }
     },
     template: `
       <TooltipProvider>
@@ -68,6 +77,9 @@ const meta = {
               :messages="selected.messages"
               :presentations="presentations"
               :status="selected.status"
+              interactive
+              @regenerate="regenerate"
+              @edit="resend"
             />
             <p v-if="notice" role="status" class="px-3 py-2 text-xs text-muted">{{ notice }}</p>
             <ChatComposer
@@ -78,11 +90,15 @@ const meta = {
               @settings="showProfileNotice"
             >
               <template #model>
-                <AppSelect
-                  v-model="profile"
-                  label="Mock model profile"
-                  :options="profileOptions"
-                />
+                <div :class="composerUI.models()">
+                  <AppSelect
+                    v-model="profile"
+                    label="Mock model profile"
+                    :options="profileOptions"
+                    :ui="{ trigger: profileUI.trigger() }"
+                  />
+                  <ChatThinkingSelect />
+                </div>
               </template>
             </ChatComposer>
           </section>
@@ -98,7 +114,7 @@ export const Interaction: Story = {
     const canvas = within(canvasElement)
     await userEvent.click(canvas.getByRole('button', { name: 'New fixture' }))
     await userEvent.type(
-      canvas.getByRole('textbox', { name: 'Describe a change' }),
+      canvas.getByRole('textbox', { name: /^Describe a change/ }),
       'Make a dashboard'
     )
     await userEvent.click(canvas.getByRole('button', { name: 'Send message' }))
@@ -109,11 +125,12 @@ export const Interaction: Story = {
     await userEvent.type(title, 'My dashboard')
     await userEvent.click(canvas.getByRole('button', { name: 'Delete fixture' }))
     await expect(title).toHaveValue('Monthly expense dashboard')
-    await expect(canvas.getByRole('button', { name: 'Create Frame Done' })).toBeVisible()
+    await expect(canvas.getByRole('button', { name: /^Done Create Frame\b/ })).toBeVisible()
   }
 }
 export const Empty: Story = { args: { initialChat: 'empty' } }
 export const Streaming: Story = { args: { initialChat: 'streaming' } }
 export const ToolError: Story = { args: { initialChat: 'error' } }
+export const RevertedReply: Story = { args: { initialChat: 'reverted' } }
 export const Narrow: Story = { args: { narrow: true } }
 export const LongTitle: Story = { args: { initialChat: 'long-title', narrow: true } }

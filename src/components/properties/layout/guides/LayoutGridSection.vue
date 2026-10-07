@@ -105,7 +105,7 @@ function isGrid(grid: LayoutGrid): boolean {
     </template>
 
     <PanelItemRow v-for="(grid, index) in grids" :key="index" class="items-start">
-      <div class="flex min-w-0 flex-1 flex-col gap-1.5">
+      <div class="flex min-w-0 flex-1 flex-col gap-field-group">
         <SegmentedControl
           :model-value="gridPattern(grid)"
           :options="patternOptions"

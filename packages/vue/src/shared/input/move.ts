@@ -169,7 +169,6 @@ function finishMove(
   indicator: Editor['state']['layoutInsertIndicator']
 ) {
   restoreOriginalPositions(d, editor)
-  applyFinalPositions(d, editor)
   const dropId = indicator?.parentId ?? editor.state.dropTargetId ?? editor.state.currentPageId
   const ids = [...d.originals.keys()].sort((a, b) => {
     const first = d.originals.get(a)
@@ -178,6 +177,11 @@ function finishMove(
   })
   const parents = new Set([...d.originals.values()].map((original) => original.parentId))
   parents.add(dropId)
+  if (!editor.prepareSlotEdits(parents)) {
+    restoreOriginalPositions(d, editor)
+    return false
+  }
+  applyFinalPositions(d, editor)
   for (const id of ids) {
     const node = editor.graph.getNode(id)
     if (!node) continue
@@ -206,6 +210,7 @@ function finishMove(
     order.forEach((id, index) => editor.graph.reorderChild(id, dropId, index))
   }
   for (const parentId of parents) editor.runLayoutForNode(parentId)
+  return true
 }
 
 export function handleMoveUp(d: DragMove, editor: Editor) {
@@ -227,17 +232,21 @@ export function handleMoveUp(d: DragMove, editor: Editor) {
   }
 
   const moved = Boolean(indicator) || hasMoved(d, editor)
-  if (moved) finishMove(d, editor, indicator)
-
-  if (d.duplicated) {
-    const previousSelection = d.duplicatedPreviousSelection ?? new Set<string>()
-    if (!moved) {
+  editor.undo.runBatch(d.duplicated ? 'Duplicate' : 'Move', () => {
+    if (moved && !finishMove(d, editor, indicator)) {
       cancelMove(d, editor)
       return
     }
-    editor.commitDuplicateMove([...d.originals.keys()], previousSelection)
-  } else if (moved) {
-    editor.commitMoveWithReparent(d.originals)
-  }
+    if (d.duplicated) {
+      const previousSelection = d.duplicatedPreviousSelection ?? new Set<string>()
+      if (!moved) {
+        cancelMove(d, editor)
+        return
+      }
+      editor.commitDuplicateMove([...d.originals.keys()], previousSelection)
+    } else if (moved) {
+      editor.commitMoveWithReparent(d.originals)
+    }
+  })
   editor.setDropTarget(null)
 }

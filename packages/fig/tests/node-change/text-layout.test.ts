@@ -28,13 +28,33 @@ function savedText(lineHeight: number | null = null) {
     {
       fontDigestMap: new Map(),
       runtime: {
-        getGlyphOutlineMetrics: () => [
-          {
-            commands: [{ type: 'M', x: 0, y: 0 }, { type: 'L', x: 8, y: 16 }, { type: 'Z' }],
-            x: 0,
-            advance: 10
-          }
-        ]
+        shapeText: () => ({
+          glyphs: [
+            {
+              commands: [{ type: 'M', x: 0, y: 0 }, { type: 'L', x: 8, y: 16 }, { type: 'Z' }],
+              x: 0,
+              y: lineHeight ?? 29,
+              fontSize: 24,
+              firstCharacter: 0,
+              advance: 10
+            }
+          ],
+          baselines: [
+            {
+              firstCharacter: 0,
+              endCharacter: node.text.length - 1,
+              position: { x: 0, y: lineHeight ?? 29 },
+              width: 120,
+              lineY: 0,
+              lineHeight: lineHeight ?? 29,
+              lineAscent: (lineHeight ?? 29) - 4.8
+            }
+          ],
+          logicalIndexToCharacterOffsetMap: Array.from(
+            { length: node.text.length },
+            (_, index) => (index * 120) / node.text.length
+          )
+        })
       }
     }
   )
@@ -42,6 +62,13 @@ function savedText(lineHeight: number | null = null) {
 }
 
 function legacy(change: NodeChange): NodeChange {
+  const derived = change.derivedTextData
+  const length = change.textData?.characters.length ?? 0
+  if (derived)
+    derived.logicalIndexToCharacterOffsetMap = Array.from(
+      { length: length + 1 },
+      (_, index) => (index * 120) / Math.max(length, 1)
+    )
   return {
     ...change,
     pluginData: change.pluginData?.filter((entry) => entry.key !== TEXT_LAYOUT_PLUGIN_KEY)

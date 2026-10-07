@@ -2,7 +2,7 @@ import type { ComboboxVirtualizer } from 'reka-ui'
 
 type FontListContext = NonNullable<Parameters<typeof ComboboxVirtualizer>[1]>
 type FontListSlot = NonNullable<FontListContext['slots']['default']>
-type FontVirtualizer = Parameters<FontListSlot>[0]['virtualizer']
+export type FontVirtualizer = Parameters<FontListSlot>[0]['virtualizer']
 
 /** Reka exposes the virtualizer in its slot, but does not forward this scheduling option. */
 export function deferFontListMeasurements(virtualizer: FontVirtualizer): void {

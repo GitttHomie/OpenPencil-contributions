@@ -23,10 +23,16 @@ export type { PresentationColorSpace } from '#vue/canvas/surface/color-space'
 export { useCanvas } from '#vue/canvas/surface/use'
 export type { UseCanvasOptions } from '#vue/canvas/surface/use'
 export { useCanvasInput } from '#vue/canvas/useCanvasInput'
+export { useCanvasIssueMarkers } from '#vue/canvas/issues/use'
+export type { CanvasIssueMarkerOptions } from '#vue/canvas/issues/use'
 export type { CanvasLabelEdit, CanvasLabelKind } from '#vue/canvas/labels/edit'
 export { useCanvasVirtualReference } from '#vue/canvas/overlays/useCanvasVirtualReference'
 export { useTextEdit } from '#vue/canvas/text-edit/use'
-export { useCanvasDrop, extractImageFilesFromClipboard } from '#vue/canvas/drop/use'
+export {
+  useCanvasDrop,
+  extractImageFilesFromClipboard,
+  filterCanvasFiles
+} from '#vue/canvas/drop/use'
 
 /** Low-level selection, graph, and derived-state helpers. */
 export { useNodeProps, MIXED } from '#vue/controls/node-props/use'
@@ -78,6 +84,7 @@ export {
   useToolbarState
 } from '#vue/primitives/Toolbar/useToolbarState'
 export { useNodeFontStatus } from '#vue/shared/font-status/use'
+export { fuzzyFilter, fuzzySearch } from '#vue/shared/search/fuzzy'
 export { usePropScrub } from '#vue/controls/prop-scrub/use'
 export { toolCursor } from '#vue/editor/tool-cursor'
 export {
@@ -95,6 +102,7 @@ export type { TestId } from '#vue/testing/test-id'
 /** Property-panel composables. */
 export { usePosition } from '#vue/controls/position/use'
 export { useLayout } from '#vue/controls/layout/use'
+export { useSelectionLayout } from '#vue/controls/layout/selection'
 export type { LayoutAxis, SizeLimitProp } from '#vue/controls/layout/helpers'
 export { useAppearance } from '#vue/controls/appearance/use'
 export { useMask } from '#vue/controls/mask/use'
@@ -112,6 +120,8 @@ export { useFillControls } from '#vue/controls/fill/use'
 export { useColorVariableBinding } from '#vue/controls/color-variable-binding/use'
 export { useNumberVariableBinding } from '#vue/controls/number-variable-binding/use'
 export type { NumberBindingPath } from '#vue/controls/number-variable-binding/use'
+export { useNumberPropertyControls } from '#vue/controls/number-variable-binding/property'
+export { CORNER_RADIUS_PATHS, BORDER_WIDTH_PATHS } from '@open-pencil/scene-graph'
 export { useVariableBinding } from '#vue/controls/variable-binding/use'
 export type {
   VariableBindingState,
@@ -124,6 +134,7 @@ export { isStrokeCapValue } from '#vue/controls/stroke/helpers'
 export {
   applySolidFillColor,
   applySolidStrokeColor,
+  applyStrokePaint,
   BUILT_IN_COLOR_FORMATS,
   fromPercent,
   toPercent,
@@ -140,9 +151,6 @@ export { useOkHCL } from '#vue/controls/okhcl/use'
 
 /** Variables, page navigation, and picker helpers. */
 export { useVariables } from '#vue/variables/use'
-export { useVariablesDialogState } from '#vue/variables/dialog/use'
-export { useVariablesEditor } from '#vue/variables/editor/use'
-export { useVariablesTable } from '#vue/variables/table/use'
 export { usePageList } from '#vue/primitives/PageList/usePageList'
 export {
   fillCategory,
@@ -155,7 +163,7 @@ export { useGradientStops } from '#vue/primitives/GradientEditor/useGradientStop
 export { useFontPicker } from '#vue/primitives/FontPicker/useFontPicker'
 
 /** Headless structural primitives and their local contexts. */
-export { CanvasRoot, CanvasSurface, useCanvasContext } from '#vue/canvas'
+export { CanvasRoot, CanvasSurface, PlayIslands, useCanvasContext } from '#vue/canvas'
 export type { CanvasContext } from '#vue/canvas'
 export { ColorInputRoot, ColorPickerRoot } from '#vue/primitives/ColorPicker'
 export {
@@ -238,14 +246,41 @@ export {
   compatibleComponentPropertyDefinitions,
   instanceSwapOptions,
   mergedComponentPropertyValue,
-  useComponentProperties,
-  useVariantAuthoring
+  useComponentPropertyAuthoring,
+  useComponentProperties
 } from '#vue/controls/component-props'
+export {
+  slotInstanceOptions,
+  slotLimits,
+  useSlotAuthoring,
+  useSlotProperties
+} from '#vue/controls/slots'
+export { useVariantAuthoring } from '#vue/controls/variants'
+export type {
+  ComponentBinding,
+  ComponentBindingGroup
+} from '#vue/controls/component-props/bindings'
+export { useBehaviour } from '#vue/controls/behaviour'
+export type {
+  BehaviourBooleanControl,
+  BehaviourControl,
+  BehaviourNumberControl,
+  BehaviourPartControl,
+  BehaviourStatesControl,
+  BehaviourTextControl,
+  BehaviourValueControl
+} from '#vue/controls/behaviour'
 export type {
   ComponentPropertyControl,
-  ComponentPropertyOption,
-  VariantDefinitionControl
+  ComponentPropertyOption
 } from '#vue/controls/component-props'
+export type {
+  SlotDefinitionControl,
+  SlotInstanceOption,
+  SlotLimit,
+  SlotPropertyControl
+} from '#vue/controls/slots'
+export type { VariantDefinitionControl, VariantPropertyControl } from '#vue/controls/variants'
 export type { CornerGeometryKey, CornerRadiusKey } from '#vue/controls/appearance/types'
 export { isPageDivider, PageListRoot, PAGE_DIVIDER_PATTERN } from '#vue/primitives/PageList'
 export { PositionControlsRoot } from '#vue/primitives/PositionControls'

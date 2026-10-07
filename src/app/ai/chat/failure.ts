@@ -1,5 +1,6 @@
-import { APICallError } from 'ai'
+import { APICallError, StreamProviderError } from 'ai'
 
+import { ACPConfigurationError } from '@/app/ai/acp/configuration/session'
 import { ACPModelSelectionError } from '@/app/ai/acp/models'
 import { MCPStartupError } from '@/app/automation/mcp/failure'
 
@@ -13,6 +14,7 @@ export type AIChatFailureReason =
   | 'rate-limit'
   | 'request-failed'
   | 'mcp-unavailable'
+  | 'cli-configuration'
 
 export type AIChatFailure = {
   reason: AIChatFailureReason
@@ -58,6 +60,14 @@ function normalizedErrorText(error: unknown): string {
   return errorText(error).toLowerCase()
 }
 
+export function isModelNotFoundError(error: unknown): boolean {
+  const text = normalizedErrorText(error)
+  return (
+    text.includes('unknown model') ||
+    (text.includes('model') && (text.includes('not found') || text.includes('does not exist')))
+  )
+}
+
 export function isInsufficientCreditError(error: unknown): boolean {
   if (providerErrorStatus(error) === 402) return true
   const text = normalizedErrorText(error)
@@ -85,6 +95,7 @@ function statusFailureReason(status: number | null): AIChatFailureReason | null 
 }
 
 function failureReason(error: unknown): AIChatFailureReason {
+  if (error instanceof ACPConfigurationError) return 'cli-configuration'
   if (error instanceof MCPStartupError) return 'mcp-unavailable'
   if (error instanceof ACPModelSelectionError) return 'model-not-found'
   const statusReason = statusFailureReason(providerErrorStatus(error))
@@ -98,7 +109,7 @@ function failureReason(error: unknown): AIChatFailureReason {
     return 'authentication'
   }
   if (text.includes('rate limit') || text.includes('too many requests')) return 'rate-limit'
-  if (text.includes('model not found') || text.includes('unknown model')) return 'model-not-found'
+  if (isModelNotFoundError(error)) return 'model-not-found'
   if (
     text.includes('failed to fetch') ||
     text.includes('network') ||
@@ -119,6 +130,10 @@ export function classifyAIChatError(error: unknown): AIChatFailure {
     reason: failureReason(error),
     detail: errorText(error),
     statusCode: providerErrorStatus(error) ?? undefined,
-    retryable: APICallError.isInstance(error) ? error.isRetryable : undefined
+    // A provider error after the stream starts arrives as StreamProviderError, not APICallError.
+    retryable:
+      APICallError.isInstance(error) || StreamProviderError.isInstance(error)
+        ? error.isRetryable
+        : undefined
   }
 }

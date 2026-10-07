@@ -1,6 +1,6 @@
 import { createDesignJSXRenderer, type SVGSource } from '@open-pencil/design-jsx'
 
-import { fetchIcons } from '#core/icons'
+import { fetchIcons } from '#core/icons/index'
 import { createIconFromPaths } from '#core/icons/render'
 import { extractPaths, extractPathsFromElements, scalePathInfos } from '#core/icons/svg'
 import type { IconData } from '#core/icons/types'

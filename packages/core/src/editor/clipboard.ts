@@ -10,7 +10,7 @@ import { createClipboardAssetActions } from './clipboard/assets'
 import { createPastedTrees } from './clipboard/component-paste'
 import type { ClipboardSnapshot } from './clipboard/copy'
 import { createClipboardCopyActions } from './clipboard/copy'
-import { deleteSelected } from './clipboard/delete'
+import { deleteNodes, deleteSelected } from './clipboard/delete'
 import { importClipboardDependencies } from './clipboard/dependencies'
 import { createClipboardExportActions } from './clipboard/export'
 import { createClipboardFontActions } from './clipboard/fonts'
@@ -20,6 +20,8 @@ import { replaceTargetsWithCreated, selectedReplacementTargets } from './clipboa
 import { resolvePasteTarget } from './clipboard/paste-target'
 import { createClipboardPlacementActions } from './clipboard/placement'
 import { collectSubtrees, restoreSubtree, snapshotSubtree } from './clipboard/subtree-history'
+import { initializePastedVariants } from './clipboard/variants'
+import { prepareSlotEdits } from './components/slots'
 import type { EditorContext } from './types'
 
 type PasteOptions = {
@@ -27,10 +29,12 @@ type PasteOptions = {
 }
 
 export function createClipboardActions(ctx: EditorContext) {
-  function duplicateSelected(selectedNodes: SceneNode[]) {
+  function duplicateLayers(selectedNodes: SceneNode[]) {
     const prevSelection = new Set(ctx.state.selectedIds)
     const selectedSet = new Set(selectedNodes.map((n) => n.id))
     const topLevel = selectedNodes.filter((n) => !n.parentId || !selectedSet.has(n.parentId))
+    const parents = topLevel.map((node) => node.parentId ?? ctx.state.currentPageId)
+    if (!prepareSlotEdits(ctx, parents)) return
 
     const newRootIds: string[] = []
     const allSnapshots = new Map<string, SceneNode>()
@@ -150,48 +154,55 @@ export function createClipboardActions(ctx: EditorContext) {
 
     const figma = await parseFigmaClipboard(html)
     if (figma) {
-      const prevSelection = new Set(ctx.state.selectedIds)
-      const replacementTargets = options.replaceSelection ? selectedReplacementTargets(ctx) : []
-      const pasteTarget = replacementTargets[0]?.parentId ?? resolvePasteTarget(ctx)
-      const operation = prepareClipboardImport(
-        figma.nodes,
-        ctx.graph,
-        pasteTarget,
-        figma.blobs,
-        0,
-        0,
-        {
-          componentsAsInstances: true
-        }
-      )
-      let deliveryError: CommittedGraphEventError | undefined
-      try {
-        operation.commit()
-      } catch (error) {
-        if (!(error instanceof CommittedGraphEventError)) throw error
-        deliveryError = error
-      }
-      const created = operation.plan.rootIds
-      if (created.length === 0) return
-      placementActions.preparePastedRoots(created)
-
-      if (replacementTargets.length > 0) {
-        replaceTargetsWithCreated(
-          ctx,
-          placementActions.centerNodesAt,
-          created,
-          replacementTargets,
-          prevSelection,
-          operation
+      const pasted = ctx.undo.runBatch('Paste', () => {
+        const prevSelection = new Set(ctx.state.selectedIds)
+        const replacementTargets = options.replaceSelection ? selectedReplacementTargets(ctx) : []
+        const pasteTarget = replacementTargets[0]?.parentId ?? resolvePasteTarget(ctx)
+        if (!prepareSlotEdits(ctx, [pasteTarget])) return null
+        const operation = prepareClipboardImport(
+          figma.nodes,
+          ctx.graph,
+          pasteTarget,
+          figma.blobs,
+          0,
+          0,
+          {
+            componentsAsInstances: ctx.graph.getNode(pasteTarget)?.type !== 'COMPONENT_SET'
+          }
         )
-      } else {
-        const center = placementActions.getPasteCenter(pasteTarget, cursorPos)
-        placementActions.centerNodesAt(created, center.x, center.y)
-        computeAllLayouts(ctx.graph, ctx.state.currentPageId)
-        ctx.setSelectedIds(new Set(created))
-        pushCreatedNodesUndo(created, prevSelection, 'Paste', operation)
-      }
+        let deliveryError: CommittedGraphEventError | undefined
+        try {
+          operation.commit()
+        } catch (error) {
+          if (!(error instanceof CommittedGraphEventError)) throw error
+          deliveryError = error
+        }
+        const created = operation.plan.rootIds
+        if (created.length === 0) return null
+        initializePastedVariants(ctx, created)
+        placementActions.preparePastedRoots(created)
 
+        if (replacementTargets.length > 0) {
+          replaceTargetsWithCreated(
+            ctx,
+            placementActions.centerNodesAt,
+            created,
+            replacementTargets,
+            prevSelection,
+            operation
+          )
+        } else {
+          const center = placementActions.getPasteCenter(pasteTarget, cursorPos)
+          placementActions.centerNodesAt(created, center.x, center.y)
+          computeAllLayouts(ctx.graph, ctx.state.currentPageId)
+          ctx.setSelectedIds(new Set(created))
+          pushCreatedNodesUndo(created, prevSelection, 'Paste', operation)
+        }
+
+        return { created, deliveryError }
+      })
+      if (!pasted) return
+      const { created, deliveryError } = pasted
       if (deliveryError) throw deliveryError
       await Promise.all([
         hydrateFigmaClipboardImages(figma.meta.fileKey, created),
@@ -213,12 +224,14 @@ export function createClipboardActions(ctx: EditorContext) {
     const replacementTargets = options.replaceSelection ? selectedReplacementTargets(ctx) : []
     for (const [hash, bytes] of images) ctx.graph.images.set(hash, bytes)
 
+    const targetId = replacementTargets[0]?.parentId ?? resolvePasteTarget(ctx)
+    if (!prepareSlotEdits(ctx, [targetId])) return []
     const { created, dependencyRootIds, pasteTarget, canReplace } = createPastedTrees(
       ctx.graph,
       nodes,
       dependencies,
       ctx.state.currentPageId,
-      replacementTargets[0]?.parentId ?? resolvePasteTarget(ctx),
+      targetId,
       reuseComponents,
       replacementTargets
     )
@@ -231,6 +244,7 @@ export function createClipboardActions(ctx: EditorContext) {
       })
     }
     if (created.length === 0) return created
+    initializePastedVariants(ctx, created)
     placementActions.preparePastedRoots(created)
 
     if (replacementTargets.length > 0 && canReplace) {
@@ -308,12 +322,15 @@ export function createClipboardActions(ctx: EditorContext) {
     collectSubtrees,
     ...placementActions,
     ...fontActions,
-    duplicateSelected,
+    duplicateSelected: (selectedNodes: SceneNode[]) =>
+      ctx.undo.runBatch('Duplicate', () => duplicateLayers(selectedNodes)),
     ...copyActions,
     pasteSnapshot,
     pasteFromHTML,
     warnMissingImages,
     deleteSelected: () => deleteSelected(ctx),
+    deleteNodes: (nodeIds: Iterable<string>, nextSelection?: ReadonlySet<string>) =>
+      deleteNodes(ctx, nodeIds, nextSelection),
     ...assetActions,
     ...exportActions
   }

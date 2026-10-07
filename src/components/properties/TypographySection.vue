@@ -4,34 +4,23 @@ import { computed } from 'vue'
 import { TypographyControlsRoot, useI18n } from '@open-pencil/vue'
 
 import { typographyFontLoader } from '@/app/editor/fonts/selection'
-import { appMenuShortcutLabel } from '@/app/shell/menu/shortcut'
 import FontPicker from '@/components/font-picker/FontPicker.vue'
 import FontSettingsPopover from '@/components/font-settings/FontSettingsPopover.vue'
 import NumberField from '@/components/inputs/NumberField.vue'
 import SharedStyleField from '@/components/properties/shared-style/SharedStyleField.vue'
 import LineHeightField from '@/components/properties/typography/LineHeightField.vue'
 import VariableNumberField from '@/components/properties/VariableNumberField.vue'
-import IconButton from '@/components/ui/button/IconButton.vue'
 import Tip from '@/components/ui/overlay/Tip.vue'
 import PanelFieldGroup from '@/components/ui/panel/PanelFieldGroup.vue'
 import PanelGrid from '@/components/ui/panel/PanelGrid.vue'
 import PanelSection from '@/components/ui/panel/PanelSection.vue'
 import AppSelect from '@/components/ui/select/AppSelect.vue'
-import SegmentedControl from '@/components/ui/select/SegmentedControl.vue'
 import AppSwitch from '@/components/ui/toggle/AppSwitch.vue'
 
-const { panels, menu } = useI18n()
-const alignmentOptions = computed(() => [
-  { value: 'LEFT', label: panels.value.alignLeft },
-  { value: 'CENTER', label: panels.value.alignCenterHorizontally },
-  { value: 'RIGHT', label: panels.value.alignRight },
-  { value: 'JUSTIFIED', label: panels.value.textAlignment }
-])
-const verticalAlignmentOptions = computed(() => [
-  { value: 'TOP', label: panels.value.alignTop },
-  { value: 'CENTER', label: panels.value.alignCenterVertically },
-  { value: 'BOTTOM', label: panels.value.alignBottom }
-])
+import TextAlignmentFields from './typography/TextAlignmentFields.vue'
+import TextFormattingField from './typography/TextFormattingField.vue'
+
+const { panels } = useI18n()
 const textCaseOptions = computed(() => [
   { value: 'ORIGINAL', label: panels.value.textCaseOriginal },
   { value: 'UPPER', label: panels.value.textCaseUpper },
@@ -58,7 +47,7 @@ function featureEnabled(features: Array<{ tag: string; enabled: boolean }>, tag:
     <PanelSection v-if="ctx.node.value" :label="panels.typography">
       <SharedStyleField kind="text" :label="panels.textStyle" />
 
-      <div class="mb-1.5 flex min-w-0 items-center gap-1.5">
+      <div class="mb-field-group flex min-w-0 items-center gap-1.5">
         <FontPicker
           class="min-w-0 flex-1"
           :model-value="ctx.node.value.fontFamily"
@@ -88,7 +77,7 @@ function featureEnabled(features: Array<{ tag: string; enabled: boolean }>, tag:
         </Tip>
       </div>
 
-      <PanelGrid :columns="2" class="mb-3">
+      <PanelGrid :columns="2" class="mb-field-group">
         <PanelFieldGroup :label="panels.fontWeight">
           <AppSelect
             :label="panels.fontWeight"
@@ -96,7 +85,7 @@ function featureEnabled(features: Array<{ tag: string; enabled: boolean }>, tag:
             :options="ctx.weights"
             :disabled="
               ctx.weights.length <= 1 &&
-              ctx.weights.every((weight) => weight.value === ctx.node.value.fontWeight)
+              ctx.weights.every((weight) => weight.value === ctx.node.value?.fontWeight)
             "
             :placeholder="String(ctx.node.value.fontWeight)"
             @update:model-value="ctx.actions.setWeight(+$event)"
@@ -116,7 +105,7 @@ function featureEnabled(features: Array<{ tag: string; enabled: boolean }>, tag:
         </PanelFieldGroup>
       </PanelGrid>
 
-      <PanelGrid :columns="2" class="mb-3">
+      <PanelGrid :columns="2" class="mb-field-group">
         <PanelFieldGroup :label="panels.lineHeight">
           <LineHeightField
             :node="ctx.node.value"
@@ -141,8 +130,8 @@ function featureEnabled(features: Array<{ tag: string; enabled: boolean }>, tag:
         </PanelFieldGroup>
       </PanelGrid>
 
-      <div class="border-t border-border pt-3">
-        <PanelFieldGroup :label="panels.direction" class="mb-3">
+      <div class="border-t border-border pt-field-group">
+        <PanelFieldGroup :label="panels.direction" class="mb-field-group">
           <AppSelect
             :label="panels.direction"
             :model-value="ctx.node.value.textDirection"
@@ -155,93 +144,25 @@ function featureEnabled(features: Array<{ tag: string; enabled: boolean }>, tag:
           />
         </PanelFieldGroup>
 
-        <PanelFieldGroup :label="panels.textAlignment" class="mb-3">
-          <SegmentedControl
-            :model-value="ctx.node.value.textAlignHorizontal"
-            :options="alignmentOptions"
-            :label="panels.textAlignment"
-            @change="ctx.actions.align($event as 'LEFT' | 'CENTER' | 'RIGHT' | 'JUSTIFIED')"
-          >
-            <template #option="{ option }">
-              <icon-lucide-align-left v-if="option.value === 'LEFT'" class="size-3.5" />
-              <icon-lucide-align-center v-else-if="option.value === 'CENTER'" class="size-3.5" />
-              <icon-lucide-align-right v-else-if="option.value === 'RIGHT'" class="size-3.5" />
-              <icon-lucide-align-justify v-else class="size-3.5" />
-            </template>
-          </SegmentedControl>
-        </PanelFieldGroup>
-
-        <PanelFieldGroup :label="panels.verticalTextAlignment" class="mb-3">
-          <SegmentedControl
-            :model-value="ctx.node.value.textAlignVertical"
-            :options="verticalAlignmentOptions"
-            :label="panels.verticalTextAlignment"
-            @change="ctx.actions.setVerticalAlign($event as 'TOP' | 'CENTER' | 'BOTTOM')"
-          >
-            <template #option="{ option }">
-              <icon-lucide-align-vertical-justify-start
-                v-if="option.value === 'TOP'"
-                class="size-3.5"
-              />
-              <icon-lucide-align-vertical-justify-center
-                v-else-if="option.value === 'CENTER'"
-                class="size-3.5"
-              />
-              <icon-lucide-align-vertical-justify-end v-else class="size-3.5" />
-            </template>
-          </SegmentedControl>
-        </PanelFieldGroup>
+        <TextAlignmentFields
+          :horizontal="ctx.node.value.textAlignHorizontal"
+          :vertical="ctx.node.value.textAlignVertical"
+          @horizontal="ctx.actions.align"
+          @vertical="ctx.actions.setVerticalAlign"
+        />
       </div>
 
-      <div class="border-t border-border pt-3">
-        <PanelFieldGroup
-          :label="panels.textFormatting"
-          class="mb-3"
-          :ui="{ container: 'flex-row gap-1.5' }"
-        >
-          <div
-            class="inline-flex items-center gap-0.5 rounded bg-panel-field p-0.5 hover:bg-panel-field-hover"
-            role="toolbar"
-            :aria-label="panels.textFormatting"
-          >
-            <IconButton
-              :label="`${menu.bold} (${appMenuShortcutLabel('text.bold')})`"
-              size="xs"
-              :active="ctx.activeFormatting.value.includes('bold')"
-              :disabled="!ctx.canToggleBold"
-              @click="ctx.actions.toggleBold"
-            >
-              <icon-lucide-bold class="size-3.5" />
-            </IconButton>
-            <IconButton
-              :label="`${menu.italic} (${appMenuShortcutLabel('text.italic')})`"
-              size="xs"
-              :active="ctx.activeFormatting.value.includes('italic')"
-              :disabled="!ctx.canToggleItalic"
-              @click="ctx.actions.toggleItalic"
-            >
-              <icon-lucide-italic class="size-3.5" />
-            </IconButton>
-            <IconButton
-              :label="`${menu.underline} (${appMenuShortcutLabel('text.underline')})`"
-              size="xs"
-              :active="ctx.activeFormatting.value.includes('underline')"
-              @click="ctx.actions.toggleDecoration('UNDERLINE')"
-            >
-              <icon-lucide-underline class="size-3.5" />
-            </IconButton>
-            <IconButton
-              :label="menu.strikethrough"
-              size="xs"
-              :active="ctx.activeFormatting.value.includes('strikethrough')"
-              @click="ctx.actions.toggleDecoration('STRIKETHROUGH')"
-            >
-              <icon-lucide-strikethrough class="size-3.5" />
-            </IconButton>
-          </div>
-        </PanelFieldGroup>
+      <div class="border-t border-border pt-field-group">
+        <TextFormattingField
+          :active="ctx.activeFormatting.value"
+          :can-toggle-bold="ctx.canToggleBold"
+          :can-toggle-italic="ctx.canToggleItalic"
+          @bold="ctx.actions.toggleBold"
+          @italic="ctx.actions.toggleItalic"
+          @decoration="ctx.actions.toggleDecoration"
+        />
 
-        <PanelGrid :columns="2" class="mb-3">
+        <PanelGrid :columns="2" class="mb-field-group">
           <PanelFieldGroup :label="panels.textCase">
             <AppSelect
               :label="panels.textCase"
@@ -265,7 +186,7 @@ function featureEnabled(features: Array<{ tag: string; enabled: boolean }>, tag:
         <PanelFieldGroup
           v-if="ctx.node.value.textTruncation === 'ENDING'"
           :label="panels.maxLines"
-          class="mb-3"
+          class="mb-field-group"
         >
           <NumberField
             :model-value="ctx.node.value.maxLines ?? 1"
@@ -284,7 +205,7 @@ function featureEnabled(features: Array<{ tag: string; enabled: boolean }>, tag:
         </PanelFieldGroup>
       </div>
 
-      <div class="grid gap-2.5 border-t border-border pt-3">
+      <div class="grid gap-2.5 border-t border-border pt-field-group">
         <label
           v-for="feature in commonFeatures"
           :key="feature.tag"

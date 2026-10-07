@@ -1,22 +1,20 @@
-import { normalizeFontFamily, weightToStyle } from '@open-pencil/scene-graph'
+import { DEFAULT_STROKE_WEIGHT, normalizeFontFamily } from '@open-pencil/scene-graph'
+import { fractionalPosition } from '@open-pencil/scene-graph/order-keys'
 
 import { effectiveFigmaRawNodeFields } from '../source-metadata'
-import { computeExportTransform, fractionalPosition, mapToFigmaType } from './basics'
-import { bytesToHex } from './bytes'
-import { buildDerivedTextData as buildSharedDerivedTextData } from './derived-text/data'
+import { computeExportTransform, mapToFigmaType } from './basics'
+import { buildNodeDerivedTextData } from './derived-text/build'
 import { EMPTY_EXPORT_RUNTIME, type FigNodeChangeExportRuntime } from './export/runtime'
 import { applyFontFeaturesToKiwi } from './font/features'
 import { weightToFigmaStyle } from './font/style'
 import { fillToKiwiPaint, safeColor } from './paint'
-import { bakeGlyphScale, encodePathCommandsBlob } from './path/commands'
 import {
   BOUND_VARIABLES_PLUGIN_KEY,
   removePluginData,
   LAYOUT_DIRECTION_PLUGIN_KEY,
   TEXT_DIRECTION_PLUGIN_KEY,
   TEXT_LAYOUT_PLUGIN_KEY,
-  upsertPluginData,
-  OPEN_PENCIL_PLUGIN_ID
+  upsertPluginData
 } from './plugin-data'
 import {
   exportedVariableConsumptionEntries,
@@ -51,117 +49,6 @@ import { toKiwiWindingRule } from './vector/geometry'
 function textLines(text: string): NonNullable<NodeChange['textData']>['lines'] {
   const lineCount = Math.max(1, text.split('\n').length)
   return Array.from({ length: lineCount }, () => ({ lineType: 'PLAIN' }))
-}
-
-function appendGlyphBlob(
-  blobs: Uint8Array[],
-  glyphBlobMap: Map<string, number>,
-  blob: Uint8Array
-): number {
-  const key = bytesToHex(blob)
-  const existing = glyphBlobMap.get(key)
-  if (existing !== undefined) return existing
-  const index = blobs.push(blob) - 1
-  glyphBlobMap.set(key, index)
-  return index
-}
-
-function buildDerivedTextData(
-  node: SceneNode,
-  digestMap: Map<string, Uint8Array>,
-  blobs: Uint8Array[],
-  glyphBlobMap: Map<string, number>,
-  runtime: FigNodeChangeExportRuntime
-): NodeChange['derivedTextData'] {
-  const fontMeta: NonNullable<NodeChange['derivedTextData']>['fontMetaData'] = []
-  const seen = new Set<string>()
-
-  const addFont = (family: string, weight: number, italic: boolean) => {
-    const style = weightToStyle(weight, italic)
-    const normalized = normalizeFontFamily(family)
-    const key = `${normalized}|${style}`
-    if (seen.has(key)) return
-    seen.add(key)
-    fontMeta.push({
-      key: { family: normalized, style: weightToFigmaStyle(weight, italic), postscript: '' },
-      fontLineHeight: 1.2,
-      fontDigest: digestMap.get(key),
-      fontStyle: italic ? 'ITALIC' : 'NORMAL',
-      fontWeight: weight
-    })
-  }
-
-  addFont(node.fontFamily, node.fontWeight, node.italic)
-  for (const run of node.styleRuns) {
-    addFont(
-      run.style.fontFamily ?? node.fontFamily,
-      run.style.fontWeight ?? node.fontWeight,
-      run.style.italic ?? node.italic
-    )
-  }
-
-  const lineHeight = node.lineHeight ?? Math.ceil(node.fontSize * 1.2)
-  const glyphAdvance = node.text.length > 0 ? node.width / Math.max(node.text.length, 1) : 0
-
-  const derivedGlyphs = node.derivedTextGlyphs ?? []
-  const glyphs =
-    derivedGlyphs.length > 0
-      ? derivedGlyphs.map((glyph, index) => ({
-          commandsBlob: appendGlyphBlob(
-            blobs,
-            glyphBlobMap,
-            bakeGlyphScale(
-              glyph.commandsBlob,
-              glyph.scaleX ?? 1,
-              glyph.scaleY ?? 1,
-              glyph.rotation ?? 0
-            )
-          ),
-          position: { x: glyph.x, y: glyph.y },
-          fontSize: glyph.fontSize,
-          firstCharacter: index,
-          advance:
-            index + 1 < derivedGlyphs.length
-              ? Math.max(derivedGlyphs[index + 1].x - glyph.x, 0)
-              : glyphAdvance,
-          // Preserve path-text radians; hardcoding 0 used to flatten circular text on re-export.
-          rotation: glyph.rotation ?? 0
-        }))
-      : (
-          runtime.getGlyphOutlineMetrics(
-            node.fontFamily,
-            weightToStyle(node.fontWeight, node.italic),
-            node.text,
-            node.fontSize
-          ) ?? []
-        ).map((glyph, index) => ({
-          commandsBlob: appendGlyphBlob(
-            blobs,
-            glyphBlobMap,
-            encodePathCommandsBlob(glyph.commands, node.fontSize)
-          ),
-          position: { x: glyph.x || index * glyphAdvance, y: lineHeight },
-          fontSize: node.fontSize,
-          firstCharacter: index,
-          advance: glyph.advance || glyphAdvance,
-          rotation: 0
-        }))
-
-  const logicalIndexToCharacterOffsetMap = Array.from(
-    { length: node.text.length + 1 },
-    (_, index) => index * glyphAdvance
-  )
-
-  return buildSharedDerivedTextData({
-    node,
-    glyphs,
-    fontMetaData: fontMeta,
-    baseline: lineHeight,
-    width: node.width,
-    lineHeight,
-    lineAscent: Math.max(lineHeight - node.fontSize * 0.2, 0),
-    logicalIndexToCharacterOffsetMap
-  })
 }
 
 function serializeCornerRadii(node: SceneNode, nc: KiwiNodeChange): void {
@@ -239,13 +126,12 @@ function serializeTextProps(
   if (node.textTruncation === 'ENDING') nc.textTruncation = 'ENDING'
   if (node.maxLines != null) nc.maxLines = node.maxLines
   if (fontDigestMap) {
-    nc.derivedTextData = buildDerivedTextData(
-      node,
-      fontDigestMap,
+    nc.derivedTextData = buildNodeDerivedTextData(node, {
+      digestMap: fontDigestMap,
       blobs,
-      glyphBlobMap ?? new Map(),
-      runtime
-    )
+      glyphBlobMap: glyphBlobMap ?? new Map(),
+      shapeText: (textNode) => runtime.shapeText(textNode)
+    })
   }
   if (node.leadingTrim !== 'NONE') nc.leadingTrim = node.leadingTrim
   if (node.lineHeight != null) nc.lineHeight = { value: node.lineHeight, units: 'PIXELS' }
@@ -526,6 +412,7 @@ export interface SceneNodeToKiwiOptions {
   componentPropertyDefinitionsById?: ReadonlyMap<string, ComponentPropertyDefinition>
   modeIdToGuid?: Map<string, GUID>
   propertyIdToGuid?: Map<string, GUID>
+  slotContentRecords?: KiwiNodeChange[]
 }
 
 export function sceneNodeToKiwi(
@@ -547,7 +434,8 @@ export function sceneNodeToKiwi(
     runtime = EMPTY_EXPORT_RUNTIME,
     componentPropertyDefinitionsById = buildComponentPropIndex(graph),
     modeIdToGuid,
-    propertyIdToGuid = new Map<string, GUID>()
+    propertyIdToGuid = new Map<string, GUID>(),
+    slotContentRecords
   } = options
   // Raw paints retain library asset refs; effects use this map because their
   // Kiwi schema accepts only GUID-backed aliases.
@@ -565,6 +453,7 @@ export function sceneNodeToKiwi(
     assetRefToVarGuid,
     componentPropertyDefinitionsById,
     propertyIdToGuid,
+    slotContentRecords,
     fractionalPosition,
     mapToFigmaType,
     fillToKiwiPaint,
@@ -581,7 +470,6 @@ export function sceneNodeToKiwi(
 }
 
 const IDENTITY_TRANSFORM = { m00: 1, m01: 0, m02: 0, m10: 0, m11: 1, m12: 0 }
-const DEFAULT_STROKE_WEIGHT = 1
 
 export function makeDocumentNodeChange(
   guid: GUID,

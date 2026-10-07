@@ -69,10 +69,10 @@ function hitTestOpaqueContainer(
   deep: boolean,
   transformCache: Map<string, boolean>
 ): SceneNode | null {
-  if (!containsPoint(px, py, child, graph, transformCache)) return null
   const childHit = hitTestChildren(graph, px, py, childId, deep, transformCache)
   if (childHit) return child
-  if (hasVisibleFillOrStroke(child)) return child
+  if (containsPoint(px, py, child, graph, transformCache) && hasVisibleFillOrStroke(child))
+    return child
   return null
 }
 function hitTestTransparentContainer(
@@ -85,11 +85,9 @@ function hitTestTransparentContainer(
   transformCache: Map<string, boolean>
 ): SceneNode | null {
   if (child.type === 'GROUP') {
-    if (!containsPoint(px, py, child, graph, transformCache)) return null
-
-    if (deep) return hitTestChildren(graph, px, py, childId, deep, transformCache) ?? child
-
-    return child
+    const childHit = hitTestChildren(graph, px, py, childId, deep, transformCache)
+    if (childHit) return deep && !child.locked ? childHit : child
+    return containsPoint(px, py, child, graph, transformCache) ? child : null
   }
 
   const childHit = hitTestChildren(graph, px, py, childId, deep, transformCache)

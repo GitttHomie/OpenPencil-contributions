@@ -13,5 +13,9 @@ export function findMoveDropTarget(
     while (dropTarget && dropTarget.type !== 'SECTION' && dropTarget.type !== 'CANVAS') {
       dropTarget = dropTarget.parentId ? (editor.graph.getNode(dropTarget.parentId) ?? null) : null
     }
+  if (dropTarget) {
+    const accepting = editor.graph.getNode(editor.acceptingParent(dropTarget.id))
+    dropTarget = accepting && accepting.type !== 'CANVAS' ? accepting : null
+  }
   return dropTarget
 }

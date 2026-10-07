@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test'
+import { test } from 'bun:test'
 
 import { expectPathError } from '#fig-tests/helpers/errors'
 import { interpretInstance } from '#fig/instance-overrides/interpret'

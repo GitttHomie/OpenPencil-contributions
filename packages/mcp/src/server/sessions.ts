@@ -15,7 +15,7 @@ type MCPSession = {
 
 type MCPSessionManagerOptions = {
   serverVersion: string
-  registerTools: (server: McpServer) => void
+  registerTools: (server: McpServer, chatId?: string) => void
 }
 
 const MAX_MCP_SESSIONS = 10
@@ -95,14 +95,14 @@ export function createMCPSessionManager({
   const creating = new Map<string, Promise<MCPTransport>>()
   let closed = false
 
-  async function createSession(id: string): Promise<MCPTransport> {
+  async function createSession(id: string, chatId?: string): Promise<MCPTransport> {
     if (closed) throw new Error('Session manager is closed')
     const inFlight = creating.get(id)
     if (inFlight) return inFlight
 
     const promise = (async () => {
       const server = new McpServer({ name: 'open-pencil', version: serverVersion })
-      registerTools(server)
+      registerTools(server, chatId)
 
       const transport = new WebStandardStreamableHTTPServerTransport({
         sessionIdGenerator: () => id,
@@ -142,7 +142,8 @@ export function createMCPSessionManager({
   }
 
   function resolveTransport(
-    sessionId: string | undefined
+    sessionId: string | undefined,
+    chatId?: string
   ): Promise<MCPTransport | { error: 'too_many' | 'closed' }> {
     if (closed) return Promise.resolve({ error: 'closed' })
     cleanupExpired()
@@ -163,7 +164,7 @@ export function createMCPSessionManager({
     if (sessions.size + creating.size + closing.size >= MAX_MCP_SESSIONS) {
       return Promise.resolve({ error: 'too_many' })
     }
-    return createSession(sessionId ?? randomUUID()).catch((e) => {
+    return createSession(sessionId ?? randomUUID(), chatId).catch((e) => {
       // If the manager was closed during session creation, return the structured
       // error instead of letting the throw escape as a route-level 500.
       if (closed) return { error: 'closed' as const }

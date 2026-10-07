@@ -20,6 +20,7 @@ const actions = {
 <template>
   <slot
     :node="ctx.node.value"
+    :nodes="ctx.nodes.value"
     :is-multi="ctx.isMulti.value"
     :active="ctx.active.value"
     :has-corner-radius="ctx.hasCornerRadius.value"
@@ -31,6 +32,8 @@ const actions = {
     :opacity-percent="ctx.opacityPercent.value"
     :blend-mode-value="ctx.blendModeValue.value"
     :visibility-state="ctx.visibilityState.value"
+    :visibility-linked="ctx.visibilityLinked.value"
+    :visibility-property-names="ctx.visibilityPropertyNames.value"
     :actions="actions"
   />
 </template>

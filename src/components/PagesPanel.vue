@@ -8,16 +8,22 @@ import {
   ContextMenuTrigger
 } from 'reka-ui'
 import { tv } from 'tailwind-variants'
-import { ref, watch, type ComponentPublicInstance } from 'vue'
+import { computed, ref, watch, type ComponentPublicInstance } from 'vue'
 
 import type { SceneNode } from '@open-pencil/scene-graph'
 import { PageListRoot, useFlatReorderDrag, useI18n, useInlineRename } from '@open-pencil/vue'
 
+import { useActiveEditorStoreRef } from '@/app/editor/active-store'
+import { presenceByPage } from '@/app/presence/registry'
+import { appPreferences } from '@/app/settings/preferences/store'
+import PageIssueBadge from '@/components/design-check/PageIssueBadge.vue'
+import PagePresenceHover from '@/components/presence/PagePresenceHover.vue'
+import PresenceMarkers from '@/components/presence/PresenceMarkers.vue'
 import IconButton from '@/components/ui/button/IconButton.vue'
 import { useMenuUI } from '@/components/ui/menu/menu'
 import pageListTheme from '@/theme/page-list'
 
-type PageItem = Pick<SceneNode, 'id' | 'name' | 'childIds'>
+type PageItem = Pick<SceneNode, 'id' | 'name' | 'childIds' | 'internalOnly'>
 
 interface PageActions {
   rename: (pageId: string, name: string) => void
@@ -29,11 +35,23 @@ const pageInput = templateRef<HTMLInputElement>('pageInput')
 const rename = useInlineRename((id, name) => pageActions.value?.rename(id, name))
 const { panels, pages: pageMessages } = useI18n()
 const menuCls = useMenuUI({
-  content: 'min-w-36 shadow-[0_8px_30px_rgb(0_0_0/0.4)]',
+  content: 'min-w-36',
   item: 'justify-start gap-2'
 })
 const pageListStyles = tv(pageListTheme)
 const baseStyles = pageListStyles()
+
+const storeRef = useActiveEditorStoreRef()
+/** Who works on each page: people in the room and active agents. */
+const pagePresence = computed(() =>
+  storeRef.value ? presenceByPage(storeRef.value) : new Map<string, never[]>()
+)
+
+/** Errors and warnings per page, following the View → Design issues toggle like the markers. */
+function pageIssues(pageId: string) {
+  if (!appPreferences.value.designCheck.showOnCanvas) return null
+  return storeRef.value?.designCheck.pages.counts.value.get(pageId) ?? null
+}
 
 const pageActions = ref<Pick<PageActions, 'rename'> | null>(null)
 const currentPages = ref<readonly PageItem[]>([])
@@ -52,6 +70,7 @@ watch(pageInput, (input) => {
 })
 
 function startRename(pg: PageItem, renamePage: (pageId: string, name: string) => void) {
+  if (pg.internalOnly) return
   setPageActions(renamePage)
   rename.start(pg.id, pg.name)
 }
@@ -77,14 +96,15 @@ function setupPageRowRef(
   pages: readonly PageItem[],
   movePage: PageActions['move']
 ) {
-  currentPages.value = pages
+  currentPages.value = pages.filter((page) => !page.internalOnly)
   currentMovePage.value = movePage
+  if (pg.internalOnly) return
   pageReorder.setupItem(value instanceof HTMLElement ? value : null, () => ({ id: pg.id }))
 }
 </script>
 
 <template>
-  <PageListRoot v-slot="{ pages, currentPageId, isDivider, actions }">
+  <PageListRoot v-slot="{ pages, currentPageId, isDivider, actions }" include-internal>
     <div data-test-id="pages-panel" :class="baseStyles.panel()">
       <div :class="baseStyles.header()">
         <span data-test-id="pages-header" :class="baseStyles.title()">{{ panels.pages }}</span>
@@ -125,23 +145,32 @@ function setupPageRowRef(
                   />
                 </div>
                 <div
-                  v-else-if="isDivider(pg)"
+                  v-else-if="!pg.internalOnly && isDivider(pg)"
                   data-test-id="pages-divider"
                   :class="pageStyles(pg, currentPageId).divider()"
                   @dblclick="startRename(pg, actions.rename)"
                 >
                   <div :class="pageStyles(pg, currentPageId).dividerLine()" />
                 </div>
-                <button
-                  v-else
-                  data-test-id="pages-item"
-                  :class="pageStyles(pg, currentPageId).item()"
-                  @click="actions.switch(pg.id)"
-                  @dblclick="startRename(pg, actions.rename)"
-                >
-                  <icon-lucide-file :class="pageStyles(pg, currentPageId).icon()" />
-                  <span :class="pageStyles(pg, currentPageId).label()">{{ pg.name }}</span>
-                </button>
+                <PagePresenceHover v-else :page-id="pg.id">
+                  <button
+                    data-test-id="pages-item"
+                    :class="pageStyles(pg, currentPageId).item()"
+                    @click="actions.switch(pg.id)"
+                    @dblclick="startRename(pg, actions.rename)"
+                  >
+                    <icon-lucide-library
+                      v-if="pg.internalOnly"
+                      :class="pageStyles(pg, currentPageId).icon()"
+                    />
+                    <icon-lucide-file v-else :class="pageStyles(pg, currentPageId).icon()" />
+                    <span :class="pageStyles(pg, currentPageId).label()">{{ pg.name }}</span>
+                    <span :class="pageStyles(pg, currentPageId).trailing()">
+                      <PageIssueBadge :counts="pageIssues(pg.id)" />
+                      <PresenceMarkers :entries="pagePresence.get(pg.id) ?? []" />
+                    </span>
+                  </button>
+                </PagePresenceHover>
                 <div
                   v-if="pageDropPosition(pg) === 'after'"
                   data-test-id="pages-drop-indicator"
@@ -153,6 +182,7 @@ function setupPageRowRef(
               <ContextMenuContent :class="menuCls.content" :side-offset="2" align="start">
                 <ContextMenuItem
                   data-test-id="pages-context-rename"
+                  :disabled="pg.internalOnly"
                   :class="menuCls.item"
                   @select="startRename(pg, actions.rename)"
                 >
@@ -162,7 +192,9 @@ function setupPageRowRef(
                 <ContextMenuItem
                   data-test-id="pages-context-delete"
                   :class="menuCls.item"
-                  :disabled="pages.length <= 1"
+                  :disabled="
+                    pg.internalOnly || pages.filter((page) => !page.internalOnly).length <= 1
+                  "
                   @select="actions.delete(pg.id)"
                 >
                   <icon-lucide-trash-2 :class="menuCls.icon" />

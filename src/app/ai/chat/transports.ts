@@ -1,4 +1,5 @@
 import { Chat } from '@ai-sdk/vue'
+import { useEventListener } from '@vueuse/core'
 import { createUIMessageStream, DirectChatTransport, stepCountIs, ToolLoopAgent } from 'ai'
 import type {
   ChatTransport,
@@ -13,15 +14,31 @@ import { ref } from 'vue'
 import { ACP_AGENTS } from '@open-pencil/core/constants'
 import type { ACPAgentID, AIProviderID } from '@open-pencil/core/constants'
 
+import { createACPCanvasActivity } from '@/app/ai/acp/canvas/activity'
+import { createCanvasSession } from '@/app/ai/acp/canvas/session'
+import type { ACPChatTransport } from '@/app/ai/acp/transport'
+import { AgentSetupError, assertAgentReady } from '@/app/ai/agents/readiness'
+import { acpChatThinkingState } from '@/app/ai/chat/acp-thinking'
 import { classifyAIChatError, type AIChatFailure } from '@/app/ai/chat/failure'
 import { resolveLanguageModelID } from '@/app/ai/chat/model'
-import { buildReasoningProviderOptions, type AIProviderOptions } from '@/app/ai/chat/reasoning'
+import { reasoningCallSettings, type AIProviderOptions } from '@/app/ai/chat/reasoning'
 import SYSTEM_PROMPT from '@/app/ai/chat/system-prompt'
-import { createAIModelRuntime, resolveModelConnectionAPIKey } from '@/app/ai/models'
+import { chatThinkingLevel } from '@/app/ai/chat/thinking'
+import {
+  createAIModelRuntime,
+  resolveAIModelRole,
+  resolveModelConnectionAPIKey
+} from '@/app/ai/models'
+import type { ThinkingLevel } from '@/app/ai/models/types'
 import { createCanvasJSXPreview } from '@/app/ai/preview/canvas'
-import { createAITools, recordStep, runPageId, startRun } from '@/app/ai/tools'
+import { LAYA_SUPPORTED } from '@/app/ai/routing/preferences'
+import { resetRoutingDecision, routingOptions } from '@/app/ai/routing/session'
+import { createRoutingTransport } from '@/app/ai/routing/transport'
+import { createAITools, endRun, recordStep, runPageId, startRun } from '@/app/ai/tools'
 import { enabledAIToolDefinitions } from '@/app/ai/tools/catalog'
 import { aiToolOverrides } from '@/app/ai/tools/preferences'
+import { resetRunTracking } from '@/app/ai/tools/run'
+import { diagnosticErrorDetails } from '@/app/diagnostics'
 import {
   recordChatCompleted,
   recordChatFailed,
@@ -33,6 +50,7 @@ import type { getActiveEditorStore } from '@/app/editor/active-store'
 import { resumableTransport } from './history/continuation'
 import { maxAgentSteps } from './preferences'
 import { createChatRunState } from './run-state'
+import { createChatTiming } from './timing'
 
 type EditorStore = ReturnType<typeof getActiveEditorStore>
 
@@ -51,7 +69,8 @@ export type ToolLoopTransportOptions = {
   model: LanguageModel
   effectiveModelID: string
   maxOutputTokens: number
-  reasoningEffort: string
+  /** Read per request, so the composer's level applies to the next message. */
+  thinkingLevel: () => ThinkingLevel
   onError?: (error: unknown) => void
   diagnosticContext?: AIDiagnosticContext
 }
@@ -76,14 +95,30 @@ function mergeProviderOptions(
   return { ...cacheOptions, ...reasoningOptions }
 }
 
-export async function createACPTransport(providerID: AIProviderID, modelId = '') {
+function callSettings(
+  providerID: AIProviderID,
+  cacheOptions: typeof ANTHROPIC_CACHE_CONTROL | undefined,
+  thinkingLevel: ThinkingLevel
+) {
+  const { reasoning, providerOptions } = reasoningCallSettings(providerID, thinkingLevel)
+  return { reasoning, providerOptions: mergeProviderOptions(cacheOptions, providerOptions) }
+}
+
+export async function createACPTransport(
+  providerID: AIProviderID,
+  modelId = '',
+  options: Pick<
+    ConstructorParameters<typeof ACPChatTransport>[0],
+    'thinking' | 'onCatalog' | 'activity' | 'chatId' | 'launch' | 'integration' | 'sessionValues'
+  > = {}
+) {
   const agentId = providerID.replace('acp:', '') as ACPAgentID
   const agentDef = ACP_AGENTS.find((a) => a.id === agentId)
   if (!agentDef) throw new Error(`Unknown ACP agent: ${agentId}`)
 
   const { ACPChatTransport } = await import('@/app/ai/acp/transport')
   const { homeDir } = await import('@tauri-apps/api/path')
-  return new ACPChatTransport({ agentDef, cwd: await homeDir(), modelId })
+  return new ACPChatTransport({ agentDef, cwd: await homeDir(), modelId, ...options })
 }
 
 export function createToolLoopTransport({
@@ -92,7 +127,7 @@ export function createToolLoopTransport({
   model,
   effectiveModelID,
   maxOutputTokens,
-  reasoningEffort,
+  thinkingLevel,
   onError,
   diagnosticContext = {}
 }: ToolLoopTransportOptions) {
@@ -107,34 +142,31 @@ export function createToolLoopTransport({
   const cacheProviderOptions = supportsAnthropicCaching(providerID, effectiveModelID)
     ? ANTHROPIC_CACHE_CONTROL
     : undefined
-  const providerOptions = mergeProviderOptions(
-    cacheProviderOptions,
-    buildReasoningProviderOptions(providerID, reasoningEffort)
-  )
-
   const agent = new ToolLoopAgent({
     model,
     instructions: SYSTEM_PROMPT,
     tools,
     maxOutputTokens,
-    providerOptions,
     prepareCall: (options) => {
       const stepLimit = maxAgentSteps.value
       const enabledNames = new Set(
         enabledAIToolDefinitions(aiToolOverrides.value).map((tool) => tool.name)
       )
       preview.clear()
-      startRun(store, stepLimit)
+      startRun(store, stepLimit, effectiveModelID)
       return {
         ...options,
         stopWhen: stepCountIs(stepLimit),
         // Keep the full catalog for validating history; offer only enabled tools to this request.
         tools: Object.fromEntries(Object.entries(tools).filter(([name]) => enabledNames.has(name))),
         maxOutputTokens,
-        providerOptions
+        ...callSettings(providerID, cacheProviderOptions, thinkingLevel())
       }
     },
-    onFinish: () => preview.clear(),
+    onFinish: () => {
+      preview.clear()
+      endRun(store)
+    },
     onStepFinish: ({ usage }) => {
       preview.clear()
       recordStep(store)
@@ -154,6 +186,7 @@ export function createToolLoopTransport({
 
   function handleError(error: unknown): string {
     preview.clear()
+    endRun(store)
     onError?.(error)
     return 'The provider rejected the request.'
   }
@@ -164,6 +197,8 @@ export function createToolLoopTransport({
   return resumableTransport({
     reconnectToStream: (options) => transport.reconnectToStream(options),
     async sendMessages(options) {
+      // Stopping a reply ends the run without onFinish.
+      if (options.abortSignal) useEventListener(options.abortSignal, 'abort', () => endRun(store))
       // DirectChatTransport handles error chunks, but not a rejected underlying stream.
       return createUIMessageStream<UIMessage>({
         execute: async ({ writer }) => {
@@ -199,6 +234,7 @@ export function createChatSessionManager({
 
   function handleChatFinish(
     context: AIDiagnosticContext,
+    timing: ReturnType<typeof createChatTiming>,
     {
       finishReason,
       isAbort,
@@ -212,7 +248,7 @@ export function createChatSessionManager({
     }
   ): void {
     if (!isAbort && !isDisconnect && !isError) {
-      recordChatCompleted({ finishReason: finishReason ?? null }, context)
+      recordChatCompleted({ finishReason: finishReason ?? null, ...timing.snapshot() }, context)
     }
   }
 
@@ -237,29 +273,73 @@ export function createChatSessionManager({
     if (errors.length) throw new AggregateError(errors, 'Agent transport teardown failed')
   }
 
-  async function createActiveACPTransport() {
+  async function createActiveACPTransport(store: EditorStore, role: 'design' | 'fast' = 'design') {
     await destroyAgentTransports()
-    const runtime = await createAIModelRuntime('design')
+    await assertAgentReady('acp')
+    const runtime = await createAIModelRuntime(role)
     if (runtime?.kind !== 'acp') throw new Error('The Design model is not a CLI profile')
-    const transport = await createACPTransport(
-      runtime.role.connection.providerID,
-      runtime.role.profile.customModelID || runtime.role.profile.modelID
-    )
-    acpTransportInstance = transport
-    return transport as ChatTransport<UIMessage>
+    const thinking = role === 'design' ? acpChatThinkingState(store, runtime.role.profile) : null
+    const model = runtime.role.profile.customModelID || runtime.role.profile.modelID
+    const canvas = createCanvasSession(store)
+    const activity = createACPCanvasActivity(store, model || runtime.role.profile.name)
+    try {
+      const transport = await createACPTransport(runtime.role.connection.providerID, model, {
+        chatId: canvas.id,
+        launch: runtime.role.profile.acpLaunch,
+        integration: runtime.role.profile.acpIntegration,
+        sessionValues: runtime.role.profile.acpOptions,
+        thinking: () => (thinking ? thinking.choice.value : runtime.role.profile.acpThinking),
+        onCatalog: (catalog) => thinking?.publish(catalog),
+        activity: {
+          start() {
+            canvas.start()
+            activity.start()
+          },
+          update: (update) => activity.update(update),
+          finish() {
+            canvas.finish()
+            activity.finish()
+          }
+        }
+      })
+      acpTransportInstance = {
+        async destroy() {
+          try {
+            await transport.destroy()
+          } finally {
+            canvas.dispose()
+            activity.dispose()
+          }
+        }
+      }
+      return transport as ChatTransport<UIMessage>
+    } catch (error) {
+      canvas.dispose()
+      activity.dispose()
+      throw error
+    }
   }
 
   async function createActiveHarnessTransport(sessionId: string) {
     await destroyAgentTransports()
     const runtime = await createAIModelRuntime('design')
     if (runtime?.kind !== 'harness') throw new Error('The Design agent is not configured for Pi')
-    const [{ HarnessChatTransport }, { buildPiMCPServers }] = await Promise.all([
+    await assertAgentReady('pi')
+    const [{ HarnessChatTransport }, { buildPiMCPServers }, { readPiAccount }] = await Promise.all([
       import('@/app/ai/harness/transport'),
-      import('@/app/integrations/mcp')
+      import('@/app/integrations/mcp'),
+      import('@/app/ai/harness/pi-settings')
     ])
+    // A saved key is an AI Gateway key; without one, Pi uses the CLI's own sign-in.
     const apiKey = await resolveModelConnectionAPIKey(runtime.role.connection.id)
-    if (!apiKey) throw new Error('Credential is unavailable for the Pi agent')
-    const model = runtime.role.profile.customModelID || runtime.role.profile.modelID
+    const account = apiKey ? null : await readPiAccount()
+    const model =
+      runtime.role.profile.customModelID ||
+      runtime.role.profile.modelID ||
+      account?.defaultModel ||
+      ''
+    if (!apiKey && !account?.signedIn) throw new AgentSetupError('pi-sign-in')
+    if (!model) throw new AgentSetupError('pi-model')
     const transport = new HarnessChatTransport(
       sessionId,
       {
@@ -267,24 +347,32 @@ export function createChatSessionManager({
         sandbox: 'just-bash',
         model,
         settings: {
-          thinkingLevel: runtime.role.profile.harnessThinkingLevel ?? 'medium',
+          ...(runtime.role.profile.thinkingLevel !== 'default' && {
+            thinkingLevel: runtime.role.profile.thinkingLevel
+          }),
           permissionMode: runtime.role.profile.harnessPermissionMode ?? 'allow-edits'
         },
         instructions: SYSTEM_PROMPT,
         mcpServers: await buildPiMCPServers()
       },
-      { OPENPENCIL_HARNESS_API_KEY: apiKey }
+      apiKey
+        ? { OPENPENCIL_HARNESS_API_KEY: apiKey }
+        : { OPENPENCIL_HARNESS_AGENT_DIR: account?.agentDir ?? '' }
     )
     harnessTransportInstance = transport
     return transport as ChatTransport<UIMessage>
   }
 
-  async function createTransport(store: EditorStore, diagnosticContext: AIDiagnosticContext) {
+  async function createTransport(
+    store: EditorStore,
+    diagnosticContext: AIDiagnosticContext,
+    role: 'design' | 'fast' = 'design'
+  ) {
     if (overrideTransport) return overrideTransport()
 
     await destroyAgentTransports()
 
-    const runtime = await createAIModelRuntime('design')
+    const runtime = await createAIModelRuntime(role)
     if (runtime?.kind !== 'direct') {
       throw new Error('The Design model is not configured for direct API access')
     }
@@ -298,7 +386,8 @@ export function createChatSessionManager({
         customModelID: runtime.role.profile.customModelID
       }),
       maxOutputTokens: runtime.role.profile.maxOutputTokens,
-      reasoningEffort: runtime.role.profile.reasoningEffort ?? '',
+      thinkingLevel: () =>
+        role === 'design' ? chatThinkingLevel.value : runtime.role.profile.thinkingLevel,
       onError: captureProviderError,
       diagnosticContext
     })
@@ -320,16 +409,39 @@ export function createChatSessionManager({
       const messages = initialMessages ?? currentChatMessages.get(store)
       const diagnosticContext: AIDiagnosticContext = { sessionId, runId: crypto.randomUUID() }
       const run = createChatRunState()
+      const timing = createChatTiming()
       let transport: ChatTransport<UIMessage>
-      if (isACPProvider.value) transport = await createActiveACPTransport()
+      resetRoutingDecision(store)
+      if (LAYA_SUPPORTED && !overrideTransport) {
+        transport = createRoutingTransport({
+          ...routingOptions(store),
+          create: async (role) => {
+            const provider = resolveAIModelRole(role)?.connection.providerID
+            if (provider?.startsWith('acp:')) return createActiveACPTransport(store, role)
+            if (provider === 'harness:pi') return createActiveHarnessTransport(sessionId)
+            return createTransport(store, diagnosticContext, role)
+          }
+        })
+      } else if (isACPProvider.value) transport = await createActiveACPTransport(store)
       else if (isHarnessProvider.value) transport = await createActiveHarnessTransport(sessionId)
       else transport = await createTransport(store, diagnosticContext)
       chat = new Chat<UIMessage>({
         transport: {
-          sendMessages: (options) => {
+          sendMessages: async (options) => {
+            resetRunTracking(store)
             run.start()
+            timing.start()
             diagnosticContext.runId = crypto.randomUUID()
-            return transport.sendMessages(options)
+            const stream = await transport.sendMessages(options)
+            timing.ready()
+            return stream.pipeThrough(
+              new TransformStream({
+                transform(chunk, controller) {
+                  timing.observe(chunk)
+                  controller.enqueue(chunk)
+                }
+              })
+            )
           },
           reconnectToStream: (options) => transport.reconnectToStream(options)
         },
@@ -339,16 +451,15 @@ export function createChatSessionManager({
           const reportedError = activeProviderError ?? error
           activeProviderError = null
           failure.value = classifyAIChatError(reportedError)
+          const { errorName, errorCode, message, stack } = diagnosticErrorDetails(reportedError)
           recordChatFailed(
-            {
-              errorName: reportedError instanceof Error ? reportedError.name : 'unknown'
-            },
+            { errorName, errorCode, message, stack, ...timing.snapshot() },
             diagnosticContext
           )
         },
         onFinish: (event) => {
           run.finish(event)
-          handleChatFinish(diagnosticContext, event)
+          handleChatFinish(diagnosticContext, timing, event)
         }
       })
       runs.set(chat, run)
@@ -359,7 +470,10 @@ export function createChatSessionManager({
   }
 
   async function resetChat() {
-    if (currentChatStore) currentChatMessages.delete(currentChatStore)
+    if (currentChatStore) {
+      currentChatMessages.delete(currentChatStore)
+      resetRoutingDecision(currentChatStore)
+    }
     await destroyAgentTransports()
     failure.value = null
     chat = null

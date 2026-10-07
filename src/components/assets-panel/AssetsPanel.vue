@@ -26,6 +26,7 @@ import { useLibraryEntry } from '@/components/libraries/useLibraryEntry'
 import AppButton from '@/components/ui/button/AppButton.vue'
 import { AppDialogRoot, useDialogUI } from '@/components/ui/dialog'
 import AppPlaceholder from '@/components/ui/feedback/AppPlaceholder.vue'
+import AppSpinner from '@/components/ui/feedback/AppSpinner.vue'
 import AppInput from '@/components/ui/input/AppInput.vue'
 import { useMenuUI } from '@/components/ui/menu/menu'
 import Tip from '@/components/ui/overlay/Tip.vue'
@@ -544,10 +545,7 @@ async function insertSelectedAsset() {
               class="max-h-[120px] max-w-[210px] object-contain"
             />
             <div v-else class="text-center">
-              <icon-lucide-loader-2
-                v-if="previewLoading"
-                class="mx-auto size-5 animate-spin motion-reduce:animate-none text-muted"
-              />
+              <AppSpinner v-if="previewLoading" class="mx-auto size-5 text-muted" />
               <component
                 v-else
                 :is="nodeIcon(selectedAsset.node)"

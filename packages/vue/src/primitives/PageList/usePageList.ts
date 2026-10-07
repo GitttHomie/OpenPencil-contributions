@@ -9,10 +9,10 @@ import { useSceneComputed } from '#vue/internal/scene-computed/use'
  * Use this composable to build page switchers, page lists, or navigation
  * panels without manually reading the graph in each component.
  */
-export function usePageList() {
+export function usePageList(includeInternal: () => boolean = () => false) {
   const editor = useEditor()
 
-  const pages = useSceneComputed(() => editor.graph.getPages())
+  const pages = useSceneComputed(() => editor.graph.getPages(includeInternal()))
   const currentPageId = computed(() => editor.state.currentPageId)
 
   return {

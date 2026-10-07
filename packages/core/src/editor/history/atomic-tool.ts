@@ -8,7 +8,7 @@ import {
 } from '@open-pencil/scene-graph'
 
 import type { Editor } from '#core/editor/create'
-import type { FigmaAPI } from '#core/figma-api'
+import type { FigmaAPI } from '#core/figma-api/index'
 import { isAtomicTool, type ToolDef } from '#core/tools/schema'
 
 // Capture property changes across pages. Component synchronization remains editor-owned.

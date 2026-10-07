@@ -7,7 +7,7 @@ import {
   hitTestCornerRotationByMatrix
 } from '#vue/shared/input/geometry'
 import type { HitTestFns } from '#vue/shared/input/select'
-import { resolveLabelHit } from '#vue/shared/input/select/hit'
+import { drillHit, resolveLabelHit, selectedHit } from '#vue/shared/input/select/hit'
 import { getNodeEditState } from '#vue/shared/input/vector'
 
 function getResizeCursorForSelection(cx: number, cy: number, editor: Editor): string | null {
@@ -51,7 +51,10 @@ function getRotationCursorForSelection(cx: number, cy: number, editor: Editor): 
 function updateHoveredNode(cx: number, cy: number, editor: Editor, fns: HitTestFns, deep: boolean) {
   const hit = deep
     ? fns.hitTestInScope(cx, cy, true)
-    : (resolveLabelHit(cx, cy, fns) ?? fns.hitTestInScope(cx, cy, false))
+    : (resolveLabelHit(cx, cy, fns) ??
+      drillHit(editor, fns.hitTestInScope(cx, cy, true)) ??
+      selectedHit(editor, fns.hitTestInScope(cx, cy, true)) ??
+      fns.hitTestInScope(cx, cy, false))
   const editNodeId = getNodeEditState(editor)?.nodeId
   editor.setHoveredNode(
     hit && !editor.state.selectedIds.has(hit.id) && hit.id !== editNodeId ? hit.id : null
@@ -67,6 +70,11 @@ export function updateHoverCursor(
 ): string | null {
   if (getNodeEditState(editor)) {
     editor.setHoveredNode(null)
+    return null
+  }
+
+  if (deep) {
+    updateHoveredNode(cx, cy, editor, fns, true)
     return null
   }
 

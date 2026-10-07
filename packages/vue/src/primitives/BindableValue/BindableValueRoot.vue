@@ -57,13 +57,24 @@ const state = computed(() => {
   void provider.revision?.value
   return provider.getState(targets.value)
 })
+const mixedBindings = computed(() => {
+  void provider.revision?.value
+  return new Set(targets.value.map((target) => provider.getBindingId(target))).size > 1
+})
+const unresolved = computed(() => {
+  void provider.revision?.value
+  return targets.value.some((target) => {
+    const id = provider.getBindingId(target)
+    return id !== undefined && provider.resolve(id, target) === undefined
+  })
+})
 const variable = computed(() => {
   const target = targets.value[0]
-  return state.value !== 'mixed' && target ? provider.getBound(target) : undefined
+  return !mixedBindings.value && target ? provider.getBound(target) : undefined
 })
 const resolvedValue = computed(() => {
   void provider.revision?.value
-  if (state.value === 'unresolved') return undefined
+  if (state.value !== 'bound') return undefined
   const current = variable.value
   return current ? provider.resolve(current.id, targets.value[0]) : undefined
 })
@@ -93,6 +104,7 @@ function runImmediate(label: string, action: () => void) {
 
 function bind(variableId: string) {
   runImmediate('Bind variable', () => {
+    provider.prepareTargets?.(targets.value)
     for (const target of targets.value) provider.bind(target, variableId)
   })
   open.value = false
@@ -100,6 +112,7 @@ function bind(variableId: string) {
 
 function unbind() {
   runImmediate('Unbind variable', () => {
+    provider.prepareTargets?.(targets.value)
     for (const target of targets.value) provider.unbind(target)
   })
 }
@@ -107,7 +120,14 @@ function unbind() {
 function create(name: string) {
   const target = targets.value[0]
   if (!target || !provider.create) return
-  runImmediate('Create and bind variable', () => provider.create?.(target, value.value, name))
+  runImmediate('Create and bind variable', () => {
+    provider.prepareTargets?.(targets.value)
+    provider.create?.(target, value.value, name)
+    const id = provider.getBindingId(target)
+    if (id) {
+      for (const other of targets.value.slice(1)) provider.bind(other, id)
+    }
+  })
   open.value = false
 }
 
@@ -135,6 +155,10 @@ function snapshotBindings() {
   }
 }
 
+function prepareTargets() {
+  provider.prepareTargets?.(targets.value)
+}
+
 function beginMutation(source: BindingMutationSource): boolean {
   if (retainedActivity?.value === false) return false
   if (interactionActive) return true
@@ -158,6 +182,7 @@ function beginMutation(source: BindingMutationSource): boolean {
   void source
   if (!startedUnbound) snapshotBindings()
   if (supportsInteractionBatch) beginProviderBatch(batchLabel)
+  prepareTargets()
 
   if (
     interactionPolicy !== 'edit-variable' &&
@@ -220,6 +245,9 @@ const actions: BindableValueActions<V> = {
 
 const slotProps = computed<BindableValueSlotProps<V>>(() => ({
   state: state.value,
+  mixedBindings: mixedBindings.value,
+  mixedValues: state.value === 'mixed' && !mixedBindings.value,
+  unresolved: unresolved.value,
   bindingId: targets.value[0] ? provider.getBindingId(targets.value[0]) : undefined,
   variable: variable.value,
   resolvedValue: resolvedValue.value,

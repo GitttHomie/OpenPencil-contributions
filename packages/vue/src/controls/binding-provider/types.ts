@@ -30,6 +30,8 @@ export interface BindingProvider<V = unknown> {
   resolve(variableId: string, target?: BindingTarget): V | undefined
   bind(target: BindingTarget, variableId: string): void
   unbind(target: BindingTarget): void
+  /** Materialize shared storage before editing individual destinations, inside the caller's batch. */
+  prepareTargets?(targets: BindingTarget[]): void
   create?(target: BindingTarget, value: V, name: string): void
   prepareEdit?(variableId: string, target: BindingTarget): BindingValueEdit<V> | undefined
   runBatch?<T>(label: string, action: () => T): T

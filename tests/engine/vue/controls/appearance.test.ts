@@ -7,6 +7,7 @@ import type { SceneNode } from '@open-pencil/scene-graph'
 import { MIXED, type MixedValue } from '@open-pencil/vue'
 
 import { createAppearanceActions, createAppearanceState } from '#vue/controls/appearance/helpers'
+import { visibilityPropertyName } from '#vue/controls/appearance/visibility'
 
 import { createRect, firstPageId, makeSceneGraph } from '#tests/helpers/scene'
 
@@ -35,6 +36,83 @@ function rectangle() {
 }
 
 describe('appearance control state', () => {
+  test('linked visibility stays controlled by its definition and unlocks on unbind', () => {
+    const graph = makeSceneGraph()
+    const component = graph.createNode('COMPONENT', firstPageId(graph))
+    const badge = graph.createNode('FRAME', component.id, { name: 'Badge' })
+    const editor = createEditor({ graph })
+    const propertyId = editor.exposeComponentProperty(badge.id, 'VISIBLE', 'Show badge')
+    if (!propertyId) throw new Error('Expected visibility property')
+    const options = {
+      editor,
+      node: computed(() => graph.getNode(badge.id) ?? null),
+      nodes: computed(() => [badge]),
+      isMulti: computed(() => false),
+      merged: () => MIXED
+    }
+    const actions = createAppearanceActions(options)
+    expect(createAppearanceState(options).visibilityLinked.value).toBe(true)
+    expect(visibilityPropertyName(editor, badge)).toBe('Show badge')
+    editor.undo.clear()
+    actions.toggleVisibility()
+    expect(graph.getNode(badge.id)?.visible).toBe(true)
+    expect(editor.undo.canUndo).toBe(false)
+    editor.setComponentPropertyDefault(component.id, propertyId, 'false')
+    expect(graph.getNode(badge.id)?.visible).toBe(false)
+    actions.toggleVisibility()
+    expect(graph.getNode(badge.id)?.visible).toBe(false)
+    editor.bindComponentProperty(badge.id, 'VISIBLE', null)
+    expect(createAppearanceState(options).visibilityLinked.value).toBe(false)
+    actions.toggleVisibility()
+    expect(graph.getNode(badge.id)?.visible).toBe(true)
+    editor.undo.undo()
+    expect(graph.getNode(badge.id)?.visible).toBe(false)
+  })
+
+  test('mixed selection cannot bypass a visibility binding', () => {
+    const graph = makeSceneGraph()
+    const component = graph.createNode('COMPONENT', firstPageId(graph))
+    const badge = graph.createNode('FRAME', component.id)
+    const unlinked = graph.createNode('FRAME', component.id)
+    const editor = createEditor({ graph })
+    editor.exposeComponentProperty(badge.id, 'VISIBLE', 'Show badge')
+    const options = {
+      editor,
+      node: computed(() => null),
+      nodes: computed(() => [badge, unlinked]),
+      isMulti: computed(() => true),
+      merged: () => MIXED
+    }
+    editor.undo.clear()
+    expect(createAppearanceState(options).visibilityLinked.value).toBe(true)
+    createAppearanceActions(options).toggleVisibility()
+    expect(badge.visible).toBe(true)
+    expect(unlinked.visible).toBe(true)
+    expect(editor.undo.canUndo).toBe(false)
+  })
+
+  test('instance children resolve visibility links to their main component', () => {
+    const graph = makeSceneGraph()
+    const component = graph.createNode('COMPONENT', firstPageId(graph))
+    const badge = graph.createNode('FRAME', component.id, { name: 'Badge' })
+    const editor = createEditor({ graph })
+    editor.exposeComponentProperty(badge.id, 'VISIBLE', 'Show badge')
+    const instance = graph.createInstance(component.id, firstPageId(graph))
+    if (!instance) throw new Error('Expected instance')
+    const child = graph.getChildren(instance.id)[0]
+    if (!child) throw new Error('Expected instance child')
+    expect(visibilityPropertyName(editor, child)).toBe('Show badge')
+    expect(appearanceState(child).visibilityLinked.value).toBe(true)
+    createAppearanceActions({
+      editor,
+      node: computed(() => child),
+      nodes: computed(() => [child]),
+      isMulti: computed(() => false),
+      merged: () => MIXED
+    }).toggleVisibility()
+    expect(child.visible).toBe(true)
+  })
+
   test('keeps equal uniform corners collapsed', () => {
     const state = appearanceState(rectangle())
     expect(state.showIndependentCorners.value).toBe(false)
@@ -94,6 +172,7 @@ describe('appearance control state', () => {
     const editor = createEditor({ graph })
     const options = {
       expandedCornerNodeId: ref<string | null>(null),
+      collapsedCornerNodeId: ref<string | null>(null),
       editor,
       node: computed(() => graph.getNode(rect.id) ?? null),
       nodes: computed(() => []),

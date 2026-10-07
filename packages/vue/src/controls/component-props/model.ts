@@ -12,9 +12,12 @@ export interface ComponentPropertyOption {
   label: string
   missing?: boolean
   disabled?: boolean
+  /** A swap choice the property's definition recommends. */
+  preferred?: boolean
 }
 
 export interface ComponentPropertyControl {
+  nested?: boolean
   id: string
   name: string
   type: ComponentPropertyType
@@ -56,7 +59,6 @@ export function instanceSwapOptions(
       (left, right) =>
         Number(right.preferred) - Number(left.preferred) || left.label.localeCompare(right.label)
     )
-    .map(({ value: optionValue, label }) => ({ value: optionValue, label }))
   if (value && !options.some((option) => option.value === value)) {
     options.push({ value, label: value, missing: true })
   }

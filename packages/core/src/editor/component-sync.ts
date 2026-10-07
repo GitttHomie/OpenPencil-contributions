@@ -1,6 +1,9 @@
-import type { SceneGraph } from '@open-pencil/scene-graph'
+import type { SceneGraph, SceneNode } from '@open-pencil/scene-graph'
 
 import { computeAllLayouts } from '#core/layout'
+import { invalidateDerivedLayouts } from '#core/layout/derived'
+
+const isComponent = (node: SceneNode) => node.type === 'COMPONENT'
 
 function componentSyncOrder(graph: SceneGraph, seeds: Set<string>): string[] {
   const dependents = new Map<string, Set<string>>()
@@ -9,10 +12,7 @@ function componentSyncOrder(graph: SceneGraph, seeds: Set<string>): string[] {
     const parents = new Set<string>()
     dependents.set(id, parents)
     for (const instance of graph.getInstances(id)) {
-      let parent = instance.parentId ? graph.getNode(instance.parentId) : undefined
-      while (parent && parent.type !== 'COMPONENT') {
-        parent = parent.parentId ? graph.getNode(parent.parentId) : undefined
-      }
+      const parent = instance.parentId ? graph.closest(instance.parentId, isComponent) : undefined
       if (parent) parents.add(parent.id)
     }
     for (const parent of parents) discover(parent)
@@ -35,15 +35,11 @@ function componentSyncOrder(graph: SceneGraph, seeds: Set<string>): string[] {
 }
 
 type ComputeLayouts = (graph: SceneGraph, scopeId?: string) => void
+export type ComponentSyncChange = 'structure' | 'creation'
 
 /** Pages are `CANVAS` nodes; layout recomputation is scoped to them. */
 function pageIdOf(graph: SceneGraph, nodeId: string): string | null {
-  let current = graph.getNode(nodeId)
-  while (current) {
-    if (current.type === 'CANVAS') return current.id
-    current = current.parentId ? graph.getNode(current.parentId) : undefined
-  }
-  return null
+  return graph.closest(nodeId, (node) => node.type === 'CANVAS')?.id ?? null
 }
 
 /**
@@ -75,31 +71,41 @@ export function createComponentSyncScheduler(
   computeLayouts: ComputeLayouts = computeAllLayouts
 ) {
   let pendingComponentSync: Set<string> | null = null
+  let pendingStructureChanges = new Set<string>()
+  let pendingCreatedNodes = new Set<string>()
   let isFlushingComponentSync = false
 
   function flushComponentSync() {
     const ids = pendingComponentSync
     if (!ids) return
     pendingComponentSync = null
+    const structureChanges = pendingStructureChanges
+    pendingStructureChanges = new Set()
+    const createdNodes = pendingCreatedNodes
+    pendingCreatedNodes = new Set()
     isFlushingComponentSync = true
     try {
       const graph = getGraph()
+      // New standalone trees retain imported geometry; an existing layout containing
+      // newly pasted children still needs to discard its saved dimensions.
+      const invalidatedLayouts = invalidateDerivedLayouts(graph, structureChanges, createdNodes)
       const componentIds = new Set<string>()
       for (const id of ids) {
-        let current = graph.getNode(id)
-        while (current) {
-          if (current.type === 'COMPONENT') {
-            componentIds.add(current.id)
-            break
-          }
-          current = current.parentId ? graph.getNode(current.parentId) : undefined
-        }
+        const component = graph.closest(id, isComponent)
+        if (component) componentIds.add(component.id)
       }
-      for (const compId of componentSyncOrder(graph, componentIds)) {
+      const orderedComponents = componentSyncOrder(graph, componentIds)
+      for (const compId of orderedComponents) {
         graph.syncInstances(compId)
       }
-      if (componentIds.size > 0) {
-        const pageIds = affectedPageIds(graph, ids, componentIds)
+      if (invalidatedLayouts.size > 0) {
+        invalidateDerivedLayouts(
+          graph,
+          orderedComponents.flatMap((id) => graph.getInstances(id).map((instance) => instance.id))
+        )
+      }
+      if (componentIds.size > 0 || invalidatedLayouts.size > 0) {
+        const pageIds = affectedPageIds(graph, ids, orderedComponents)
         if (pageIds.size === 0) computeLayouts(graph)
         else for (const pageId of pageIds) computeLayouts(graph, pageId)
         requestRender()
@@ -109,7 +115,7 @@ export function createComponentSyncScheduler(
     }
   }
 
-  function scheduleComponentSync(nodeId: string) {
+  function scheduleComponentSync(nodeId: string, change?: ComponentSyncChange) {
     // Import/materialization has already resolved component overrides. These updates
     // are not authored component edits and must not reset instances to their defaults.
     if (isFlushingComponentSync || getGraph().isApplyingImportedState) return
@@ -118,6 +124,8 @@ export function createComponentSyncScheduler(
       queueMicrotask(flushComponentSync)
     }
     pendingComponentSync.add(nodeId)
+    if (change) pendingStructureChanges.add(nodeId)
+    if (change === 'creation') pendingCreatedNodes.add(nodeId)
   }
 
   return { scheduleComponentSync }

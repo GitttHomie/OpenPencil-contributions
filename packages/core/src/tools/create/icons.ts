@@ -2,7 +2,7 @@ import * as v from 'valibot'
 
 import { parseColor } from '@open-pencil/scene-graph/color'
 
-import { fetchIcons, searchIconsBatch } from '#core/icons'
+import { fetchIcons, searchIconsBatch } from '#core/icons/index'
 import { createIconFromPaths } from '#core/icons/render'
 import { toolNumber } from '#core/tools/input'
 import { defineTool } from '#core/tools/schema'

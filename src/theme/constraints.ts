@@ -6,7 +6,7 @@ const constraintsTheme = {
     pinMark: 'block rounded-full bg-current',
     scaleBadge:
       'pointer-events-none absolute inset-2 flex items-center justify-center text-[9px] font-medium tracking-wide text-accent uppercase',
-    selects: 'grid min-w-0 gap-1.5'
+    selects: 'grid min-w-0 gap-field-group'
   },
   variants: {
     active: {

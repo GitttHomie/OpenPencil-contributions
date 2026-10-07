@@ -18,7 +18,7 @@ import {
   missingGlyphsByScript,
   type MissingGlyphOccurrence,
   type FontResolutionSnapshot
-} from '#core/text/resolver'
+} from '#core/text/resolver/index'
 
 export function resolveLabelFontCoverage(
   r: Pick<SkiaRenderer, 'isDestroyed' | 'onFontResolutionSettled'>,

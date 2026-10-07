@@ -62,6 +62,7 @@ const selectedLabel = computed(
       :class="styles.trigger({ class: ui?.trigger })"
       :aria-label="label"
     >
+      <slot name="value-start" :value="modelValue" />
       <SelectValue :placeholder="placeholder" :class="styles.value({ class: ui?.value })">
         {{ selectedLabel ?? placeholder }}
       </SelectValue>
@@ -88,7 +89,9 @@ const selectedLabel = computed(
             <SelectItemIndicator :class="styles.indicator({ class: ui?.indicator })">
               <icon-lucide-check class="size-3 text-accent" />
             </SelectItemIndicator>
+            <slot name="option-start" :option="opt" />
             <SelectItemText>{{ opt.label }}</SelectItemText>
+            <slot name="option-end" :option="opt" />
           </SelectItem>
         </SelectViewport>
         <SelectScrollDownButton class="flex items-center justify-center py-0.5 text-muted">

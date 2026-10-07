@@ -11,28 +11,41 @@ import {
 import { computed } from 'vue'
 
 import type { SceneNode } from '@open-pencil/scene-graph'
-import { useEditor, useI18n, useRetainedPopup } from '@open-pencil/vue'
+import { MIXED, useEditor, useI18n, useRetainedPopup } from '@open-pencil/vue'
 
 import VariableNumberField from '@/components/properties/VariableNumberField.vue'
 import { useSelectUI } from '@/components/ui/select/select'
 
-const { node } = defineProps<{ node: SceneNode }>()
+const { node, nodes } = defineProps<{ node: SceneNode; nodes?: SceneNode[] }>()
+const targets = computed(() => nodes ?? [node])
 const emit = defineEmits<{ update: [value: number]; commit: [value: number, previous: number] }>()
 const editor = useEditor()
 const { open: popupOpen, portalActive } = useRetainedPopup()
 const { panels } = useI18n()
-const automatic = computed(() => node.lineHeight == null && !node.boundVariables.lineHeight)
-const value = computed(() => node.lineHeight ?? Math.round((node.fontSize || 14) * 1.2))
+const automatic = computed(() =>
+  targets.value.every((target) => target.lineHeight == null && !target.boundVariables.lineHeight)
+)
+const value = computed(() =>
+  targets.value.every((target) => target.lineHeight === node.lineHeight)
+    ? (node.lineHeight ?? Math.round((node.fontSize || 14) * 1.2))
+    : MIXED
+)
 const menu = useSelectUI()
 function setMode(mode: string) {
-  if (mode === 'AUTO') {
-    editor.undo.runBatch('Use automatic line height', () => {
-      if (node.boundVariables.lineHeight) editor.unbindVariable(node.id, 'lineHeight')
-      editor.updateNodeWithUndo(node.id, { lineHeight: null }, 'Use automatic line height')
-    })
-  } else if (mode === 'FIXED' && automatic.value) {
-    editor.updateNodeWithUndo(node.id, { lineHeight: value.value }, 'Set line height')
-  }
+  editor.undo.runBatch('Change line height mode', () => {
+    for (const target of targets.value) {
+      if (mode === 'AUTO') {
+        if (target.boundVariables.lineHeight) editor.unbindVariable(target.id, 'lineHeight')
+        editor.updateNodeWithUndo(target.id, { lineHeight: null }, 'Use automatic line height')
+      } else if (mode === 'FIXED' && target.lineHeight == null) {
+        editor.updateNodeWithUndo(
+          target.id,
+          { lineHeight: Math.round((target.fontSize || 14) * 1.2) },
+          'Set line height'
+        )
+      }
+    }
+  })
 }
 </script>
 
@@ -43,6 +56,8 @@ function setMode(mode: string) {
     suffix="px"
     :min="0"
     :node-id="node.id"
+    :node-ids="nodes?.map((target) => target.id)"
+    :edit-properties="Boolean(nodes)"
     binding-path="lineHeight"
     @update:model-value="emit('update', $event)"
     @commit="(current, previous) => emit('commit', current, previous)"

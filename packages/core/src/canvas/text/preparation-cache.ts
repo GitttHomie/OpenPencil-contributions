@@ -3,7 +3,7 @@ import type { Paragraph, TypefaceFontProvider } from 'canvaskit-wasm'
 import type { SceneNode } from '@open-pencil/scene-graph'
 
 import { ResourceCache } from '#core/cache/resource'
-import type { missingGlyphOccurrences } from '#core/text/resolver'
+import type { missingGlyphOccurrences } from '#core/text/resolver/index'
 
 // Bound both the number of native paragraphs and the text retained by them.
 // Source UTF-16 units are a workload bound, not an estimate of native bytes.

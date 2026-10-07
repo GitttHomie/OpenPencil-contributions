@@ -1,0 +1,58 @@
+{
+  "codex": {
+    "version": 1,
+    "agent": "codex",
+    "fields": [
+      {
+        "id": "codexProvider",
+        "label": "CLI provider ID",
+        "hint": "Use a provider already configured in your CLI. Leave blank to inherit its default.",
+        "type": "identifier",
+        "target": {
+          "kind": "config",
+          "flag": "-c",
+          "key": "model_provider"
+        },
+        "labelKey": "cliCodexProvider",
+        "hintKey": "cliCodexProviderHint"
+      },
+      {
+        "id": "codexBaseURL",
+        "label": "Base URL",
+        "type": "url",
+        "target": {
+          "kind": "config",
+          "flag": "-c",
+          "key": "model_providers.{codexProvider}.base_url"
+        },
+        "labelKey": "baseURL"
+      }
+    ]
+  },
+  "claude-code": {
+    "version": 1,
+    "agent": "claude-code",
+    "fields": [
+      {
+        "id": "awsRegion",
+        "label": "AWS region",
+        "type": "region",
+        "target": {
+          "kind": "env",
+          "names": ["AWS_REGION", "AWS_DEFAULT_REGION"]
+        },
+        "labelKey": "cliAWSRegion"
+      }
+    ]
+  },
+  "gemini-cli": {
+    "version": 1,
+    "agent": "gemini-cli",
+    "fields": []
+  },
+  "kiro-cli": {
+    "version": 1,
+    "agent": "kiro-cli",
+    "fields": []
+  }
+}

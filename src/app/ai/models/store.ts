@@ -1,12 +1,18 @@
-import { computed, ref, watch } from 'vue'
+import { uniq } from 'es-toolkit'
+import * as v from 'valibot'
+import { computed, ref, watch, toRaw } from 'vue'
 
 import {
   AI_PROVIDERS,
+  ACP_AGENTS,
   DEFAULT_AI_MODEL,
   DEFAULT_AI_PROVIDER,
   type AIProviderID
 } from '@open-pencil/core/constants'
 
+import { validateIntegration } from '@/app/ai/acp/configuration/schema'
+import { acpLaunchOptions, parseACPLaunchSettings } from '@/app/ai/acp/launch'
+import { parseACPThinkingSelection } from '@/app/ai/acp/thinking'
 import {
   readAIModelSettingsStorage,
   readLegacyAIModelStorage,
@@ -14,7 +20,7 @@ import {
 } from '@/app/ai/models/storage'
 import {
   HARNESS_PERMISSION_MODES,
-  HARNESS_THINKING_LEVELS,
+  THINKING_LEVELS,
   type AIModelCapability,
   type AIModelConnection,
   type AIModelProfile,
@@ -25,17 +31,12 @@ import {
   type AIModelSettings,
   type OptionalAIModelRole,
   type ResolvedAIModelRole,
-  type HarnessPermissionMode,
-  type HarnessThinkingLevel
+  type ThinkingLevel
 } from '@/app/ai/models/types'
 
 const LEGACY_CONNECTION_ID = 'connection-default'
 const LEGACY_MODEL_ID: AIModelProfileId = 'model-default'
 const DEFAULT_MAX_OUTPUT_TOKENS = 16_384
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
 
 function isProviderID(value: unknown): value is AIProviderID {
   return (
@@ -44,73 +45,89 @@ function isProviderID(value: unknown): value is AIProviderID {
   )
 }
 
-function isAPIType(value: unknown): value is 'completions' | 'responses' {
-  return value === 'completions' || value === 'responses'
+const connectionSchema = v.object({
+  id: v.pipe(v.string(), v.minLength(1)),
+  providerID: v.custom<AIProviderID>(isProviderID),
+  customBaseURL: v.fallback(v.string(), ''),
+  customAPIType: v.fallback(v.picklist(['completions', 'responses']), 'completions'),
+  credentialProfileId: v.pipe(v.string(), v.minLength(1))
+})
+
+const thinkingLevelSchema = v.picklist(THINKING_LEVELS)
+
+/** Profiles saved before thinking levels kept a Pi level or a free-text provider effort. */
+function migrateThinkingLevel(stored: {
+  thinkingLevel?: unknown
+  harnessThinkingLevel?: unknown
+  reasoningEffort?: unknown
+}): ThinkingLevel {
+  for (const value of [stored.thinkingLevel, stored.harnessThinkingLevel]) {
+    if (v.is(thinkingLevelSchema, value)) return value
+  }
+  const effort = typeof stored.reasoningEffort === 'string' ? stored.reasoningEffort : ''
+  const normalized = effort.trim().toLowerCase()
+  if (normalized === 'none') return 'off'
+  if (normalized === 'max') return 'xhigh'
+  return v.is(thinkingLevelSchema, normalized) ? normalized : 'default'
 }
 
-function isHarnessThinkingLevel(value: unknown): value is HarnessThinkingLevel {
-  return (
-    typeof value === 'string' && HARNESS_THINKING_LEVELS.includes(value as HarnessThinkingLevel)
-  )
-}
-
-function isHarnessPermissionMode(value: unknown): value is HarnessPermissionMode {
-  return (
-    typeof value === 'string' && HARNESS_PERMISSION_MODES.includes(value as HarnessPermissionMode)
-  )
-}
-
-function isCapability(value: unknown): value is AIModelCapability {
-  return value === 'tools' || value === 'vision'
-}
-
-function stringValue(value: unknown, fallback = ''): string {
-  return typeof value === 'string' ? value : fallback
-}
+const maxOutputTokensSchema = v.fallback(
+  v.pipe(
+    v.number(),
+    v.finite(),
+    v.transform((tokens) => Math.min(128_000, Math.max(1024, Math.round(tokens))))
+  ),
+  DEFAULT_MAX_OUTPUT_TOKENS
+)
 
 function normalizedMaxOutputTokens(value: unknown): number {
-  return typeof value === 'number' && Number.isFinite(value)
-    ? Math.min(128_000, Math.max(1024, Math.round(value)))
-    : DEFAULT_MAX_OUTPUT_TOKENS
+  return v.parse(maxOutputTokensSchema, value)
 }
 
+const capabilitySchema = v.picklist(['tools', 'vision'])
+
+const profileSchema = v.object({
+  id: v.custom<AIModelProfileId>((id) => typeof id === 'string' && id.startsWith('model-')),
+  name: v.fallback(v.string(), 'Model'),
+  connectionId: v.string(),
+  modelID: v.fallback(v.string(), ''),
+  customModelID: v.fallback(v.string(), ''),
+  maxOutputTokens: maxOutputTokensSchema,
+  thinkingLevel: v.optional(v.unknown()),
+  harnessThinkingLevel: v.optional(v.unknown()),
+  reasoningEffort: v.optional(v.unknown()),
+  harnessPermissionMode: v.fallback(v.optional(v.picklist(HARNESS_PERMISSION_MODES)), undefined),
+  acpThinking: v.optional(v.unknown()),
+  acpLaunch: v.optional(v.unknown()),
+  acpOptions: v.optional(v.unknown()),
+  acpIntegration: v.optional(v.unknown()),
+  capabilities: v.fallback(
+    v.pipe(
+      v.array(v.unknown()),
+      v.transform((capabilities) =>
+        uniq(capabilities.filter((capability) => v.is(capabilitySchema, capability)))
+      )
+    ),
+    (): AIModelCapability[] => ['tools']
+  )
+})
+
 function parseConnection(value: unknown): AIModelConnection | null {
-  if (!isRecord(value)) return null
-  const id = stringValue(value.id)
-  const credentialProfileId = stringValue(value.credentialProfileId)
-  if (!id || !credentialProfileId || !isProviderID(value.providerID)) return null
-  return {
-    id,
-    providerID: value.providerID,
-    customBaseURL: stringValue(value.customBaseURL),
-    customAPIType: isAPIType(value.customAPIType) ? value.customAPIType : 'completions',
-    credentialProfileId
-  }
+  const parsed = v.safeParse(connectionSchema, value)
+  return parsed.success ? parsed.output : null
 }
 
 function parseProfile(value: unknown, connectionIds: Set<string>): AIModelProfile | null {
-  if (!isRecord(value)) return null
-  const id = stringValue(value.id)
-  const connectionId = stringValue(value.connectionId)
-  if (!id.startsWith('model-') || !connectionIds.has(connectionId)) return null
-  const capabilities = Array.isArray(value.capabilities)
-    ? value.capabilities.filter(isCapability)
-    : ['tools' as const]
+  const parsed = v.safeParse(profileSchema, value)
+  if (!parsed.success || !connectionIds.has(parsed.output.connectionId)) return null
+  const { harnessThinkingLevel, reasoningEffort, ...profile } = parsed.output
   return {
-    id: id as AIModelProfileId,
-    name: stringValue(value.name, 'Model'),
-    connectionId,
-    modelID: stringValue(value.modelID),
-    customModelID: stringValue(value.customModelID),
-    maxOutputTokens: normalizedMaxOutputTokens(value.maxOutputTokens),
-    reasoningEffort: stringValue(value.reasoningEffort).trim() || undefined,
-    harnessThinkingLevel: isHarnessThinkingLevel(value.harnessThinkingLevel)
-      ? value.harnessThinkingLevel
-      : undefined,
-    harnessPermissionMode: isHarnessPermissionMode(value.harnessPermissionMode)
-      ? value.harnessPermissionMode
-      : undefined,
-    capabilities: [...new Set(capabilities)]
+    ...profile,
+    thinkingLevel: migrateThinkingLevel({ ...profile, harnessThinkingLevel, reasoningEffort }),
+    acpThinking: parseACPThinkingSelection(profile.acpThinking),
+    acpLaunch: parseACPLaunchSettings(profile.acpLaunch),
+    acpOptions: parseACPLaunchSettings(profile.acpOptions),
+    acpIntegration: profile.acpIntegration ? validateIntegration(profile.acpIntegration) : undefined
   }
 }
 
@@ -142,22 +159,29 @@ function hydrateCuratedCapabilities(
   }
 }
 
-function parseSettings(value: unknown): AIModelSettings | null {
-  if (!isRecord(value) || value.version !== 1) return null
-  const connections = Array.isArray(value.connections)
-    ? value.connections.map(parseConnection).filter((connection) => connection !== null)
-    : []
+const settingsSchema = v.object({
+  version: v.literal(1),
+  connections: v.fallback(v.array(v.unknown()), () => []),
+  models: v.fallback(v.array(v.unknown()), () => []),
+  assignments: v.fallback(v.record(v.string(), v.unknown()), () => ({}))
+})
+
+/** Normalizes persisted settings, migrating fields from earlier versions. */
+export function parseAIModelSettings(value: unknown): AIModelSettings | null {
+  const stored = v.safeParse(settingsSchema, value)
+  if (!stored.success) return null
+  const connections = stored.output.connections
+    .map(parseConnection)
+    .filter((connection) => connection !== null)
   const connectionIds = new Set(connections.map((connection) => connection.id))
-  const models = Array.isArray(value.models)
-    ? value.models
-        .map((profile) => parseProfile(profile, connectionIds))
-        .filter((profile) => profile !== null)
-    : []
+  const models = stored.output.models
+    .map((profile) => parseProfile(profile, connectionIds))
+    .filter((profile) => profile !== null)
   if (!models.length) return null
   hydrateCuratedCapabilities(models, connections)
   const modelIds = new Set(models.map((profile) => profile.id))
-  const rawAssignments = isRecord(value.assignments) ? value.assignments : {}
-  const rawDesign = stringValue(rawAssignments.design)
+  const rawAssignments = stored.output.assignments
+  const rawDesign = typeof rawAssignments.design === 'string' ? rawAssignments.design : ''
   const design = rawDesign.startsWith('model-') ? (rawDesign as AIModelProfileId) : models[0].id
   const resolvedDesign = modelIds.has(design) ? design : models[0].id
   const assignments: AIModelSettings['assignments'] = {
@@ -172,11 +196,7 @@ function parseSettings(value: unknown): AIModelSettings | null {
     const profileId = assignment === 'design' ? resolvedDesign : assignment
     const profile = models.find((candidate) => candidate.id === profileId)
     const connection = connections.find((candidate) => candidate.id === profile?.connectionId)
-    const invalidAgent =
-      (role !== 'review' && connection?.providerID.startsWith('acp:')) ||
-      connection?.providerID === 'harness:pi'
-    const invalidVision = role === 'vision' && !profile?.capabilities.includes('vision')
-    if (invalidAgent || invalidVision) assignments[role] = null
+    if (!supportsModelRole(profile ?? null, connection?.providerID, role)) assignments[role] = null
   }
   return { version: 1, connections, models, assignments }
 }
@@ -215,6 +235,7 @@ function legacySettings(): AIModelSettings {
         maxOutputTokens: Number.isFinite(maxOutputTokens)
           ? maxOutputTokens
           : DEFAULT_MAX_OUTPUT_TOKENS,
+        thinkingLevel: 'default',
         capabilities: curatedCapabilities ?? ['tools']
       }
     ],
@@ -228,7 +249,7 @@ function legacySettings(): AIModelSettings {
 }
 
 function loadSettings(): AIModelSettings {
-  return parseSettings(readAIModelSettingsStorage()) ?? legacySettings()
+  return parseAIModelSettings(readAIModelSettingsStorage()) ?? legacySettings()
 }
 
 export const aiModelSettings = ref<AIModelSettings>(loadSettings())
@@ -270,12 +291,25 @@ export function isACPModelProfile(profile: AIModelProfile | null): boolean {
   return Boolean(profile && modelConnection(profile.connectionId)?.providerID.startsWith('acp:'))
 }
 
-export function canAssignModelRole(profile: AIModelProfile | null, role: AIModelRole): boolean {
+function supportsModelRole(
+  profile: AIModelProfile | null,
+  providerID: AIProviderID | undefined,
+  role: AIModelRole
+): boolean {
   if (!profile) return false
   if (role === 'design') return isDesignModelProfile(profile)
-  if (role === 'review' && isACPModelProfile(profile)) return true
-  if (isAgentModelProfile(profile)) return false
+  if (role === 'fast') return isDesignModelProfile(profile) && providerID !== 'harness:pi'
+  if (role === 'review' && providerID?.startsWith('acp:')) return true
+  if (providerID?.startsWith('acp:') || providerID === 'harness:pi') return false
   return role !== 'vision' || profile.capabilities.includes('vision')
+}
+
+export function canAssignModelRole(profile: AIModelProfile | null, role: AIModelRole): boolean {
+  return supportsModelRole(
+    profile,
+    profile ? modelConnection(profile.connectionId)?.providerID : undefined,
+    role
+  )
 }
 
 export function resolveAIModelRole(role: AIModelRole): ResolvedAIModelRole | null {
@@ -340,8 +374,13 @@ function draftForProfile(
     customBaseURL: connection.customBaseURL,
     customAPIType: connection.customAPIType,
     maxOutputTokens: profile.maxOutputTokens,
-    reasoningEffort: profile.reasoningEffort ?? '',
-    harnessThinkingLevel: profile.harnessThinkingLevel ?? 'medium',
+    thinkingLevel: profile.thinkingLevel,
+    acpThinking: profile.acpThinking ? { ...profile.acpThinking } : undefined,
+    acpOptions: profile.acpOptions ? { ...profile.acpOptions } : undefined,
+    acpIntegration: profile.acpIntegration
+      ? structuredClone(toRaw(profile.acpIntegration))
+      : undefined,
+    acpLaunch: profile.acpLaunch ? { ...profile.acpLaunch } : undefined,
     harnessPermissionMode: profile.harnessPermissionMode ?? 'allow-edits',
     capabilities: [...profile.capabilities]
   }
@@ -360,8 +399,7 @@ function newProfileDraft(connection: AIModelConnection | null): AIModelProfileDr
     customBaseURL: connection?.customBaseURL ?? '',
     customAPIType: connection?.customAPIType ?? 'completions',
     maxOutputTokens: DEFAULT_MAX_OUTPUT_TOKENS,
-    reasoningEffort: '',
-    harnessThinkingLevel: 'medium',
+    thinkingLevel: 'default',
     harnessPermissionMode: 'allow-edits',
     capabilities: ['tools']
   }
@@ -375,11 +413,31 @@ export function createModelProfileDraft(profileId?: string): AIModelProfileDraft
   return newProfileDraft(designConnection ?? aiModelSettings.value.connections[0])
 }
 
+function profileAgentSettings(draft: AIModelProfileDraft) {
+  const agent = ACP_AGENTS.find((candidate) => `acp:${candidate.id}` === draft.providerID)
+  if (agent) acpLaunchOptions(agent.id, draft.acpLaunch, draft.acpIntegration)
+  return {
+    acpThinking: agent ? parseACPThinkingSelection(draft.acpThinking) : undefined,
+    acpIntegration:
+      agent && draft.acpIntegration ? validateIntegration(draft.acpIntegration) : undefined,
+    acpOptions: agent ? parseACPLaunchSettings(draft.acpOptions) : undefined,
+    acpLaunch: agent ? parseACPLaunchSettings(draft.acpLaunch) : undefined,
+    harnessPermissionMode:
+      draft.providerID === 'harness:pi' ? draft.harnessPermissionMode : undefined
+  }
+}
+
 export function saveModelProfileDraft(draft: AIModelProfileDraft): AIModelProfile {
+  const agentSettings = profileAgentSettings(draft)
   const provider = AI_PROVIDERS.find((definition) => definition.id === draft.providerID)
   const effectiveModel = draft.customModelID.trim() || draft.modelID.trim()
   if (!draft.name.trim()) throw new Error('Model name is required')
-  if (!draft.providerID.startsWith('acp:') && !effectiveModel) {
+  // Agents choose their own model, and Pi falls back to its own default model.
+  if (
+    !draft.providerID.startsWith('acp:') &&
+    draft.providerID !== 'harness:pi' &&
+    !effectiveModel
+  ) {
     throw new Error('Model ID is required')
   }
   if (
@@ -396,11 +454,8 @@ export function saveModelProfileDraft(draft: AIModelProfileDraft): AIModelProfil
     modelID: draft.modelID.trim() || provider?.defaultModel || '',
     customModelID: draft.customModelID.trim(),
     maxOutputTokens: normalizedMaxOutputTokens(draft.maxOutputTokens),
-    reasoningEffort: draft.reasoningEffort.trim() || undefined,
-    harnessThinkingLevel:
-      draft.providerID === 'harness:pi' ? draft.harnessThinkingLevel : undefined,
-    harnessPermissionMode:
-      draft.providerID === 'harness:pi' ? draft.harnessPermissionMode : undefined,
+    thinkingLevel: draft.thinkingLevel,
+    ...agentSettings,
     capabilities: [...new Set(draft.capabilities)]
   }
   const index = aiModelSettings.value.models.findIndex((model) => model.id === profile.id)

@@ -12,7 +12,7 @@ import LayerTreeRowShell from './LayerTreeRowShell.vue'
 import type { LayerRenameControls, LayerTreeItemActions } from './types'
 import { useLayerTreeUI } from './ui'
 
-const { renameControls, expanded } = defineProps<{
+const { node, renameControls, expanded } = defineProps<{
   node: LayerNode
   hasChildren: boolean
   padLeft: string
@@ -24,7 +24,7 @@ const { renameControls, expanded } = defineProps<{
 const renameInput = useTemplateRef<HTMLInputElement>('renameInput')
 const ui = useLayerTreeUI()
 const layerTree = tv(layerTreeTheme)
-const styles = computed(() => layerTree({ expanded }))
+const styles = computed(() => layerTree({ expanded, component: node.component }))
 
 watch(renameInput, (input) => {
   if (input) void renameControls.focusInput(input)

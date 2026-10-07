@@ -15,8 +15,6 @@ import {
 
 import type { ACPAgentDef } from '@open-pencil/core/constants'
 
-import { buildACPUserPrompt } from '@/app/ai/acp/prompt'
-
 const canvasTools = new Set([
   'get_selection',
   'list_documents',
@@ -76,7 +74,7 @@ export async function runCanvasAgent(agent: ACPAgentDef, mcpServer: McpServer, r
     const session = await connection.newSession({ cwd, mcpServers: [mcpServer] })
     const result = await connection.prompt({
       sessionId: session.sessionId,
-      prompt: [{ type: 'text', text: buildACPUserPrompt(request, true) }]
+      prompt: [{ type: 'text', text: request }]
     })
     return { result, updates, permissions }
   } finally {

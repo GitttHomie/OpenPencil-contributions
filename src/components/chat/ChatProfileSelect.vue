@@ -23,6 +23,7 @@ import {
   setModelRoleAssignment
 } from '@/app/ai/models'
 import type { AIModelProfile, AIModelProfileId } from '@/app/ai/models'
+import { automaticRouting, LAYA_SUPPORTED } from '@/app/ai/routing/preferences'
 import { openSettingsDialog } from '@/app/settings/dialog'
 import ChatProfileItem from '@/components/chat/ChatProfileItem.vue'
 import AppButton from '@/components/ui/button/AppButton.vue'
@@ -45,6 +46,7 @@ const selectCls = useSelectUI({
 const selectedProfileId = computed({
   get: () => aiModelSettings.value.assignments.design,
   set: (profileId: string) => {
+    if (LAYA_SUPPORTED) automaticRouting.value = false
     setModelRoleAssignment('design', profileId as AIModelProfileId)
   }
 })

@@ -14,7 +14,7 @@ Renderer, layout, editor, Figma API, tools, clipboard, vector conversion, and do
 
 ## Components and instances
 
-- Component types use `#9747ff`.
+- Component types and their descendants use `#9747ff` for editor indicators; resolve ancestry with Scene Graph's `isInComponent`, while slots retain their distinct color (`packages/core/src/canvas/overlays/selection.ts`).
 - Component edits propagate through editor component sync in `packages/core/src/editor/components/`; never hand-copy properties in app UI. Use Scene Graph copy helpers for nested values.
 
 ## Vector conversion
@@ -28,7 +28,7 @@ Renderer, layout, editor, Figma API, tools, clipboard, vector conversion, and do
 - `packages/core/src/tools/ai-adapter.ts` converts ToolDefs for Vercel AI; the app binds them to the active editor's `FigmaAPI` in `src/app/ai/tools/index.ts`. MCP v2 registration uses Standard Schema with Valibot JSON Schema conversion; AI and WebMCP adapters share the same input contract.
 - `packages/core/src/editor/history/atomic-tool.ts` owns synchronous property/variable transactions; Scene Graph owns checkpoint recovery. AI, MCP, and WebMCP share this execution path. Async and structural tools cannot declare atomic property execution.
 - Shared scene-authoring guidance and tested examples live under `packages/design-jsx/src/reference/`; `reference.ts` combines them with renderer metadata. Prompts under `packages/core/src/tools/prompts/` and the app chat/ACP prompt compose that reference rather than copying it. Run `bun run generate:authoring-reference` after changes; `check:authoring-reference` (part of `check:docs`) verifies the committed skill/docs copies. Do not edit generated reference files.
-- Shared design workflow and on-demand UX, visual, design-system, and review guidance live under `packages/core/src/tools/design-guidance/`; chat composes `DESIGN_WORKFLOW` and MCP exposes `get_design_guidance`. Keep briefs and planning artifacts optional, and keep renderer syntax in the canonical authoring reference; `packages/core/tests/tools/design-guidance/`.
+- Shared design workflow and on-demand UX, visual, design-system, creation, and review guidance live under `packages/core/src/tools/design-guidance/`; chat composes `DESIGN_WORKFLOW` and MCP exposes `get_design_guidance`. Keep briefs and planning artifacts optional, and keep renderer syntax in the canonical authoring reference; `packages/core/tests/tools/design-guidance/`.
 - The installable agent skill is maintained in `skills/open-pencil/`. Changes to agent-facing APIs, CLI/MCP behavior, or design authoring must update affected skill examples, prompts, and public documentation in the same change. Keep examples valid in their actual execution environment; do not advertise library exports as scripting globals unless exposed there. Prefer runtime discovery and canonical references over duplicated API/tool inventories.
 - MCP-only tools and transports: `packages/mcp/AGENTS.md`. WebMCP registration and app completion: `src/AGENTS.md`.
 
@@ -40,10 +40,20 @@ Renderer, layout, editor, Figma API, tools, clipboard, vector conversion, and do
 - The editor exposes a typed nanoevents emitter. Event names and payloads live in `EditorEvents` in `packages/core/src/editor/types.ts`; graph events are bridged from SceneGraph by `packages/core/src/editor/graph-events.ts`. Subscribe with `editor.onEditorEvent(event, handler)`; in Vue use `useEditorEvent()` from `packages/vue/src/editor/events/use.ts`. UI that only cares about graph data should use editor events for incremental surfaces such as the layer tree instead of watching repaint-only state.
 - Commands under `packages/core/src/editor/structure/` (group, boolean, container wrap, flatten) and `packages/core/src/editor/components/` are the canonical implementations of user actions. The Figma API, tools, and app call them or share their helpers; do not reimplement sizing, placement, or propagation elsewhere.
 - Live property controls use selected-node projections from `packages/core/src/editor/selection-state/nodes.ts`: shallow reactive copies that receive `node:previewUpdated` patches at property granularity. Never add preview invalidation to all `useSceneComputed` consumers; catalogs and unrelated controls must not refresh for geometry previews. Projection subscriptions belong to the consuming scope or session and must be disposed.
+- `prepareNumberProperty()` materializes shared corner/border storage only for an edit, preserving inherited instance sides; grouped callers include preparation and mutation in one binding transaction. `packages/core/tests/editor/numeric-property-groups.test.ts`.
 - Numeric geometry edits own a `beginNodePreview()` handle with `update`, `commit`, and `cancel`. It captures all affected fields and layout children, publishes the complete delta once, and restores exact originals on cancellation. Selection, page, and graph changes and disposal cancel the old edit; trailing input must not target the new selection. Controls must close previews even when a gesture returns to its starting value.
 - Rotation previews change through `setRotationPreview()` and `rotation:preview-changed`; cancellation must close the owning gesture without deselecting or committing it.
 - Renderer interaction policy uses explicit `beginInteractiveEdit()` leases and `isInteractiveEditing()`, not undo batching. Release leases on every terminal path. Keep live queries callable across app facades that spread editor actions.
 - `packages/core/src/editor/history/atomic-tool.ts` owns synchronous property/variable transactions for AI, MCP, and WebMCP tools; see Tools above.
+
+## OpenPencil API
+
+`OpenPencilAPI` (`packages/core/src/openpencil-api/`) is what OpenPencil adds to the Plugin API, exposed to scripts as the `openpencil` global next to `figma`.
+
+- Keep `figma` Figma-shaped and put OpenPencil-only features on `openpencil`, in the same style: methods and node-like handles with getters and setters, not parallel helper functions. Never add non-Figma members to `FigmaAPI` (`compatibility.ts`).
+- Script runners get both globals only through `compileScript` (`packages/core/src/tools/analyze/eval/wrap.ts`); the `eval` tool, `openpencil eval`, and app automation must not build their own `AsyncFunction`.
+- Members take names, not internal ids, and write through the same scene-graph functions the editor's actions use, such as `behaviourFromSpec`; errors name what exists. Tools for the same feature wrap the `openpencil` API rather than reimplementing it (`packages/core/src/tools/create/behaviours.ts`).
+- A new member updates `packages/docs/programmable/cli/scripting.md` and the agent skill in the same change; tests drive it as scripts do, through `compileScript` (`packages/core/tests/openpencil-api/`).
 
 ## Renderer
 
@@ -51,11 +61,16 @@ Canvas is CanvasKit (Skia WASM) on a WebGL surface, not DOM.
 
 ### Invalidation
 
-- `renderVersion` is a canvas repaint (pan, zoom, hover); `sceneVersion` is a scene-graph mutation. `requestRender()` bumps both; `requestRepaint()` bumps only `renderVersion`. UI that only cares about graph data must not watch repaint-only state.
+- `renderVersion` tracks repaints, `canvasVersion` invalidates scene drawing, and `sceneVersion` tracks all document changes. `requestRender()` bumps all three, `requestRepaint()` only `renderVersion`, and `requestRefresh()` only `sceneVersion` and its refresh event; views and collaboration follow document changes without forcing a canvas redraw (`packages/core/src/editor/create.ts`).
 - `renderNow()` is only for surface recreation and font loading, where an immediate draw is required.
 - The resize observer uses a rAF throttle, not a debounce; debounce causes canvas skew.
 - Viewport culling skips off-screen nodes; unclipped parents are not culled because children may extend beyond bounds.
 - Overscan images accelerate navigation; settled scenes rasterize existing retained pictures at the live viewport size and origin. Pixel-grid alignment alone does not guarantee Skia anti-aliasing parity. Keep settlement pending until the viewport pass completes; do not add a second viewport image cache.
+
+### Paints
+
+- A gradient or image paint builds a Skia shader through `applyGradientFill` and `applyImageFill` (`packages/core/src/canvas/fills.ts`), which take the target `Paint`, so a stroke reuses them instead of a second shader path.
+- `forVisibleStrokes` (`packages/core/src/canvas/scene.ts`) is where a stroke's shader is set and cleared; stroke draw helpers take an already-configured `strokePaint` and must not reset its shader.
 
 ### Caches
 

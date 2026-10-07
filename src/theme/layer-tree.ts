@@ -35,8 +35,17 @@ const layerTreeTheme = {
       false: { row: 'opacity-50' }
     },
     component: {
-      true: { icon: 'text-component opacity-100' },
+      true: {
+        icon: 'text-component opacity-100',
+        label: 'text-component',
+        renameIcon: 'text-component opacity-100',
+        renameInput: 'border-component text-component'
+      },
       false: { icon: 'opacity-70' }
+    },
+    slot: {
+      true: { icon: 'text-slot opacity-100', label: 'text-slot' },
+      false: {}
     },
     expanded: {
       true: { disclosure: 'rotate-90' },
@@ -71,12 +80,19 @@ const layerTreeTheme = {
   compoundVariants: [
     {
       selected: true,
+      component: true,
+      class: { row: 'bg-component/15 hover:bg-component/15' }
+    },
+    {
+      selected: true,
       focused: true,
+      component: false,
       class: { icon: 'text-white opacity-100' }
     },
     {
       selected: true,
       focused: false,
+      component: false,
       class: { row: 'bg-panel-selected-muted text-surface hover:bg-panel-selected-muted' }
     }
   ],
@@ -86,6 +102,7 @@ const layerTreeTheme = {
     dragging: false,
     visible: true,
     component: false,
+    slot: false,
     expanded: false,
     actionsVisible: true,
     actionActive: false,

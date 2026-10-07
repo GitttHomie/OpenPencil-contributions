@@ -1,14 +1,14 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
-import { useI18n, useLayoutControlsContext } from '@open-pencil/vue'
+import { useI18n, useSelectionLayout } from '@open-pencil/vue'
 
 import SizeAxisField from '@/components/properties/layout/size/SizeAxisField.vue'
 import SizeLimitField from '@/components/properties/layout/size/SizeLimitField.vue'
 import type { SizeLimitItem } from '@/components/properties/layout/size/types'
 import PanelGrid from '@/components/ui/panel/PanelGrid.vue'
 
-const ctx = useLayoutControlsContext()
+const { nodes } = useSelectionLayout()
 const { panels } = useI18n()
 
 const sizeLimits = computed<SizeLimitItem[]>(() => [
@@ -43,12 +43,15 @@ const sizeLimits = computed<SizeLimitItem[]>(() => [
 ])
 
 const visibleSizeLimits = computed(() =>
-  sizeLimits.value.filter((item) => ctx.node[item.prop] != null)
+  sizeLimits.value.filter((item) => nodes.value.some((node) => node[item.prop] != null))
 )
 </script>
 
 <template>
-  <PanelGrid :columns="1">
+  <PanelGrid
+    :columns="2"
+    class="[&>[data-slot=fields]]:grid-cols-[repeat(auto-fit,minmax(min(100%,6rem),1fr))]"
+  >
     <SizeAxisField axis="width" icon="W" :label="panels.width" />
     <SizeAxisField axis="height" icon="H" :label="panels.height" />
   </PanelGrid>

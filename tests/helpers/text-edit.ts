@@ -85,6 +85,35 @@ export function addTextBadge(page: Page, frameId: string) {
   }, frameId)
 }
 
+export function addHugBadgeNumber(page: Page, badgeId: string) {
+  return page.evaluate(async (id) => {
+    const editor = window.openPencil?.getStore?.()
+    if (!editor) throw new Error('Editor unavailable')
+    editor.updateNode(id, {
+      layoutMode: 'HORIZONTAL',
+      primaryAxisSizing: 'HUG',
+      counterAxisSizing: 'HUG',
+      primaryAxisAlign: 'MAX',
+      paddingLeft: 6,
+      paddingRight: 6,
+      paddingTop: 4,
+      paddingBottom: 4
+    })
+    const number = editor.graph.createNode('TEXT', id, {
+      text: '1',
+      fontFamily: 'Inter',
+      fontSize: 16,
+      textAutoResize: 'WIDTH_AND_HEIGHT',
+      fills: [{ type: 'SOLID', color: { r: 1, g: 1, b: 1, a: 1 }, opacity: 1, visible: true }]
+    })
+    await editor.loadFontsForNodes([number.id])
+    editor.updateNode(number.id, { text: '1' })
+    editor.select([number.id])
+    editor.requestRender()
+    return number.id
+  }, badgeId)
+}
+
 export function holdTextCaretVisible(page: Page) {
   return page.evaluateHandle(() => {
     const store = window.openPencil?.getStore?.()

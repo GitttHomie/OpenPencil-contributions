@@ -136,16 +136,16 @@ describe('LabelCache', () => {
     expect(nested?.nested).toBe(true)
   })
 
-  it('collects top-level components, component sets and their members', () => {
+  it('collects top-level components and component sets, without variant labels', () => {
     const { g, pageId } = buildGraph()
     const cache = new LabelCache()
 
     cache.update(g, pageId, 1)
     const components = cache.getComponents(g, { x: -1000, y: -1000, w: 3000, h: 3000 })
 
-    expect(components.length).toBe(3)
+    expect(components.length).toBe(2)
     const names = components.map((c) => c.node.name).sort()
-    expect(names).toEqual(['Button', 'Button Set', 'Standalone'])
+    expect(names).toEqual(['Button Set', 'Standalone'])
   })
 
   it('skips components nested inside other components', () => {
@@ -161,7 +161,7 @@ describe('LabelCache', () => {
     const components = cache.getComponents(g, { x: -1000, y: -1000, w: 3000, h: 3000 })
 
     expect(components.find((c) => c.node.name === 'Button Set')).toBeDefined()
-    expect(components.find((c) => c.node.id === compId)).toBeDefined()
+    expect(components.find((c) => c.node.id === compId)).toBeUndefined()
     expect(components.find((c) => c.node.id === nested.id)).toBeUndefined()
     expect(components.find((c) => c.node.name === 'Standalone')).toBeDefined()
   })
@@ -222,4 +222,21 @@ describe('LabelCache', () => {
     expect(buttonSet?.absX).toBe(300)
     expect(buttonSet?.absY).toBe(0)
   })
+})
+
+it('caches ordinary top-level names without duplicating component or section labels', () => {
+  const { g, pageId } = buildGraph()
+  const cache = new LabelCache()
+  const frame = g.createNode('FRAME', pageId, { name: 'Frame' })
+  const text = g.createNode('TEXT', pageId, { name: 'Text' })
+  const child = g.createNode('RECTANGLE', frame.id, { name: 'Nested' })
+  g.createNode('ELLIPSE', pageId, { visible: false })
+  cache.update(g, pageId, 1)
+  expect(cache.getAllFrames().map((item) => item.nodeId)).toEqual([frame.id, text.id])
+  g.reparentNode(text.id, frame.id)
+  g.reparentNode(child.id, pageId)
+  cache.update(g, pageId, 2)
+  expect(cache.getAllFrames().map((item) => item.nodeId)).toEqual([frame.id, child.id])
+  cache.invalidate()
+  expect(cache.getAllFrames()).toEqual([])
 })

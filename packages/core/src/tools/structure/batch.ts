@@ -1,7 +1,7 @@
 import { safeDestr } from 'destr'
 import * as v from 'valibot'
 
-import type { FigmaNodeProxy } from '#core/figma-api'
+import type { FigmaNodeProxy } from '#core/figma-api/index'
 import { defineTool } from '#core/tools/schema'
 
 interface BatchOp {

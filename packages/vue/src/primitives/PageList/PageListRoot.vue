@@ -4,8 +4,9 @@ import { computed } from 'vue'
 import { isPageDivider, PAGE_DIVIDER_PATTERN } from '#vue/primitives/PageList/divider'
 import { usePageList } from '#vue/primitives/PageList/usePageList'
 
-const { dividerPattern: customDividerPattern } = defineProps<{
+const { dividerPattern: customDividerPattern, includeInternal = false } = defineProps<{
   dividerPattern?: RegExp
+  includeInternal?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -16,8 +17,9 @@ const emit = defineEmits<{
   move: [pageId: string, index: number]
 }>()
 
-const { pages, currentPageId, switchPage, addPage, renamePage, deletePage, movePage } =
-  usePageList()
+const { pages, currentPageId, switchPage, addPage, renamePage, deletePage, movePage } = usePageList(
+  () => includeInternal
+)
 
 const dividerPattern = computed(() => customDividerPattern ?? PAGE_DIVIDER_PATTERN)
 

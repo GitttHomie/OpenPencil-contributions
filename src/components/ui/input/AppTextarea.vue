@@ -6,8 +6,16 @@ import theme from '@/theme/input/textarea'
 
 const model = defineModel<string>({ default: '' })
 
-const { rows = 3, disabled = false } = defineProps<{ rows?: number; disabled?: boolean }>()
-const textareaClass = computed(() => tv(theme)())
+const {
+  rows = 3,
+  disabled = false,
+  tone = 'default'
+} = defineProps<{
+  rows?: number
+  disabled?: boolean
+  tone?: 'default' | 'panel'
+}>()
+const textareaClass = computed(() => tv(theme)({ tone }))
 </script>
 
 <template>

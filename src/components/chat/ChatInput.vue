@@ -1,23 +1,31 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, useTemplateRef } from 'vue'
 
+import { HARNESS_PROVIDER_ID } from '@open-pencil/core/constants'
 import { useI18n, useSelectionState } from '@open-pencil/vue'
 
+import { revokeImagePreviewURL } from '@/app/ai/attachment/image/prepare'
 import { MAX_IMAGE_ATTACHMENTS } from '@/app/ai/attachment/image/types'
 import type { ChatSubmission } from '@/app/ai/chat/submission/types'
 import { useAIChat } from '@/app/ai/chat/use'
 import { designModelProfile } from '@/app/ai/models'
+import { supportsThinkingLevel } from '@/app/ai/models/thinking'
+import { useRoutingDecision } from '@/app/ai/routing/session'
 import { openSettingsDialog } from '@/app/settings/dialog'
+import ACPChatThinking from '@/components/chat/ACPChatThinking.vue'
 import ChatNodePreview from '@/components/chat/ChatNodePreview.vue'
 import ChatProfileSelect from '@/components/chat/ChatProfileSelect.vue'
+import ChatThinkingSelect from '@/components/chat/ChatThinkingSelect.vue'
 import { useAttachmentDrafts } from '@/components/chat/input/useAttachments'
 import IconButton from '@/components/ui/button/IconButton.vue'
+import { chatComposerTheme } from '@/theme/chat/composer'
 
 import ChatComposer from './ChatComposer.vue'
 
 const { providerID, providerDef, modelID, customModelID } = useAIChat()
 const { editor, selectedIds } = useSelectionState()
 const { ai } = useI18n()
+const ui = chatComposerTheme()
 
 const { status, disabled = false } = defineProps<{
   status: 'ready' | 'submitted' | 'streaming' | 'error'
@@ -45,8 +53,18 @@ const {
   removeNode: removeReferencedNode,
   toggleSelection: toggleCurrentSelection,
   handlePaste,
-  takeSubmission
+  takeSubmission,
+  restoreSubmission
 } = attachments
+
+const composer = useTemplateRef<{ restoreDraft: (text: string) => boolean }>('composer')
+
+/** Puts back an unsent message with its attachments; releases them if newer text replaced it. */
+function restoreDraft(submission: ChatSubmission): void {
+  if (composer.value?.restoreDraft(submission.displayText)) restoreSubmission(submission)
+  else for (const image of submission.images) revokeImagePreviewURL(image.previewURL)
+}
+defineExpose({ restoreDraft })
 
 const isStreaming = computed(() => disabled || status === 'streaming' || status === 'submitted')
 const isCustomProvider = computed(
@@ -67,10 +85,12 @@ const selectedModelName = computed(() => {
 const selectedProfileName = computed(
   () => designModelProfile.value?.name ?? selectedModelName.value
 )
+const routingDecision = useRoutingDecision()
 </script>
 
 <template>
   <ChatComposer
+    ref="composer"
     :status="status"
     :disabled="disabled"
     @submit="emit('submit', takeSubmission($event))"
@@ -132,7 +152,7 @@ const selectedProfileName = computed(
         data-slot="chat-add-selection-context"
         @click="toggleCurrentSelection"
       >
-        <icon-lucide-mouse-pointer-2 class="size-4" />
+        <icon-lucide-mouse-pointer-2 class="size-3.5" />
       </IconButton>
       <IconButton
         :label="ai.attachImages"
@@ -140,16 +160,30 @@ const selectedProfileName = computed(
         :disabled="isStreaming || images.length >= MAX_IMAGE_ATTACHMENTS"
         @click="openImageDialog()"
       >
-        <icon-lucide-image-plus class="size-4" />
+        <icon-lucide-image-plus class="size-3.5" />
       </IconButton>
     </template>
     <template #model>
-      <div class="flex min-w-0 items-center">
+      <div :class="ui.models()">
         <ChatProfileSelect :disabled="isStreaming">
           <template #value>
             <span class="min-w-0 truncate">{{ selectedProfileName }}</span>
           </template>
         </ChatProfileSelect>
+        <ChatThinkingSelect
+          v-if="
+            routingDecision?.role !== 'fast' &&
+            supportsThinkingLevel(providerID) &&
+            providerID !== HARNESS_PROVIDER_ID
+          "
+        />
+        <ACPChatThinking
+          v-if="routingDecision?.role !== 'fast' && providerID.startsWith('acp:')"
+          :disabled="isStreaming"
+        />
+        <span v-if="routingDecision" :class="ui.routing()" role="status">
+          {{ ai.layaSelected({ model: routingDecision.model }) }}
+        </span>
       </div>
     </template>
   </ChatComposer>

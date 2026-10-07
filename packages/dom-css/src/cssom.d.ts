@@ -27,3 +27,7 @@ declare module '@acemir/cssom' {
 
   export function parse(cssText: string): CSSStyleSheetLike
 }
+
+declare module '@acemir/cssom/lib/parse.js' {
+  export { parse } from '@acemir/cssom'
+}

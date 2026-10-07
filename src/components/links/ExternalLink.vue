@@ -23,8 +23,7 @@ const styles = computed(() => {
 /** Desktop WebViews cannot open external pages themselves, so route them to the system browser. */
 function navigate(event: MouseEvent) {
   if (!IS_TAURI) return
-  event.preventDefault()
-  void openExternalLink(href)
+  void openExternalLink(href, event)
 }
 </script>
 

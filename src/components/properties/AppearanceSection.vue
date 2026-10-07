@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import type { BlendMode } from '@open-pencil/scene-graph'
-import { AppearanceControlsRoot, MIXED, useI18n } from '@open-pencil/vue'
+import { AppearanceControlsRoot, CORNER_RADIUS_PATHS, MIXED, useI18n } from '@open-pencil/vue'
 
 import NumberField from '@/components/inputs/NumberField.vue'
 import { useBlendModeOptions } from '@/components/properties/blend-mode/use'
+import MaskAction from '@/components/properties/MaskAction.vue'
 import VariableNumberField from '@/components/properties/VariableNumberField.vue'
 import IconButton from '@/components/ui/button/IconButton.vue'
+import Tip from '@/components/ui/overlay/Tip.vue'
 import PanelFieldGroup from '@/components/ui/panel/PanelFieldGroup.vue'
 import PanelGrid from '@/components/ui/panel/PanelGrid.vue'
 import PanelSection from '@/components/ui/panel/PanelSection.vue'
@@ -27,24 +29,41 @@ function blendModeOptions(value: BlendMode | typeof MIXED) {
   <AppearanceControlsRoot
     v-slot="{
       node,
+      nodes,
       isMulti,
       active,
       hasCornerRadius,
       showIndependentCorners,
       cornerRadiusValue,
-      cornerRadiusBindingPaths,
       cornerSmoothingPercent,
       opacityPercent,
       blendModeValue,
       visibilityState,
+      visibilityLinked,
+      visibilityPropertyNames,
       actions
     }"
   >
     <PanelSection v-if="active" :label="panels.appearance">
       <template #actions>
+        <MaskAction />
+        <Tip
+          v-if="visibilityLinked"
+          :label="`${panels.layerVisibility}: ${visibilityPropertyNames.join(', ')}`"
+        >
+          <span
+            role="img"
+            tabindex="0"
+            :aria-label="`${panels.layerVisibility}: ${visibilityPropertyNames.join(', ')}`"
+            class="inline-flex size-6 items-center justify-center text-accent"
+          >
+            <icon-lucide-link class="size-3.5" />
+          </span>
+        </Tip>
         <IconButton
           :label="panels.toggleVisibility"
           :active="visibilityState === 'hidden'"
+          :disabled="visibilityLinked"
           @click="actions.toggleVisibility"
         >
           <icon-lucide-eye v-if="visibilityState === 'visible'" class="size-3.5" />
@@ -101,36 +120,25 @@ function blendModeOptions(value: BlendMode | typeof MIXED) {
         </PanelFieldGroup>
       </PanelGrid>
 
-      <PanelGrid v-if="hasCornerRadius && !showIndependentCorners" :columns="2" class="mt-1.5">
+      <PanelGrid
+        v-if="hasCornerRadius && !showIndependentCorners"
+        :columns="2"
+        class="mt-field-group"
+      >
         <PanelFieldGroup :label="panels.radius">
           <VariableNumberField
-            v-if="node && !isMulti"
+            v-if="nodes[0]"
             :aria-label="panels.radius"
             :model-value="cornerRadiusValue"
             :min="0"
-            :node-id="node.id"
+            :node-id="nodes[0].id"
+            :node-ids="nodes.map((node) => node.id)"
             binding-path="cornerRadius"
-            :binding-paths="cornerRadiusBindingPaths"
-            @update:model-value="actions.updateUniformRadius"
-            @commit="actions.commitUniformRadius"
+            :binding-paths="CORNER_RADIUS_PATHS"
+            edit-properties
           >
-            <template #icon>
-              <icon-lucide-square-round-corner class="size-3" />
-            </template>
+            <template #icon><icon-lucide-square-round-corner class="size-3" /></template>
           </VariableNumberField>
-          <NumberField
-            v-else
-            data-property="cornerRadius"
-            :aria-label="panels.radius"
-            :model-value="cornerRadiusValue"
-            :min="0"
-            @update:model-value="actions.updateUniformRadius"
-            @commit="actions.commitUniformRadius"
-          >
-            <template #icon>
-              <icon-lucide-square-round-corner class="size-3" />
-            </template>
-          </NumberField>
         </PanelFieldGroup>
         <div class="flex h-6 items-center justify-end">
           <IconButton
@@ -145,46 +153,21 @@ function blendModeOptions(value: BlendMode | typeof MIXED) {
       </PanelGrid>
 
       <PanelGrid
-        v-else-if="hasCornerRadius && !isMulti && node"
+        v-else-if="hasCornerRadius && nodes[0]"
         :columns="2"
         class="mt-1.5 [&>[data-slot=actions]]:self-start"
         data-corner-grid
       >
         <VariableNumberField
-          label="TL"
-          :model-value="node.topLeftRadius"
+          v-for="(path, index) in CORNER_RADIUS_PATHS"
+          :key="path"
+          :label="['TL', 'TR', 'BR', 'BL'][index]"
+          :model-value="0"
           :min="0"
-          :node-id="node.id"
-          binding-path="topLeftRadius"
-          @update:model-value="actions.updateCornerProp('topLeftRadius', $event)"
-          @commit="(v: number, p: number) => actions.commitCornerProp('topLeftRadius', v, p)"
-        />
-        <VariableNumberField
-          label="TR"
-          :model-value="node.topRightRadius"
-          :min="0"
-          :node-id="node.id"
-          binding-path="topRightRadius"
-          @update:model-value="actions.updateCornerProp('topRightRadius', $event)"
-          @commit="(v: number, p: number) => actions.commitCornerProp('topRightRadius', v, p)"
-        />
-        <VariableNumberField
-          label="BL"
-          :model-value="node.bottomLeftRadius"
-          :min="0"
-          :node-id="node.id"
-          binding-path="bottomLeftRadius"
-          @update:model-value="actions.updateCornerProp('bottomLeftRadius', $event)"
-          @commit="(v: number, p: number) => actions.commitCornerProp('bottomLeftRadius', v, p)"
-        />
-        <VariableNumberField
-          label="BR"
-          :model-value="node.bottomRightRadius"
-          :min="0"
-          :node-id="node.id"
-          binding-path="bottomRightRadius"
-          @update:model-value="actions.updateCornerProp('bottomRightRadius', $event)"
-          @commit="(v: number, p: number) => actions.commitCornerProp('bottomRightRadius', v, p)"
+          :node-id="nodes[0].id"
+          :node-ids="nodes.map((node) => node.id)"
+          :binding-path="path"
+          edit-properties
         />
         <template #actions>
           <IconButton
@@ -198,7 +181,7 @@ function blendModeOptions(value: BlendMode | typeof MIXED) {
         </template>
       </PanelGrid>
 
-      <PanelGrid v-if="hasCornerRadius" :columns="2" class="mt-1.5">
+      <PanelGrid v-if="hasCornerRadius" :columns="2" class="mt-field-group">
         <PanelFieldGroup :label="panels.cornerSmoothing">
           <NumberField
             suffix="%"

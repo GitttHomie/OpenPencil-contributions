@@ -3,18 +3,39 @@ import type {
   NewSessionResponse,
   SessionConfigOption
 } from '@agentclientprotocol/sdk'
+import * as v from 'valibot'
 
-export interface ACPModelOption {
-  id: string
-  name: string
-  description?: string
-}
+import { sessionControls, sessionControlSchema } from './configuration/session'
+import { sessionThinkingControl } from './thinking'
 
-export type ACPModelCatalog = {
-  models: ACPModelOption[]
-  currentModelId: string
-  selector: { kind: 'config'; id: string } | { kind: 'legacy' } | null
-}
+export const acpModelCatalogSchema = v.object({
+  controls: v.optional(v.array(sessionControlSchema)),
+  thinking: v.optional(
+    v.object({
+      id: v.string(),
+      name: v.string(),
+      currentValue: v.string(),
+      options: v.array(v.object({ value: v.string(), name: v.string() }))
+    })
+  ),
+  models: v.array(
+    v.object({
+      id: v.string(),
+      name: v.string(),
+      description: v.optional(v.string())
+    })
+  ),
+  currentModelId: v.string(),
+  selector: v.nullable(
+    v.variant('kind', [
+      v.object({ kind: v.literal('config'), id: v.string() }),
+      v.object({ kind: v.literal('legacy') })
+    ])
+  )
+})
+
+export type ACPModelCatalog = v.InferOutput<typeof acpModelCatalogSchema>
+export type ACPModelOption = ACPModelCatalog['models'][number]
 
 export class ACPModelSelectionError extends Error {
   constructor(message: string) {
@@ -33,12 +54,16 @@ function configModel(options: SessionConfigOption[] | null | undefined) {
 export function sessionModelCatalog(
   response: Pick<NewSessionResponse, 'configOptions' | 'models'>
 ): ACPModelCatalog {
+  const controls = sessionControls(response.configOptions)
+  const thinking = sessionThinkingControl(response.configOptions)
   const config = configModel(response.configOptions)
   if (config) {
     const options = config.options.flatMap((option) =>
       'options' in option ? option.options : [option]
     )
     return {
+      thinking,
+      controls,
       selector: { kind: 'config', id: config.id },
       currentModelId: config.currentValue,
       models: options.map((option) => ({
@@ -50,6 +75,8 @@ export function sessionModelCatalog(
   }
   if (response.models) {
     return {
+      thinking,
+      controls,
       selector: { kind: 'legacy' },
       currentModelId: response.models.currentModelId,
       models: response.models.availableModels.map((model) => ({
@@ -59,7 +86,16 @@ export function sessionModelCatalog(
       }))
     }
   }
-  return { selector: null, models: [], currentModelId: '' }
+  return { selector: null, models: [], currentModelId: '', thinking, controls }
+}
+
+/** Preserve legacy model metadata when a config update contains only session controls. */
+export function updateSessionCatalog(
+  current: ACPModelCatalog,
+  configOptions: SessionConfigOption[]
+) {
+  const next = sessionModelCatalog({ configOptions })
+  return next.selector ? next : { ...current, thinking: next.thinking, controls: next.controls }
 }
 
 export async function applySessionModel(

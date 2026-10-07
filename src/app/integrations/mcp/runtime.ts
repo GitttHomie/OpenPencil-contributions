@@ -1,6 +1,6 @@
 import type { McpServer } from '@agentclientprotocol/sdk'
 
-import { AUTOMATION_HTTP_PORT } from '@open-pencil/core/constants'
+import { AUTOMATION_HTTP_PORT, MANAGED_CHAT_HEADER } from '@open-pencil/core/constants'
 
 import { describeDiagnosticError, recordMCPConnectionFailure } from '@/app/diagnostics'
 import { appCredentialServices } from '@/app/settings/credentials/app'
@@ -9,6 +9,7 @@ import { enabledMCPConnections } from './store'
 import type { MCPConnection } from './types'
 export type BuiltInMCPServerOptions = {
   authorizationToken: string | null
+  chatId?: string
 }
 
 export function builtInMCPServer(options: BuiltInMCPServerOptions): McpServer {
@@ -16,9 +17,12 @@ export function builtInMCPServer(options: BuiltInMCPServerOptions): McpServer {
     type: 'http',
     name: 'open-pencil',
     url: `http://127.0.0.1:${AUTOMATION_HTTP_PORT}/mcp`,
-    headers: options.authorizationToken
-      ? [{ name: 'Authorization', value: `Bearer ${options.authorizationToken}` }]
-      : []
+    headers: [
+      ...(options.authorizationToken
+        ? [{ name: 'Authorization', value: `Bearer ${options.authorizationToken}` }]
+        : []),
+      ...(options.chatId ? [{ name: MANAGED_CHAT_HEADER, value: options.chatId }] : [])
+    ]
   }
 }
 

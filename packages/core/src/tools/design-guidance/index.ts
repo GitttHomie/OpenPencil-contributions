@@ -2,6 +2,7 @@ import * as v from 'valibot'
 
 import { defineTool } from '#core/tools/schema'
 
+import creation from './creation.md?raw'
 import designSystem from './design-system.md?raw'
 import review from './review.md?raw'
 import ux from './ux.md?raw'
@@ -23,6 +24,11 @@ const topics = {
   review: {
     description: 'Evidence-based visual, UX, and document-structure assessment.',
     content: review
+  },
+  creation: {
+    description:
+      'Creation tool routes for component properties, slots, paint stacks, gradients, layout and bindings.',
+    content: creation
   }
 }
 
@@ -35,15 +41,15 @@ export const getDesignGuidance = defineTool({
   input: v.object({
     topics: v.optional(
       v.pipe(
-        v.array(v.picklist(['ux', 'visual', 'design-system', 'review'])),
-        v.maxLength(4),
+        v.array(v.picklist(['ux', 'visual', 'design-system', 'review', 'creation'])),
+        v.maxLength(5),
         v.description('Load only the topics needed for this task.')
       ),
       []
     )
   }),
   execute: (_figma, args) => ({
-    version: '1.0.0',
+    version: '1.1.0',
     workflow: DESIGN_WORKFLOW,
     available: Object.entries(topics).map(([topic, { description }]) => ({ topic, description })),
     guidance: [...new Set(args.topics)].map((topic) => ({

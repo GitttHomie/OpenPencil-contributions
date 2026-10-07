@@ -74,9 +74,10 @@ export function createNodePropSelectionState(store: Editor) {
   }
 
   function updateAllWithUndo(patch: Partial<SceneNode>, label: string) {
-    for (const n of nodes.value) {
-      store.updateNodeWithUndo(n.id, patch, label)
-    }
+    const selected = [...nodes.value]
+    store.undo.runBatch(label, () => {
+      for (const n of selected) store.updateNodeWithUndo(n.id, patch, label)
+    })
   }
 
   return { node, nodes, isMulti, active, activeNode, merged, prop, updateAllWithUndo }

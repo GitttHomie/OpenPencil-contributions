@@ -1,17 +1,21 @@
 <script setup lang="ts">
-import { computed, ref, useTemplateRef } from 'vue'
+import { computed, ref, useTemplateRef, watch } from 'vue'
 
 import type { AIProviderID } from '@open-pencil/core/constants'
 import { useI18n } from '@open-pencil/vue'
 
+import { useOnboardingAgents } from '@/app/ai/models/settings/onboarding/agents'
 import { useModelProfileFeedback } from '@/app/ai/models/settings/profile-editor/feedback'
 import { useModelProfileEditor } from '@/app/ai/models/settings/profile-editor/use'
+import { thinkingLevelOptions as buildThinkingLevelOptions } from '@/app/ai/models/thinking'
 import { useSettingsFormGuard } from '@/app/settings/navigation/use'
 import ProviderConnectionTestButton from '@/components/chat/ProviderConnectionTestButton.vue'
+import AISetupPi from '@/components/settings/ai-setup/AISetupPi.vue'
 import { focusInvalidField } from '@/components/settings/layout/focus'
 import SettingsPage from '@/components/settings/layout/SettingsPage.vue'
 import SettingsSaveFeedback from '@/components/settings/layout/SettingsSaveFeedback.vue'
 import SettingsSection from '@/components/settings/layout/SettingsSection.vue'
+import CLILaunchSettings from '@/components/settings/models/CLILaunchSettings.vue'
 import CLIModelSelect from '@/components/settings/models/CLIModelSelect.vue'
 import LocalAgentsSection from '@/components/settings/models/LocalAgentsSection.vue'
 import ProviderSelect from '@/components/settings/provider-select/ProviderSelect.vue'
@@ -31,6 +35,7 @@ const { ai, common, credentials, settings } = useI18n()
 const formElement = useTemplateRef<HTMLFormElement>('formElement')
 const keyInput = ref('')
 const deleteOpen = ref(false)
+const sessionOptionsValid = ref(true)
 const profile = useModelProfileEditor({ profileId, keyInput, labels: ai })
 const {
   draft,
@@ -39,7 +44,7 @@ const {
   providerDef,
   isACP,
   isHarness,
-  supportsReasoningEffort,
+  supportsThinking,
   modelOptions,
   selectedModelValue,
   knownModel,
@@ -57,9 +62,20 @@ const {
   clearKey,
   testConnection: runConnectionTest
 } = profile
+const piAgents = useOnboardingAgents()
+const piSetup = computed(() => {
+  const setup = isHarness.value ? piAgents.piSetup('harness:pi') : undefined
+  // Pi runs only in the desktop app, where its companion can be checked.
+  return setup?.supported ? setup : undefined
+})
+const customModelPlaceholder = computed(() =>
+  isHarness.value ? (piSetup.value?.defaultModel ?? 'provider/model') : 'e.g. llama-3.3-70b'
+)
+watch(isHarness, (harness) => harness && piAgents.refreshAgents(), { immediate: true })
 const feedback = useModelProfileFeedback(profile, keyInput, settings)
 const { errors: fieldErrors } = feedback
 const busy = computed(() => saving.value || connectionTestStatus.value === 'testing')
+const thinkingLevelOptions = computed(() => buildThinkingLevelOptions(ai.value))
 useSettingsFormGuard({ dirty, busy, cancel: () => emit('done') })
 const CUSTOM_MODEL_VALUE = '__custom__'
 const advancedOpen = ref(Boolean(draft.customModelID.trim()))
@@ -73,7 +89,7 @@ function updateModel(id: string) {
 }
 async function save() {
   if (busy.value) return
-  if (!(await feedback.validate('save'))) {
+  if (!(await feedback.validate('save')) || (isACP.value && !sessionOptionsValid.value)) {
     await focusInvalidField(formElement.value)
     return
   }
@@ -81,7 +97,7 @@ async function save() {
 }
 async function testConnection() {
   if (busy.value) return
-  if (!(await feedback.validate('test'))) {
+  if (!(await feedback.validate('test')) || (isACP.value && !sessionOptionsValid.value)) {
     await focusInvalidField(formElement.value)
     return
   }
@@ -134,7 +150,22 @@ async function remove() {
           </ProviderSettingsField>
 
           <LocalAgentsSection v-if="isACP" :provider-id="draft.providerID" />
-          <CLIModelSelect v-if="isACP" :draft="draft" />
+          <CLIModelSelect
+            v-if="isACP"
+            :draft="draft"
+            @refresh="profile.resetConnectionTest"
+            @validity="sessionOptionsValid = $event"
+          />
+          <CLILaunchSettings v-if="isACP" :draft="draft" />
+
+          <div v-if="piSetup" class="flex flex-col gap-2" data-test-id="settings-pi-setup">
+            <AISetupPi
+              :setup="piSetup"
+              @check="piAgents.refreshAgents()"
+              @install-companion="piAgents.installAgent('harness:pi')"
+              @install-bridge="piAgents.setupCanvasBridge()"
+            />
+          </div>
 
           <template v-if="!isACP">
             <div class="flex items-center gap-2 pt-1">
@@ -145,7 +176,7 @@ async function remove() {
             </div>
 
             <ProviderSettingsField
-              v-if="modelOptions.length"
+              v-if="modelOptions.length && !isHarness"
               v-slot="{ control }"
               :label="ai.modelID"
               :error="fieldErrors.modelID"
@@ -167,7 +198,7 @@ async function remove() {
               v-if="providerDef.supportsCustomModel && selectedModelValue === CUSTOM_MODEL_VALUE"
               v-slot="{ control }"
               :label="ai.customModelID"
-              :hint="settings.modelIDHint"
+              :hint="isHarness ? ai.piModelHint : settings.modelIDHint"
               :error="fieldErrors.customModelID"
               @blur="feedback.blur('customModelID')"
             >
@@ -176,7 +207,7 @@ async function remove() {
                 v-model="draft.customModelID"
                 :aria-label="ai.customModelID"
                 data-test-id="provider-settings-custom-model"
-                placeholder="e.g. llama-3.3-70b"
+                :placeholder="customModelPlaceholder"
               />
             </ProviderSettingsField>
 
@@ -232,15 +263,16 @@ async function remove() {
               :key-u-r-l-label="credentials.getAPIKey"
               @clear="clearKey"
             />
-
-            <ProviderConnectionTestButton
-              v-if="!isHarness"
-              :status="connectionTestStatus"
-              :reason="connectionTestReason"
-              :disabled="busy"
-              @test="testConnection"
-            />
           </template>
+
+          <p v-if="isACP" class="text-[11px] text-muted">{{ ai.cliVerificationHint }}</p>
+          <ProviderConnectionTestButton
+            v-if="!isHarness"
+            :status="connectionTestStatus"
+            :reason="connectionTestReason"
+            :disabled="busy"
+            @test="testConnection"
+          />
 
           <AppCollapsible
             v-if="!isACP"
@@ -281,19 +313,13 @@ async function remove() {
                 </div>
               </div>
 
-              <ProviderSettingsField v-if="isHarness" :label="ai.harnessThinkingLevel">
+              <ProviderSettingsField v-if="supportsThinking" :label="ai.thinkingLevel">
                 <AppSelect
-                  v-model="draft.harnessThinkingLevel"
-                  :label="ai.harnessThinkingLevel"
-                  :options="[
-                    { value: 'off', label: ai.harnessThinkingOff },
-                    { value: 'minimal', label: ai.harnessThinkingMinimal },
-                    { value: 'low', label: ai.harnessThinkingLow },
-                    { value: 'medium', label: ai.harnessThinkingMedium },
-                    { value: 'high', label: ai.harnessThinkingHigh },
-                    { value: 'xhigh', label: ai.harnessThinkingExtraHigh }
-                  ]"
+                  v-model="draft.thinkingLevel"
+                  :label="ai.thinkingLevel"
+                  :options="thinkingLevelOptions"
                 />
+                <p class="mt-1 text-[10px] text-muted">{{ ai.thinkingLevelDescription }}</p>
               </ProviderSettingsField>
 
               <ProviderSettingsField v-if="isHarness" :label="ai.harnessToolPermissions">
@@ -306,15 +332,6 @@ async function remove() {
                     { value: 'allow-all', label: ai.harnessPermissionAll }
                   ]"
                 />
-              </ProviderSettingsField>
-
-              <ProviderSettingsField v-if="supportsReasoningEffort" :label="ai.reasoningEffort">
-                <ProviderSettingsInput
-                  v-model="draft.reasoningEffort"
-                  :aria-label="ai.reasoningEffort"
-                  :placeholder="ai.reasoningEffortPlaceholder"
-                />
-                <p class="mt-1 text-[10px] text-muted">{{ ai.reasoningEffortDescription }}</p>
               </ProviderSettingsField>
 
               <div class="border-t border-border pt-2.5">

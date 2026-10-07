@@ -23,6 +23,10 @@ const resultMessage = computed(() => {
   if (status !== 'error') return null
 
   switch (reason) {
+    case 'invalid-options':
+      return ai.value.cliOptionUnavailable
+    case 'invalid-launch':
+      return ai.value.cliLaunchInvalid
     case 'missing-api-key':
       return ai.value.connectionTestMissingAPIKey
     case 'missing-base-url':

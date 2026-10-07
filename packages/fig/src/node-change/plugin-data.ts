@@ -4,7 +4,7 @@ import type { NodeChange, PluginData, PluginRelaunchData } from '@open-pencil/ki
 import { guidToString } from '@open-pencil/kiwi/fig/guid'
 import {
   clampExportScale,
-  isExportFormatId,
+  OPEN_PENCIL_PLUGIN_DATA,
   type ExportFormatId,
   type ExportSetting,
   type PluginDataEntry,
@@ -86,25 +86,11 @@ export function applyTextPathBoxPluginData(node: {
 }
 
 export function extractTextPathBox(nc: NodeChange): Rect | null {
-  const value = getOpenPencilPluginValue(nc, TEXT_PATH_BOX_PLUGIN_KEY)
-  if (!value) return null
-  try {
-    const parsed = JSON.parse(value) as Partial<Rect> | null
-    if (!parsed || typeof parsed !== 'object') return null
-    const { x, y, width, height } = parsed
-    if (
-      typeof x !== 'number' ||
-      typeof y !== 'number' ||
-      typeof width !== 'number' ||
-      typeof height !== 'number'
-    ) {
-      return null
-    }
-    if (!Number.isFinite(x + y + width + height) || width <= 0 || height <= 0) return null
-    return { x, y, width, height }
-  } catch {
-    return null
-  }
+  return (
+    OPEN_PENCIL_PLUGIN_DATA.textPathBox.decode(
+      getOpenPencilPluginValue(nc, TEXT_PATH_BOX_PLUGIN_KEY)
+    ) ?? null
+  )
 }
 
 function hasOpenPencilExportSettingsPluginData(pluginData: PluginDataEntry[]): boolean {
@@ -113,26 +99,11 @@ function hasOpenPencilExportSettingsPluginData(pluginData: PluginDataEntry[]): b
   )
 }
 
-function parseBoundVariablesPluginValue(value: string | null): Record<string, string> {
-  if (!value) return {}
-  try {
-    const parsed = JSON.parse(value) as unknown
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {}
-    return Object.fromEntries(
-      Object.entries(parsed).filter(
-        (entry): entry is [string, string] =>
-          typeof entry[0] === 'string' && typeof entry[1] === 'string'
-      )
-    )
-  } catch {
-    return {}
-  }
-}
-
 export function extractBoundVariables(nc: NodeChange): Record<string, string> {
-  let bindings = parseBoundVariablesPluginValue(
-    getOpenPencilPluginValue(nc, BOUND_VARIABLES_PLUGIN_KEY)
-  )
+  let bindings =
+    OPEN_PENCIL_PLUGIN_DATA.boundVariables.decode(
+      getOpenPencilPluginValue(nc, BOUND_VARIABLES_PLUGIN_KEY)
+    ) ?? {}
   for (const entry of variableConsumptionEntries(nc)) {
     const binding = resolveVariableConsumptionEntry(entry)
     if (binding) bindings[binding.field] = binding.variableId
@@ -150,28 +121,6 @@ export function extractBoundVariables(nc: NodeChange): Record<string, string> {
     if (variableGuid) bindings[`strokes/${i}/color`] = guidToString(variableGuid)
   })
   return bindings
-}
-
-function parseExportSettingsPluginValue(value: string | null): ExportSetting[] | null {
-  if (!value) return null
-  try {
-    const parsed = JSON.parse(value) as unknown
-    if (!Array.isArray(parsed)) return null
-    const settings = parsed.flatMap((entry): ExportSetting[] => {
-      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return []
-      const scale = (entry as { scale?: unknown }).scale
-      const format = (entry as { format?: unknown }).format
-      if (typeof scale !== 'number' || !Number.isFinite(scale) || !isExportFormatId(format)) {
-        return []
-      }
-      // Clamp at the file-format boundary: imported plugin data may carry an
-      // out-of-range scale the UI would never produce.
-      return [{ scale: clampExportScale(scale), format }]
-    })
-    return settings.length === parsed.length ? settings : null
-  } catch {
-    return null
-  }
 }
 
 function mapNativeImageType(imageType: unknown): ExportFormatId | null {
@@ -193,7 +142,7 @@ function extractNativeConstraintScale(constraint: unknown): number {
 }
 
 export function extractExportSettings(nc: NodeChange): ExportSetting[] {
-  const pluginSettings = parseExportSettingsPluginValue(
+  const pluginSettings = OPEN_PENCIL_PLUGIN_DATA.exportSettings.decode(
     getOpenPencilPluginValue(nc, EXPORT_SETTINGS_PLUGIN_KEY)
   )
   if (pluginSettings) return pluginSettings
@@ -220,35 +169,11 @@ export function extractPluginData(nc: NodeChange): PluginDataEntry[] {
 }
 
 export function extractLibrarySource(nc: NodeChange): SceneNode['librarySource'] {
-  const value = getOpenPencilPluginValue(nc, LIBRARY_SOURCE_PLUGIN_KEY)
-  if (!value) return null
-  try {
-    const parsed = JSON.parse(value) as unknown
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null
-    const source = parsed as {
-      identity?: { libraryId?: unknown; assetKey?: unknown; revisionId?: unknown }
-      sourceNodeId?: unknown
-      readOnly?: unknown
-    }
-    if (
-      typeof source.identity?.libraryId !== 'string' ||
-      typeof source.identity.assetKey !== 'string' ||
-      typeof source.identity.revisionId !== 'string'
-    ) {
-      return null
-    }
-    return {
-      identity: {
-        libraryId: source.identity.libraryId,
-        assetKey: source.identity.assetKey,
-        revisionId: source.identity.revisionId
-      },
-      sourceNodeId: typeof source.sourceNodeId === 'string' ? source.sourceNodeId : null,
-      readOnly: source.readOnly === true
-    }
-  } catch {
-    return null
-  }
+  return (
+    OPEN_PENCIL_PLUGIN_DATA.librarySource.decode(
+      getOpenPencilPluginValue(nc, LIBRARY_SOURCE_PLUGIN_KEY)
+    ) ?? null
+  )
 }
 
 export function applyLibrarySourcePluginData(node: SceneNode): void {

@@ -12,6 +12,7 @@ async function selectedNodeSnapshot(page: Page) {
     return selected
       ? {
           id: selected.id,
+          name: selected.name,
           type: selected.type,
           parentId: selected.parentId,
           componentId: selected.componentId,
@@ -169,6 +170,7 @@ test('assets panel groups component sets and inserts the default variant', async
   const inserted = await selectedNodeSnapshot(page)
 
   expect(inserted?.type).toBe('INSTANCE')
+  expect(inserted?.name).toBe('Button')
   // The spatially first variant is the documented default, regardless of property defaults.
   expect(inserted?.componentId).toBe(ids.primaryId)
   expect(inserted?.parentId).toBe(inserted?.pageId)
@@ -184,6 +186,7 @@ test('assets panel groups component sets and inserts the default variant', async
   expectDefined(inserted?.id, 'inserted instance id')
   const switched = await selectedNodeSnapshot(page)
   expect(switched?.componentId).toBe(ids.secondaryId)
+  expect(switched?.name).toBe('Button')
   expect(switched?.width).toBe(132)
   expect(switched?.childTexts).toEqual(['Secondary'])
 
