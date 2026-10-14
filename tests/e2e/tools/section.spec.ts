@@ -5,7 +5,7 @@ const editor = useEditorSetupWithClear('/?test')
 test('draw section in full editor without browser errors', async () => {
   await editor.canvas.drawSection(100, 100, 240, 160)
 
-  await expect(editor.page.getByRole('img', { name: 'SECTION' })).toBeVisible()
+  await expect(editor.page.getByRole('heading', { name: 'Section 1', exact: true })).toBeVisible()
   await expect
     .poll(async () => {
       return editor.page.evaluate(() => {
