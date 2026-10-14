@@ -1,6 +1,43 @@
 import { expect, test, useEditorSetup } from '#tests/e2e/fixtures'
 
-const editor = useEditorSetup('/demo')
+const editor = useEditorSetup('/?test')
+
+test.beforeAll(async () => {
+  await editor.page.evaluate(() => {
+    const store = window.openPencil?.getStore?.()
+    if (!store) throw new Error('Editor unavailable')
+    const frame = store.graph.createNode('FRAME', store.state.currentPageId, {
+      name: 'Example frame',
+      x: 100,
+      y: 100,
+      width: 320,
+      height: 240
+    })
+    store.graph.createNode('FRAME', frame.id, {
+      name: 'Nested frame',
+      x: 40,
+      y: 40,
+      width: 140,
+      height: 80
+    })
+    const library = store.graph.createNode('FRAME', store.state.currentPageId, {
+      name: 'Components',
+      x: 460,
+      y: 100,
+      width: 160,
+      height: 160
+    })
+    store.graph.createNode('COMPONENT', library.id, {
+      name: 'Example component',
+      x: 20,
+      y: 20,
+      width: 80,
+      height: 40
+    })
+    store.requestRender()
+  })
+  await editor.canvas.waitForRender()
+})
 
 function layerRows() {
   return editor.page.locator('[data-node-id]')
@@ -53,9 +90,9 @@ async function getSelectedCount(): Promise<number> {
 
 const NUMBERED_GROUP = /^Group \d+$/
 
-test('demo layers visible in panel', async () => {
+test('document layers visible in panel', async () => {
   const names = await getLayerNames()
-  expect(names).toContain('Announcement system')
+  expect(names).toContain('Example frame')
   expect(names).toContain('Components')
 })
 
@@ -64,9 +101,9 @@ test('clicking a node inside a frame does not reparent it', async () => {
     const store = window.openPencil?.getStore?.()
     if (!store) throw new Error('OpenPencil store not initialized')
     const nodes = [...store.graph.nodes.values()]
-    const root = nodes.find((node) => node.name === 'Announcement system')
-    const nested = nodes.find((node) => node.name === 'Source components')
-    if (!root || !nested?.parentId) throw new Error('Demo announcement structure not found')
+    const root = nodes.find((node) => node.name === 'Example frame')
+    const nested = nodes.find((node) => node.name === 'Nested frame')
+    if (!root || !nested?.parentId) throw new Error('Fixture hierarchy not found')
     const origin = store.graph.getAbsolutePosition(nested.id)
     return {
       id: nested.id,
