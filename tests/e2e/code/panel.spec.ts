@@ -32,6 +32,12 @@ function codeEditor() {
   return editor.page.locator('[data-slot="code-editor"] .cm-content')
 }
 
+async function replaceCode(source: string) {
+  await codeEditor().click()
+  await codeEditor().press('ControlOrMeta+a')
+  await editor.page.keyboard.insertText(source)
+}
+
 /** Opens the editor; with nothing selected that means choosing to write new Design JSX. */
 async function openCodePanel() {
   await codeTab().click()
@@ -91,9 +97,9 @@ test('live previews Design JSX and keeps one undo transaction', async () => {
   await editor.canvas.drawRect(100, 100, 200, 150)
   const originalId = await getFirstSelectedNodeId(editor.page)
   await openCodePanel()
-  await codeEditor().fill('<Frame name="Live JSX" w={320} h={180} fill="#ffffff" />')
+  await replaceCode('<Frame name="Live JSX" w={320} h={180} fill="#ffffff" />')
   await waitForNodeNamed(editor.page, 'Live JSX')
-  await codeEditor().fill('<Frame name="Live JSX final" w={360} h={180} fill="#ffffff" />')
+  await replaceCode('<Frame name="Live JSX final" w={360} h={180} fill="#ffffff" />')
   await waitForNodeNamed(editor.page, 'Live JSX final')
 
   await designTab().click()
@@ -116,12 +122,12 @@ test('Ctrl+Z edits the CodeMirror draft before touching the canvas transaction',
 
 test('keeps the last valid preview while showing invalid-code diagnostics', async () => {
   await openCodePanel()
-  await codeEditor().fill('<Frame name="Last valid" />')
+  await replaceCode('<Frame name="Last valid" />')
   await waitForNodeNamed(editor.page, 'Last valid')
-  await codeEditor().fill('<Frame>')
+  await replaceCode('<Frame>')
   const errorAlert = editor.page.getByTestId('code-panel-error')
   await expect(errorAlert).toBeVisible()
-  await expect(errorAlert).toHaveCSS('color', 'rgb(248, 113, 113)')
+  await expect(errorAlert).toHaveCSS('color', 'rgb(250, 133, 133)')
 
   await editor.page.evaluate(async () => {
     const themeModulePath = '/src/app/shell/theme.ts'
@@ -137,7 +143,7 @@ test('Reset restores generated source and original canvas state', async () => {
   await editor.canvas.drawRect(100, 100, 200, 150)
   const originalId = await getFirstSelectedNodeId(editor.page)
   await openCodePanel()
-  await codeEditor().fill('<Frame name="Reset preview" />')
+  await replaceCode('<Frame name="Reset preview" />')
   await waitForNodeNamed(editor.page, 'Reset preview')
   await expect(editor.page.getByTestId('code-panel-reset').locator('svg')).toHaveCount(1)
   await editor.page.getByTestId('code-panel-reset').click()
@@ -151,9 +157,9 @@ test('HTML/CSS live preview commits as one undoable session', async () => {
   const originalId = await getFirstSelectedNodeId(editor.page)
   await openCodePanel()
   await selectSource('HTML')
-  await codeEditor().fill('<div style="width: 180px; height: 90px">First</div>')
+  await replaceCode('<div style="width: 180px; height: 90px">First</div>')
   await expect.poll(() => hasNode(editor.page, originalId)).toBe(false)
-  await codeEditor().fill('<div style="width: 220px; height: 110px">Final</div>')
+  await replaceCode('<div style="width: 220px; height: 110px">Final</div>')
   await expect(editor.page.getByTestId('code-panel-status')).toContainText('Updated live')
   await expect(editor.page.getByTestId('code-panel-status')).toHaveAttribute('data-tone', 'success')
 
@@ -170,7 +176,7 @@ test('switching source formats commits the current live session', async () => {
   await editor.canvas.drawRect(90, 90, 140, 100)
   const originalId = await getFirstSelectedNodeId(editor.page)
   await openCodePanel()
-  await codeEditor().fill('<Frame name="Committed on switch" />')
+  await replaceCode('<Frame name="Committed on switch" />')
   await waitForNodeNamed(editor.page, 'Committed on switch')
   await selectSource('HTML')
   await expect(codeEditor()).toContainText('<style>')
@@ -183,7 +189,7 @@ test('Reset before debounce cancels the pending preview', async () => {
   await editor.canvas.drawRect(100, 100, 200, 150)
   const originalId = await getFirstSelectedNodeId(editor.page)
   await openCodePanel()
-  await codeEditor().fill('<Frame name="Stale reset preview" />')
+  await replaceCode('<Frame name="Stale reset preview" />')
   await editor.page.getByTestId('code-panel-reset').click()
   await editor.page.waitForTimeout(450)
   expect(await hasNode(editor.page, originalId)).toBe(true)
@@ -195,7 +201,7 @@ test('HTML/CSS uses the same editor and live reloads the canvas', async () => {
   await selectSource('HTML')
   await expect(codePanel().locator('[data-slot="code-editor"]')).toHaveCount(1)
   await expect(codeEditor()).toHaveAttribute('aria-label', 'HTML and CSS')
-  await codeEditor().fill(
+  await replaceCode(
     '<style>.card { width: 240px; height: 120px; background: red; }</style><div class="card">Hello</div>'
   )
   await expect(editor.page.getByTestId('code-panel-status')).toContainText('Updated live')
@@ -248,7 +254,7 @@ test('Tailwind styles generated components and HTML with utilities, remembered',
   await expect(codeEditor()).toContainText(/^<div class="[^"]*w-50 h-\[150px\]/)
   await expect(codeEditor()).not.toContainText('<style>')
   // Written HTML is built with Tailwind's utilities, as the canvas shows them.
-  await codeEditor().fill('<div class="w-60 h-30 p-4 bg-red-500">Tailwind</div>')
+  await replaceCode('<div class="w-60 h-30 p-4 bg-red-500">Tailwind</div>')
   await expect
     .poll(() => getCodeNodeSummaries(editor.page))
     .toContainEqual(expect.objectContaining({ width: 240, height: 120 }))
