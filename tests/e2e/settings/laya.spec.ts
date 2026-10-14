@@ -48,9 +48,9 @@ test('the default build exposes neither Laya nor the Fast tasks assignment', asy
     await route.fulfill({ json: null })
   })
   await page.goto('/tests/helpers/laya/fixture.html')
-  await expect(page.getByTestId('settings-model-assignment-design')).toBeVisible()
+  await expect(page.getByRole('combobox', { name: 'Design agent', exact: true })).toBeVisible()
   await expect(page.getByText('Local routing (experimental)')).toHaveCount(0)
-  await expect(page.getByTestId('settings-model-assignment-fast')).toHaveCount(0)
+  await expect(page.getByRole('combobox', { name: 'Fast tasks', exact: true })).toHaveCount(0)
   expect(calls).toEqual([])
 })
 
