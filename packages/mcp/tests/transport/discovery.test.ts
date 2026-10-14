@@ -3,6 +3,7 @@ import { describe, expect, test } from 'bun:test'
 import { parseDiscoveryInfo } from '@open-pencil/mcp/discovery'
 
 const VALID = {
+  scope: 'document',
   pid: 4242,
   socketPath: '/tmp/open-pencil.sock',
   httpPort: 7600,

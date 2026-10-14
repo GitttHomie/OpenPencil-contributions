@@ -1,161 +1,289 @@
-import { isEqual } from 'es-toolkit'
-import type * as Y from 'yjs'
+import { isEqual } from 'es-toolkit/predicate'
+import * as v from 'valibot'
+import * as Y from 'yjs'
 
-import { reconcileVariableLayouts } from '@open-pencil/core/layout/variables'
+import type { Variable, VariableCollection } from '@open-pencil/scene-graph'
 
 import type { EditorStore } from '@/app/editor/active-store'
 
-import { changedVariableValues, type RegistrySnapshot } from './changes'
-import { publishDefinitions, receiveDefinitions, snapshotDefinitions } from './maps'
+/**
+ * Variables and collections in a room, by id. Each record is a map of its fields, so peers
+ * changing different fields both keep theirs; a variable's values are a nested map by mode, so
+ * two people editing a color in different modes do too.
+ */
+export type YRecords = Y.Map<Y.Map<unknown>>
+
+import { changedVariableValues } from './changes'
 import { collectionSchema, variableSchema } from './schema'
 
-type Options = {
+const VALUES_BY_MODE = 'valuesByMode'
+
+type VariableSyncOptions = {
   store: EditorStore
+  ydoc: Y.Doc
+  yvariables: YRecords
+  ycollections: YRecords
   canPublish?: () => boolean
-  doc: Y.Doc
-  suppressGraphSync: (value: boolean) => void
-  suppressYjsEvents: (value: boolean) => void
+  waitForDocument?: boolean
 }
 
-/** Room-owned variable registries; local document edits and peer updates share native IDs. */
-export function createVariableSync({
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function isVariable(value: unknown): value is Variable {
+  return v.safeParse(variableSchema, value).success
+}
+function isCollection(value: unknown): value is VariableCollection {
+  return v.safeParse(collectionSchema, value).success
+}
+
+/** Writes the fields of `record` that differ from what the room holds, and drops the others. */
+function writeRecord(target: Y.Map<unknown>, record: object): void {
+  const fields = new Map<string, unknown>(Object.entries(record))
+  // Collected first: deleting from a Yjs map while iterating its keys skips some.
+  for (const key of Array.from(target.keys())) if (!fields.has(key)) target.delete(key)
+  for (const [key, value] of fields) {
+    if (key === VALUES_BY_MODE && isRecord(value)) {
+      let modes = target.get(key)
+      if (!(modes instanceof Y.Map)) {
+        modes = new Y.Map<unknown>()
+        target.set(key, modes)
+      }
+      writeRecord(modes as Y.Map<unknown>, value)
+      continue
+    }
+    if (value === undefined) target.delete(key)
+    else if (!isEqual(target.get(key), value)) target.set(key, structuredClone(value))
+  }
+}
+
+/** Writes `records` that differ from `sent` into the room, and removes those gone since. */
+function writeChanges<T extends { id: string }>(
+  target: YRecords,
+  records: Map<string, T>,
+  sent: Map<string, T>
+): void {
+  for (const id of sent.keys()) if (!records.has(id)) target.delete(id)
+  for (const [id, record] of records) {
+    if (isEqual(sent.get(id), record)) continue
+    let ymap = target.get(id)
+    if (!ymap) {
+      ymap = new Y.Map<unknown>()
+      target.set(id, ymap)
+    }
+    writeRecord(ymap, record)
+  }
+}
+
+/** Sets a record in place where it exists, as views may hold it, as undo does. */
+function applyRecord<T extends object>(target: Map<string, T>, id: string, value: T): void {
+  const existing = target.get(id)
+  if (!existing) {
+    target.set(id, value)
+    return
+  }
+  for (const key of Object.keys(existing)) {
+    if (!Object.hasOwn(value, key)) Reflect.deleteProperty(existing, key)
+  }
+  Object.assign(existing, value)
+}
+
+/** The ids of records an event batch on `records` added, changed, or removed. */
+function changedIds(records: YRecords, events: Y.YEvent<Y.Map<unknown>>[]): Set<string> {
+  const ids = new Set<string>()
+  for (const event of events) {
+    if (event.target === records) {
+      for (const key of event.changes.keys.keys()) ids.add(key)
+      continue
+    }
+    const [id] = event.path
+    if (typeof id === 'string') ids.add(id)
+  }
+  return ids
+}
+
+/**
+ * Keeps the document's variables and collections in step with the room's. Local edits reach the
+ * room after every change to the history, which every variable edit, undo, and redo makes;
+ * peers' edits are applied without one, and the layers bound to them are laid out again.
+ * Which mode a collection shows is each viewer's own, and stays out of the room.
+ */
+export function bindVariableSync({
   store,
-  doc,
-  suppressGraphSync,
-  suppressYjsEvents,
-  canPublish = () => true
-}: Options) {
-  const variables = doc.getMap<Y.Map<unknown>>('variables')
-  const collections = doc.getMap<Y.Map<unknown>>('variableCollections')
-  const activeModes = doc.getMap<string>('variableActiveModes')
-  const knownVariables = new Set<string>()
-  const knownCollections = new Set<string>()
-  let busy = false
+  ydoc,
+  yvariables,
+  ycollections,
+  canPublish = () => true,
+  waitForDocument = false
+}: VariableSyncOptions) {
+  let waiting = waitForDocument
+  let receiving = false
   let disposed = false
-  let changed = false
-  let previous = snapshot()
+  const graph = () => store.graph
+  // What the room holds as this peer last wrote or read it, so only what changed since is sent.
+  let sentVariables = structuredClone(graph().variables)
+  let sentCollections = structuredClone(graph().variableCollections)
 
-  function snapshot(before?: RegistrySnapshot): RegistrySnapshot {
-    return {
-      variables: snapshotDefinitions(store.graph.variables, before?.variables),
-      collections: snapshotDefinitions(store.graph.variableCollections, before?.collections),
-      activeModes:
-        before && isEqual(store.graph.activeMode, before.activeModes)
-          ? before.activeModes
-          : new Map(store.graph.activeMode)
+  function send() {
+    if (waiting || receiving || disposed || !canPublish()) return
+    const { variables, variableCollections } = graph()
+    if (isEqual(sentVariables, variables) && isEqual(sentCollections, variableCollections)) return
+    ydoc.transact(() => {
+      writeChanges(ycollections, variableCollections, sentCollections)
+      writeChanges(yvariables, variables, sentVariables)
+    })
+    sentVariables = structuredClone(variables)
+    sentCollections = structuredClone(variableCollections)
+  }
+
+  /** Writes every variable and collection, as Share does with the layers. */
+  function share() {
+    waiting = false
+    sentVariables = new Map()
+    sentCollections = new Map()
+    send()
+  }
+
+  /**
+   * A collection lists its variables in order. Two peers adding variables at once each write
+   * their own list, and the room keeps one, so a variable missing from its collection's list is
+   * added at the end, in the same order on every peer.
+   */
+  function keepCollectionsComplete(collectionIds: Iterable<string>) {
+    const { variables, variableCollections } = graph()
+    for (const id of collectionIds) {
+      const collection = variableCollections.get(id)
+      if (!collection) continue
+      const sharedOrder = v.safeParse(v.array(v.string()), ycollections.get(id)?.get('variableIds'))
+      const order = sharedOrder.success ? sharedOrder.output : collection.variableIds
+      collection.variableIds = order.filter((id) => yvariables.has(id))
+      const listed = new Set(collection.variableIds)
+      const missing = [...variables.values()]
+        .filter((variable) => variable.collectionId === id && !listed.has(variable.id))
+        .map((variable) => variable.id)
+        .toSorted()
+      if (missing.length > 0) collection.variableIds = [...collection.variableIds, ...missing]
     }
   }
 
-  function publish(all = false) {
-    if (busy || disposed || !canPublish()) return
-    const current = snapshot(previous)
-    if (
-      !all &&
-      current.variables === previous.variables &&
-      current.collections === previous.collections &&
-      current.activeModes === previous.activeModes
+  /** Applies a peer's records; one that is not well formed is left as this peer has it. */
+  function receive<T extends object>(
+    records: YRecords,
+    target: Map<string, T>,
+    isValid: (value: unknown) => value is T,
+    events: Y.YEvent<Y.Map<unknown>>[]
+  ): Set<string> {
+    const ids = changedIds(records, events)
+    for (const id of ids) {
+      const value: unknown = records.get(id)?.toJSON()
+      if (value === undefined) target.delete(id)
+      else if (isValid(value)) applyRecord(target, id, value)
+    }
+    return ids
+  }
+
+  /** Takes the records a peer sent as what the room holds; others may hold unsent edits. */
+  function markReceived<T>(sent: Map<string, T>, records: Map<string, T>, ids: Set<string>) {
+    for (const id of ids) {
+      const record = records.get(id)
+      if (record) sent.set(id, structuredClone(record))
+      else sent.delete(id)
+    }
+  }
+
+  /**
+   * Lays out what the received records reach. Only those records are taken as sent: an edit not
+   * yet in the history, such as a running plugin script's, still goes out with the next change.
+   */
+  function settle(variableIds: Set<string>, collectionIds: Set<string>) {
+    const { variables, variableCollections } = graph()
+    const scope = changedVariableValues(
+      { variables: sentVariables, collections: sentCollections, activeModes: graph().activeMode },
+      { variables, collections: variableCollections, activeModes: graph().activeMode }
     )
-      return
-    busy = true
+    markReceived(sentVariables, variables, variableIds)
+    markReceived(sentCollections, variableCollections, collectionIds)
+    const collections = new Set(collectionIds)
+    for (const id of variableIds) {
+      const collectionId = variables.get(id)?.collectionId
+      if (collectionId) collections.add(collectionId)
+    }
+    // A list completed here differs from the room's, and goes out with the next change.
+    keepCollectionsComplete(collections)
+    if (scope.size) store.refreshVariables({ variables: scope })
+    else store.requestRefresh()
+  }
+
+  // This peer's own writes are already in its graph.
+  function onVariables(events: Y.YEvent<Y.Map<unknown>>[], transaction: Y.Transaction) {
+    if (waiting || transaction.local) return
+    receiving = true
     try {
-      doc.transact(() => {
-        publishDefinitions(
-          collections,
-          store.graph.variableCollections,
-          all ? new Map() : previous.collections
-        )
-        publishDefinitions(variables, store.graph.variables, all ? new Map() : previous.variables)
-        const beforeModes = all ? new Map<string, string>() : previous.activeModes
-        for (const id of beforeModes.keys())
-          if (!store.graph.activeMode.has(id)) activeModes.delete(id)
-        for (const [id, mode] of store.graph.activeMode) {
-          if (beforeModes.get(id) !== mode) activeModes.set(id, mode)
-        }
-      })
-      for (const id of variables.keys()) knownVariables.add(id)
-      for (const id of collections.keys()) knownCollections.add(id)
-      previous = current
+      const ids = receive(yvariables, graph().variables, isVariable, events)
+      if (ids.size > 0) settle(ids, new Set())
     } finally {
-      busy = false
+      receiving = false
     }
   }
 
-  function normalizeCollections() {
-    const members = new Map<string, string[]>()
-    for (const variable of store.graph.variables.values()) {
-      const ids = members.get(variable.collectionId) ?? []
-      ids.push(variable.id)
-      members.set(variable.collectionId, ids)
-    }
-    for (const collection of store.graph.variableCollections.values()) {
-      const ids = new Set(members.get(collection.id))
-      const ordered = collection.variableIds.filter((id) => ids.delete(id))
-      collection.variableIds = [...ordered, ...[...ids].sort()]
-      const defaultMode = collection.modes.find((mode) => mode.modeId === collection.defaultModeId)
-      if (!defaultMode) collection.defaultModeId = collection.modes[0].modeId
-      const requested = activeModes.get(collection.id)
-      const valid = collection.modes.some((mode) => mode.modeId === requested)
-      store.graph.activeMode.set(
-        collection.id,
-        valid && requested ? requested : collection.defaultModeId
-      )
-    }
-    for (const id of store.graph.activeMode.keys())
-      if (!store.graph.variableCollections.has(id)) store.graph.activeMode.delete(id)
-  }
-
-  function receive(transaction: Y.Transaction) {
-    if (transaction.local || !changed || busy || disposed) return
-    changed = false
-    busy = true
-    suppressGraphSync(true)
-    suppressYjsEvents(true)
+  function onCollections(events: Y.YEvent<Y.Map<unknown>>[], transaction: Y.Transaction) {
+    if (waiting || transaction.local) return
+    receiving = true
     try {
-      receiveDefinitions(
-        collections,
-        store.graph.variableCollections,
-        knownCollections,
-        collectionSchema
-      )
-      receiveDefinitions(variables, store.graph.variables, knownVariables, variableSchema)
-      normalizeCollections()
-      const current = snapshot(previous)
-      const affected = changedVariableValues(previous, current)
-      if (affected.size) {
-        reconcileVariableLayouts(store.graph, { variables: affected })
-        store.requestRender()
-      } else store.requestRefresh()
-      previous = current
+      const ids = receive(ycollections, graph().variableCollections, isCollection, events)
+      if (ids.size > 0) settle(new Set(), ids)
     } finally {
-      suppressYjsEvents(false)
-      suppressGraphSync(false)
-      busy = false
+      receiving = false
     }
   }
 
-  function markChanged(_events: unknown, transaction: Y.Transaction) {
-    if (!transaction.local) changed = true
+  /** A joined tab adopts the room's registry, including an intentionally empty registry. */
+  function receiveDocument(transaction: Y.Transaction) {
+    if (!waiting || transaction.local || !canPublish()) return
+    receiving = true
+    try {
+      const { variables, variableCollections, activeMode } = graph()
+      variables.clear()
+      variableCollections.clear()
+      activeMode.clear()
+      for (const [id, record] of yvariables) {
+        const value: unknown = record.toJSON()
+        if (isVariable(value)) variables.set(id, value)
+      }
+      for (const [id, record] of ycollections) {
+        const value: unknown = record.toJSON()
+        if (isCollection(value)) variableCollections.set(id, value)
+      }
+      settle(new Set(variables.keys()), new Set(variableCollections.keys()))
+      sentVariables = structuredClone(variables)
+      sentCollections = structuredClone(variableCollections)
+      waiting = false
+    } finally {
+      receiving = false
+    }
   }
-  variables.observeDeep(markChanged)
-  collections.observeDeep(markChanged)
-  activeModes.observe(markChanged)
-  doc.on('afterTransaction', receive)
-  // Editor commands, AI tools, imports and Undo may edit the registries directly.
-  // Scene-change notifications catch all of them; viewport-only repaint events do not.
-  const stop = store.onEditorEvent('render:requested', () => publish())
-  const stopRefresh = store.onEditorEvent('refresh:requested', () => publish())
+
+  ydoc.on('afterTransaction', receiveDocument)
+  yvariables.observeDeep(onVariables)
+  ycollections.observeDeep(onCollections)
+  const stopHistory = store.onEditorEvent('history:changed', send)
+  const stopRender = store.onEditorEvent('render:requested', send)
+  const stopRefresh = store.onEditorEvent('refresh:requested', send)
+
   return {
-    publishChanges: () => publish(),
-    publishAll: () => publish(true),
+    share,
     dispose() {
+      // An edit made just before leaving still reaches the room.
       if (disposed) return
+      send()
       disposed = true
-      stop()
+      stopRender()
       stopRefresh()
-      doc.off('afterTransaction', receive)
-      variables.unobserveDeep(markChanged)
-      collections.unobserveDeep(markChanged)
-      activeModes.unobserve(markChanged)
+      stopHistory()
+      ydoc.off('afterTransaction', receiveDocument)
+      yvariables.unobserveDeep(onVariables)
+      ycollections.unobserveDeep(onCollections)
     }
   }
 }

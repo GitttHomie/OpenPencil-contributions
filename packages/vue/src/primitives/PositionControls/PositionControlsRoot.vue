@@ -19,7 +19,10 @@ const {
   canExclude,
   excluded,
   setExcluded,
-  prop: multiProp
+  prop: multiProp,
+  inAutoLayout,
+  ignoresAutoLayout,
+  toggleIgnoreAutoLayout
 } = usePosition()
 
 const xValue = computed(() => (isMulti.value ? multiProp('x').value : (node.value?.x ?? 0)))
@@ -36,7 +39,8 @@ const actions = {
   cancelProp,
   align,
   flip,
-  rotate
+  rotate,
+  toggleIgnoreAutoLayout
 }
 </script>
 
@@ -53,6 +57,8 @@ const actions = {
     :w-value="wValue"
     :h-value="hValue"
     :rotation-value="rotationValue"
+    :in-auto-layout="inAutoLayout"
+    :ignores-auto-layout="ignoresAutoLayout"
     :mixed="MIXED"
     :actions="actions"
   />

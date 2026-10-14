@@ -8,20 +8,21 @@ test('CLI defaults are inherited unless an OpenPencil override is explicitly set
   }
 })
 
-test('Codex endpoint overrides are literal process arguments and retain the existing provider', () => {
+test('Codex overrides use its ACP adapter environment contract and retain the provider', () => {
   expect(
     acpLaunchOptions('codex', {
       codexProvider: 'bedrock',
       codexBaseURL: 'https://example.test/openai/v1'
     })
   ).toEqual({
-    args: [
-      '-c',
-      'model_provider="bedrock"',
-      '-c',
-      'model_providers.bedrock.base_url="https://example.test/openai/v1"'
-    ],
-    env: {}
+    args: [],
+    env: {
+      CODEX_CONFIG: JSON.stringify({
+        model_provider: 'bedrock',
+        'model_providers.bedrock.base_url': 'https://example.test/openai/v1'
+      }),
+      MODEL_PROVIDER: 'bedrock'
+    }
   })
   expect(
     acpLaunchOptions('claude-code', { awsRegion: 'us-east-1', codexProvider: 'bedrock' })
@@ -30,6 +31,24 @@ test('Codex endpoint overrides are literal process arguments and retain the exis
     env: { AWS_REGION: 'us-east-1', AWS_DEFAULT_REGION: 'us-east-1' }
   })
   expect(acpLaunchOptions('kiro-cli', { awsRegion: 'us-east-1' })).toEqual({ args: [], env: {} })
+})
+
+test('Codex Bedrock region is configured independently of a custom endpoint', () => {
+  expect(
+    acpLaunchOptions('codex', { codexProvider: 'team-bedrock', awsRegion: 'us-east-1' })
+  ).toEqual({
+    args: [],
+    env: {
+      CODEX_CONFIG: JSON.stringify({
+        model_provider: 'team-bedrock',
+        'model_providers.team-bedrock.aws.region': 'us-east-1'
+      }),
+      MODEL_PROVIDER: 'team-bedrock'
+    }
+  })
+  expect(() => acpLaunchOptions('codex', { awsRegion: 'us-east-1' })).toThrow(
+    ACPLaunchSettingsError
+  )
 })
 
 test('invalid or credential-bearing endpoint overrides cannot launch a process', () => {

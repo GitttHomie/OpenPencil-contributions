@@ -27,5 +27,11 @@
   "deepLinkCancelled": "リンクをキャンセルしました。「{file}」で終わるファイルが必要です。",
   "deepLinkNodeNotFound": "「{file}」にレイヤー「{node}」が見つかりませんでした。",
   "openQueuedFilesFailed": "OpenPencil に渡されたファイルを開けませんでした: {error}",
-  "tokensLeftOut": "スタイルシートに含まれていません: {names}"
+  "tokensLeftOut": "スタイルシートに含まれていません: {names}",
+  "layoutContainerFixedWidth": "「{layer}」が利用可能なスペースを埋められるように、「{name}」の幅を固定に変更しました。",
+  "layoutContainerFixedHeight": "「{layer}」が利用可能なスペースを埋められるように、「{name}」の高さを固定に変更しました。",
+  "layoutLayerFixedWidth": "「{name}」が内容に合わせてサイズを調整できるように、内部の1レイヤーの幅を固定に変更しました。",
+  "layoutLayerFixedHeight": "「{name}」が内容に合わせてサイズを調整できるように、内部の1レイヤーの高さを固定に変更しました。",
+  "layoutLayersFixedWidth": "「{name}」が内容に合わせてサイズを調整できるように、内部の{count}レイヤーの幅を固定に変更しました。",
+  "layoutLayersFixedHeight": "「{name}」が内容に合わせてサイズを調整できるように、内部の{count}レイヤーの高さを固定に変更しました。"
 }

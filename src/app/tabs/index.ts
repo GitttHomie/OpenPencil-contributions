@@ -2,9 +2,8 @@ import { promiseTimeout } from '@vueuse/core'
 import { shallowRef, computed, triggerRef } from 'vue'
 
 import { BUILTIN_IO_FORMATS, IORegistry } from '@open-pencil/core/io'
-import { findFigThumbnailPageId, populateFigPage } from '@open-pencil/core/io/formats/fig'
+import { findFigThumbnailPageId } from '@open-pencil/core/io/formats/fig'
 import { renderThumbnail } from '@open-pencil/core/io/formats/raster'
-import { computeAllLayouts } from '@open-pencil/core/layout'
 import type { SceneGraph } from '@open-pencil/scene-graph'
 
 import { setOpenPencilStore } from '@/app/browser-bridge'
@@ -12,7 +11,7 @@ import { describeDiagnosticError, recordStorageFailure } from '@/app/diagnostics
 import { confirmAllDocuments } from '@/app/document/close/all'
 import { confirmDocumentClose } from '@/app/document/close/controller'
 import { requestDocumentClose } from '@/app/document/close/prompt'
-import { readFigDocument } from '@/app/document/io/fig'
+import { readFigForTab, wasFigCleanedOnOpen } from '@/app/document/io/fig'
 import { applyImportedDocument } from '@/app/document/io/imported-document'
 import type { DocumentSourceIdentity } from '@/app/document/io/types'
 import { getRecoveryStore, type RecoverySnapshotMeta } from '@/app/document/recovery'
@@ -215,18 +214,6 @@ function reusableTabStore(): { store: EditorStore; created: boolean } {
   return { store: createTab().store, created: true }
 }
 
-async function readFigForTab(file: File, signal?: AbortSignal): Promise<SceneGraph> {
-  const imported = await readFigDocument(file, signal)
-  const firstPageId = imported.getPages()[0]?.id
-  if (firstPageId) computeAllLayouts(imported, firstPageId)
-  const coverPageId = findFigThumbnailPageId(imported.getPages())
-  if (coverPageId && coverPageId !== firstPageId) {
-    populateFigPage(imported, coverPageId)
-    computeAllLayouts(imported, coverPageId)
-  }
-  return imported
-}
-
 async function showImportedGraph(
   store: EditorStore,
   graph: SceneGraph,
@@ -237,6 +224,7 @@ async function showImportedGraph(
   await applyImportedDocument(store, graph, load)
   load?.signal.throwIfAborted()
   await prepare?.()
+  if (wasFigCleanedOnOpen(graph)) store.markDocumentChanged()
   load?.signal.throwIfAborted()
   const pageId = store.graph.getPages()[0]?.id ?? store.graph.rootId
   load?.update({ phase: 'populating-page', detail: store.graph.getNode(pageId)?.name ?? null })
@@ -467,7 +455,7 @@ export async function openFileInNewTab(
     let sourceFormat: string
     if (isFig) {
       load.update({ phase: 'decoding', detail: file.name })
-      imported = await readFigForTab(file, load.signal)
+      imported = await readFigForTab(file, load.signal, true)
       sourceFormat = 'fig'
     } else {
       const result = await io.readDocument({
@@ -479,8 +467,6 @@ export async function openFileInNewTab(
       sourceFormat = result.sourceFormat
     }
 
-    const firstPageId = imported.getPages()[0]?.id
-    if (!isFig && firstPageId) computeAllLayouts(imported, firstPageId)
     await showImportedGraph(
       store,
       imported,
@@ -543,7 +529,7 @@ export async function restoreRecoverySnapshot(id: string): Promise<void> {
       imported,
       async () => {
         store.state.documentName = snapshot.documentName
-        await store.adoptRecoverySnapshot(id, snapshot.sceneVersion)
+        await store.adoptRecoverySnapshot(id)
       },
       load
     )

@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 
-import { createEditor, type Editor } from '@open-pencil/core/editor'
+import { createEditor, type Editor, type LayoutSizingConversion } from '@open-pencil/core/editor'
+import { layoutSizing, type SceneNode } from '@open-pencil/scene-graph'
 
 function restoredScene(derived: boolean) {
   const editor = createEditor()
@@ -133,4 +134,206 @@ describe('restored frame layout and sizing edits', () => {
       editor.dispose()
     }
   })
+})
+
+describe('Hug with independently sized contents', () => {
+  for (const axis of ['width', 'height'] as const) {
+    const sizingAxis = axis === 'width' ? 'HORIZONTAL' : 'VERTICAL'
+    const mode = axis === 'width' ? 'VERTICAL' : 'HORIZONTAL'
+
+    function scene(siblingChanges: Partial<SceneNode> = {}) {
+      const editor = createEditor()
+      const notices: LayoutSizingConversion[] = []
+      editor.onEditorEvent('layout:sizing-converted', (event) => notices.push(event))
+      const parent = editor.graph.createNode('FRAME', editor.state.currentPageId, {
+        name: 'Button',
+        width: 300,
+        height: 300,
+        layoutMode: mode,
+        primaryAxisSizing: 'FIXED',
+        counterAxisSizing: 'FIXED'
+      })
+      const child = editor.graph.createNode('FRAME', parent.id, {
+        name: 'Label',
+        layoutMode: mode,
+        width: 250,
+        height: 250
+      })
+      const sibling = editor.graph.createNode('FRAME', parent.id, {
+        width: 120,
+        height: 120,
+        ...siblingChanges
+      })
+      return { editor, notices, parent, child, sibling }
+    }
+
+    test(`${axis}: Hug retains Fill, follows the independent size in both directions, and undoes`, () => {
+      const { editor, parent, child, sibling, notices } = scene()
+      try {
+        editor.setLayoutSizing(child.id, axis, 'FILL')
+        const before = snapshot(editor)
+        editor.setLayoutSizing(parent.id, axis, 'HUG')
+        expect(parent.counterAxisSizing).toBe('HUG')
+        expect(layoutSizing(editor.graph, child, sizingAxis)).toBe('FILL')
+        expect(parent[axis]).toBe(120)
+        expect(child[axis]).toBe(120)
+        const hugged = snapshot(editor)
+        editor.undoAction()
+        expect(snapshot(editor)).toEqual(before)
+        editor.redoAction()
+        expect(snapshot(editor)).toEqual(hugged)
+        for (const size of [200, 80]) {
+          editor.updateNode(sibling.id, { [axis]: size })
+          expect(parent[axis]).toBe(size)
+          expect(child[axis]).toBe(size)
+        }
+        expect(notices).toEqual([])
+      } finally {
+        editor.dispose()
+      }
+    })
+
+    test(`${axis}: choosing Fill preserves Hug until the last independent layer is set to Fill`, () => {
+      const { editor, parent, child, sibling, notices } = scene()
+      try {
+        editor.setLayoutSizing(parent.id, axis, 'HUG')
+        editor.setLayoutSizing(child.id, axis, 'FILL')
+        expect(parent.counterAxisSizing).toBe('HUG')
+        expect(parent[axis]).toBe(120)
+        expect(notices).toEqual([])
+        const before = snapshot(editor)
+        editor.setLayoutSizing(sibling.id, axis, 'FILL')
+        expect(parent.counterAxisSizing).toBe('FIXED')
+        expect(parent[axis]).toBe(120)
+        expect(notices).toEqual([
+          {
+            kind: 'container',
+            axis,
+            containerName: 'Button',
+            layerName: sibling.name
+          }
+        ])
+        editor.undoAction()
+        expect(snapshot(editor)).toEqual(before)
+        editor.redoAction()
+        expect(notices).toHaveLength(1)
+      } finally {
+        editor.dispose()
+      }
+    })
+
+    for (const siblingChanges of [
+      { visible: false },
+      { layoutPositioning: 'ABSOLUTE' as const },
+      { layoutAlignSelf: 'STRETCH' as const }
+    ]) {
+      test(`${axis}: ${JSON.stringify(siblingChanges)} cannot establish the Hug size`, () => {
+        const { editor, parent, child, notices } = scene(siblingChanges)
+        try {
+          editor.setLayoutSizing(parent.id, axis, 'HUG')
+          notices.length = 0
+          editor.setLayoutSizing(child.id, axis, 'FILL')
+          expect(parent.counterAxisSizing).toBe('FIXED')
+          expect(notices).toEqual([
+            {
+              kind: 'container',
+              axis,
+              containerName: 'Button',
+              layerName: 'Label'
+            }
+          ])
+        } finally {
+          editor.dispose()
+        }
+      })
+    }
+
+    test(`${axis}: a Hug sibling establishes its size from content`, () => {
+      const { editor, parent, child, sibling, notices } = scene({
+        layoutMode: mode,
+        counterAxisSizing: 'HUG'
+      })
+      try {
+        editor.graph.createNode('FRAME', sibling.id, { width: 90, height: 90 })
+        editor.setLayoutSizing(child.id, axis, 'FILL')
+        editor.setLayoutSizing(parent.id, axis, 'HUG')
+        expect(parent.counterAxisSizing).toBe('HUG')
+        expect(parent[axis]).toBe(90)
+        expect(child[axis]).toBe(90)
+        expect(notices).toEqual([])
+      } finally {
+        editor.dispose()
+      }
+    })
+
+    test(`${axis}: inherited Fill does not qualify as an independent layer`, () => {
+      const { editor, parent, child, notices } = scene()
+      try {
+        editor.graph.updateNode(parent.id, { counterAxisAlign: 'STRETCH' })
+        editor.setLayoutSizing(parent.id, axis, 'HUG')
+        expect(layoutSizing(editor.graph, child, sizingAxis)).toBe('FIXED')
+        expect(notices).toEqual([{ kind: 'contents', axis, containerName: 'Button', count: 2 }])
+      } finally {
+        editor.dispose()
+      }
+    })
+
+    test(`${axis}: setting both layers to Fill in one batch freezes once and undoes together`, () => {
+      const { editor, parent, child, sibling, notices } = scene()
+      try {
+        editor.setLayoutSizing(parent.id, axis, 'HUG')
+        const before = snapshot(editor)
+        editor.undo.runBatch('Set selection sizing', () => {
+          editor.setLayoutSizing(child.id, axis, 'FILL')
+          editor.setLayoutSizing(sibling.id, axis, 'FILL')
+        })
+        expect(parent.counterAxisSizing).toBe('FIXED')
+        expect(notices).toHaveLength(1)
+        expect(layoutSizing(editor.graph, child, sizingAxis)).toBe('FILL')
+        expect(layoutSizing(editor.graph, sibling, sizingAxis)).toBe('FILL')
+        editor.undoAction()
+        expect(snapshot(editor)).toEqual(before)
+      } finally {
+        editor.dispose()
+      }
+    })
+
+    test(`${axis}: along the flow, Hug freezes all Fill sizes together and reports once`, () => {
+      const { editor, parent, child, sibling, notices } = scene({
+        layoutGrow: 1
+      })
+      try {
+        editor.graph.updateNode(parent.id, {
+          layoutMode: sizingAxis,
+          primaryAxisSizing: 'FIXED'
+        })
+        editor.setLayoutSizing(child.id, axis, 'FILL')
+        editor.graph.createNode('FRAME', parent.id, { width: 40, height: 40 })
+        editor.updateNode(parent.id, { [axis]: 400 })
+        const sizes = [child[axis], sibling[axis]]
+        const before = snapshot(editor)
+        editor.setLayoutSizing(parent.id, axis, 'HUG')
+        expect(layoutSizing(editor.graph, child, sizingAxis)).toBe('FIXED')
+        expect(layoutSizing(editor.graph, sibling, sizingAxis)).toBe('FIXED')
+        expect([child[axis], sibling[axis]]).toEqual(sizes)
+        expect(notices).toEqual([
+          {
+            kind: 'contents',
+            axis,
+            containerName: 'Button',
+            count: 2
+          }
+        ])
+        const after = snapshot(editor)
+        editor.setLayoutSizing(parent.id, axis, 'HUG')
+        expect(notices).toHaveLength(1)
+        editor.undoAction()
+        expect(snapshot(editor)).toEqual(before)
+        editor.redoAction()
+        expect(snapshot(editor)).toEqual(after)
+      } finally {
+        editor.dispose()
+      }
+    })
+  }
 })

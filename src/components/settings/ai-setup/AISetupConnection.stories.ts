@@ -35,8 +35,6 @@ function agentSetup(overrides: Partial<AgentSetupState>): AgentSetupState {
     scanning: false,
     detected: null,
     bridge: false,
-    bridgeOutdated: false,
-    bridgeCommand: 'npm i -g @open-pencil/mcp@0.15.1',
     npm: true,
     installingAgent: false,
     installingBridge: false,
@@ -53,8 +51,6 @@ function piSetup(overrides: Partial<PiSetupState>): PiSetupState {
     companionOutdated: false,
     companionCommand: 'npm i -g @open-pencil/harness@0.15.1',
     bridge: false,
-    bridgeOutdated: false,
-    bridgeCommand: 'npm i -g @open-pencil/mcp@0.15.1',
     npm: true,
     installingCompanion: false,
     installingBridge: false,
@@ -220,10 +216,8 @@ export const PiOutdatedMCPFromBun: Story = {
     piSetup: piSetup({
       companion: true,
       bridge: true,
-      bridgeOutdated: true,
-      bridgeCommand: 'bun add -g @open-pencil/mcp@0.15.1',
       defaultModel: 'openai-codex/gpt-5.6',
-      error: 'canvas-install'
+      error: 'canvas-start'
     })
   },
   play: async ({ canvasElement }) => {

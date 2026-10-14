@@ -27,5 +27,11 @@
   "deepLinkCancelled": "Link abgebrochen: Erwartet wurde eine Datei mit der Endung „{file}“.",
   "deepLinkNodeNotFound": "Ebene „{node}“ wurde in „{file}“ nicht gefunden.",
   "openQueuedFilesFailed": "Die an OpenPencil übergebenen Dateien konnten nicht geöffnet werden: {error}",
-  "tokensLeftOut": "Nicht im Stylesheet enthalten: {names}."
+  "tokensLeftOut": "Nicht im Stylesheet enthalten: {names}.",
+  "layoutContainerFixedWidth": "„{name}“ verwendet jetzt eine feste Breite, damit „{layer}“ den verfügbaren Platz ausfüllen kann.",
+  "layoutContainerFixedHeight": "„{name}“ verwendet jetzt eine feste Höhe, damit „{layer}“ den verfügbaren Platz ausfüllen kann.",
+  "layoutLayerFixedWidth": "1 Ebene in „{name}“ verwendet jetzt eine feste Breite, damit sich „{name}“ an den Inhalt anpassen kann.",
+  "layoutLayerFixedHeight": "1 Ebene in „{name}“ verwendet jetzt eine feste Höhe, damit sich „{name}“ an den Inhalt anpassen kann.",
+  "layoutLayersFixedWidth": "{count} Ebenen in „{name}“ verwenden jetzt eine feste Breite, damit sich „{name}“ an den Inhalt anpassen kann.",
+  "layoutLayersFixedHeight": "{count} Ebenen in „{name}“ verwenden jetzt eine feste Höhe, damit sich „{name}“ an den Inhalt anpassen kann."
 }

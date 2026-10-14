@@ -139,10 +139,14 @@ describe('swapping an instance', () => {
       return component
     }
     const instance = outer('Outer A', 'Card').createInstance()
-    const nestedSlot = () =>
-      instance.children[0]?.children.find((child) => child.type === 'SLOT')
+    const nestedSlot = () => instance.children[0]?.children.find((child) => child.type === 'SLOT')
     nestedSlot()?.appendChild(Object.assign(api.createText(), { name: 'Filled' }))
-    return { instance, nestedSlot, same: outer('Outer B', 'Card'), other: outer('Outer C', innerName) }
+    return {
+      instance,
+      nestedSlot,
+      same: outer('Outer B', 'Card'),
+      other: outer('Outer C', innerName)
+    }
   }
 
   // Recorded in live Figma: nested slot content follows a nested instance of the same name.

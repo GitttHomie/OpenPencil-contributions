@@ -3,6 +3,7 @@ import * as v from 'valibot'
 import {
   TOKEN_UNITS,
   VARIABLE_SCOPES,
+  variableFormulaSchema,
   type Variable,
   type VariableCollection
 } from '@open-pencil/scene-graph'
@@ -10,7 +11,20 @@ import {
 const finite = v.pipe(v.number(), v.finite())
 const color = v.object({ r: finite, g: finite, b: finite, a: finite })
 const alias = v.object({ aliasId: v.string() })
-const value = v.union([color, finite, v.string(), v.boolean(), alias])
+const expression = v.object({
+  expression: v.literal('COMPOSE_COLOR'),
+  color: v.union([color, alias]),
+  opacity: v.union([finite, alias])
+})
+const value = v.union([
+  color,
+  finite,
+  v.string(),
+  v.boolean(),
+  alias,
+  expression,
+  variableFormulaSchema
+])
 const pluginData = v.array(v.object({ pluginId: v.string(), key: v.string(), value: v.string() }))
 
 export const variableSchema: v.GenericSchema<unknown, Variable> = v.object({
@@ -30,6 +44,7 @@ export const variableSchema: v.GenericSchema<unknown, Variable> = v.object({
     })
   ),
   unit: v.optional(v.picklist(TOKEN_UNITS)),
+  fontFamilyVariableId: v.optional(v.string()),
   expressions: v.optional(v.record(v.string(), v.object({ css: v.string(), resolved: finite }))),
   pluginData: v.optional(pluginData),
   key: v.optional(v.string()),
@@ -44,6 +59,7 @@ export const collectionSchema: v.GenericSchema<unknown, VariableCollection> = v.
       v.object({
         modeId: v.string(),
         name: v.string(),
+        sortPosition: v.optional(v.string()),
         condition: v.optional(v.string())
       })
     ),
@@ -52,5 +68,7 @@ export const collectionSchema: v.GenericSchema<unknown, VariableCollection> = v.
   modeAttribute: v.optional(v.string()),
   defaultModeId: v.string(),
   variableIds: v.array(v.string()),
-  pluginData: v.optional(pluginData)
+  pluginData: v.optional(pluginData),
+  key: v.optional(v.string()),
+  version: v.optional(v.string())
 })

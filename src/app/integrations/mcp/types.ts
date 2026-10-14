@@ -7,14 +7,23 @@ export type MCPHTTPTransport = {
   url: string
 }
 
+export type MCPLocalTransport = {
+  type: 'stdio'
+  command: string
+  args: string[]
+  /** Values live in the credential store, including environments imported from IDEs. */
+  environment?: CredentialRef
+}
+
 export type MCPAuthentication = { type: 'none' } | { type: 'bearer'; credentialRef: CredentialRef }
 
 export type MCPConnection = {
   id: MCPConnectionID
   name: string
   enabled: boolean
-  transport: MCPHTTPTransport
+  transport: MCPHTTPTransport | MCPLocalTransport
   authentication: MCPAuthentication
+  autoApprove?: string[]
 }
 
 export type MCPConnectionSettings = {
@@ -28,4 +37,9 @@ export type MCPConnectionDraft = {
   url: string
   enabled: boolean
   authenticationType: MCPAuthentication['type']
+  transportType?: 'streamable-http' | 'stdio'
+  command?: string
+  args?: string[]
+  autoApprove?: string[]
+  hasEnvironment?: boolean
 }

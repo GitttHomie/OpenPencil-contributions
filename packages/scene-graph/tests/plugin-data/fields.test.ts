@@ -71,7 +71,12 @@ describe('OpenPencil plugin data', () => {
 
   test('picking an OkHCL color keeps the node’s other plugin data', () => {
     const graph = new SceneGraph()
-    const paint = { type: 'SOLID' as const, visible: true, opacity: 1, color: { r: 1, g: 0, b: 0, a: 1 } }
+    const paint = {
+      type: 'SOLID' as const,
+      visible: true,
+      opacity: 1,
+      color: { r: 1, g: 0, b: 0, a: 1 }
+    }
     const node = graph.createNode('FRAME', graph.getPages()[0].id, {
       fills: [paint],
       strokes: [{ ...paint, weight: 1, align: 'INSIDE' as const }],

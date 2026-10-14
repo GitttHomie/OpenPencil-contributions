@@ -15,12 +15,9 @@ export interface AgentSetupState {
   detected: DetectedAgent | null
   /** OpenPencil's MCP server, through which agents reach the canvas. */
   bridge: boolean
-  /** The installed MCP server does not match this app's version. */
-  bridgeOutdated: boolean
-  /** Installs or updates the MCP server by hand. */
-  bridgeCommand: string
   /** npm, which one-click installation runs. */
   npm: boolean
+  adapterNeedsAdmin?: boolean
   installingAgent: boolean
   installingBridge: boolean
   error: AgentDiscovery['error']['value']
@@ -34,9 +31,9 @@ export interface PiSetupState {
   companion: boolean
   companionOutdated: boolean
   companionCommand: string
+  companionNeedsAdmin?: boolean
+  companionInstallable?: boolean
   bridge: boolean
-  bridgeOutdated: boolean
-  bridgeCommand: string
   npm: boolean
   installingCompanion: boolean
   installingBridge: boolean
@@ -64,9 +61,8 @@ export function useOnboardingAgents(
       scanning: discovery.scanning.value,
       detected: discovery.agents.value.find((agent) => agent.definition.id === id) ?? null,
       bridge: discovery.canvasBridgeAvailable.value,
-      bridgeOutdated: discovery.canvasBridgeOutdated.value,
-      bridgeCommand: discovery.canvasBridgeCommand.value,
       npm: discovery.npmAvailable.value,
+      adapterNeedsAdmin: discovery.adapterNeedsAdmin.value,
       installingAgent: discovery.installing.value === id,
       installingBridge: discovery.installing.value === 'canvas',
       error: discovery.error.value
@@ -81,9 +77,9 @@ export function useOnboardingAgents(
       companion: discovery.harnessAvailable.value,
       companionOutdated: discovery.harnessOutdated.value,
       companionCommand: discovery.harnessCommand.value,
+      companionNeedsAdmin: discovery.harnessNeedsAdmin.value,
+      companionInstallable: discovery.harnessInstallable.value,
       bridge: discovery.canvasBridgeAvailable.value,
-      bridgeOutdated: discovery.canvasBridgeOutdated.value,
-      bridgeCommand: discovery.canvasBridgeCommand.value,
       npm: discovery.npmAvailable.value,
       installingCompanion: discovery.installing.value === 'harness',
       installingBridge: discovery.installing.value === 'canvas',

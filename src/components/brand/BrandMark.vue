@@ -19,7 +19,7 @@ const sources = {
   'app-icon': 'app-icon'
 } as const
 const source = computed(() => {
-  // The ivory tile owns its background and always uses the light palette.
+  // The fork's app artwork owns its background and is shared by both themes.
   const suffix = variant !== 'app-icon' && appearance === 'dark' ? '-dark' : ''
   return `/brand/${sources[variant]}${suffix}.svg`
 })

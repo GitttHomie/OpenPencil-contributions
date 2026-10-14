@@ -10,7 +10,6 @@ import { agentModelLoaderKey } from '@/app/ai/agents/models'
 import { agentLookupSchema } from '@/app/ai/agents/native'
 import { agentDiscoveryKey } from '@/app/ai/agents/use'
 import { agentModelVerifierKey } from '@/app/ai/agents/verification'
-import { MCP_INSTALL_TARGET } from '@/app/automation/mcp/failure'
 
 import AgentSettingsFixture from './AgentSettingsFixture.vue'
 
@@ -25,13 +24,6 @@ const discovery = createAgentDiscovery({
     const response = await fetch('/__test/local-agents/install', {
       method: 'POST',
       body: JSON.stringify({ id: agent.id, package: agent.adapterPackage })
-    })
-    if (!response.ok) throw new Error('Install failed')
-  },
-  async installBridge() {
-    const response = await fetch('/__test/local-agents/install', {
-      method: 'POST',
-      body: JSON.stringify({ id: 'canvas', package: MCP_INSTALL_TARGET })
     })
     if (!response.ok) throw new Error('Install failed')
   },

@@ -6,6 +6,8 @@ import { appCredentialServices } from '@/app/settings/credentials/app'
 import { credentialRef } from '@/app/settings/credentials/reference'
 import type { CredentialRef, CredentialStatus } from '@/app/settings/credentials/types'
 
+import { localTransportSchema } from './configuration'
+import { mcpEnvironmentRef } from './environment'
 import { readMCPConnectionSettingsStorage, writeMCPConnectionSettingsStorage } from './storage'
 import type {
   MCPAuthentication,
@@ -42,14 +44,18 @@ const connectionSchema = v.object({
     v.transform((name) => name.slice(0, MCP_CONNECTION_NAME_MAX_LENGTH))
   ),
   enabled: v.fallback(v.boolean(), false),
-  transport: v.object({
-    type: v.literal('streamable-http'),
-    url: v.pipe(
-      v.string(),
-      v.trim(),
-      v.check((url) => isValidMCPConnectionURL(url))
-    )
-  }),
+  transport: v.union([
+    localTransportSchema,
+    v.object({
+      type: v.literal('streamable-http'),
+      url: v.pipe(
+        v.string(),
+        v.trim(),
+        v.check((url) => isValidMCPConnectionURL(url))
+      )
+    })
+  ]),
+  autoApprove: v.optional(v.array(v.string()), []),
   authentication: v.optional(v.unknown())
 })
 
@@ -58,6 +64,9 @@ function parseConnection(value: unknown): MCPConnection | null {
   if (!parsed.success) return null
   const { authentication, ...connection } = parsed.output
   const id = connection.id as MCPConnectionID
+  if (connection.transport.type === 'stdio' && connection.transport.environment) {
+    if (!isEqual(connection.transport.environment, mcpEnvironmentRef(id))) return null
+  }
   return { ...connection, id, authentication: parseAuthentication(authentication, id) }
 }
 
@@ -124,12 +133,21 @@ export function mcpConnectionCredentialRef(id: MCPConnectionID): CredentialRef {
 }
 
 export function createMCPConnectionDraft(connection?: MCPConnection): MCPConnectionDraft {
+  const local =
+    connection?.transport.type === 'stdio'
+      ? connection.transport
+      : { command: '', args: [], environment: undefined }
   return {
     id: connection?.id ?? null,
     name: connection?.name ?? '',
-    url: connection?.transport.url ?? '',
+    url: connection?.transport.type === 'streamable-http' ? connection.transport.url : '',
     enabled: connection?.enabled ?? false,
-    authenticationType: connection?.authentication.type ?? 'none'
+    authenticationType: connection?.authentication.type ?? 'none',
+    transportType: connection?.transport.type ?? 'streamable-http',
+    command: local.command,
+    args: [...local.args],
+    autoApprove: [...(connection?.autoApprove ?? [])],
+    hasEnvironment: !!local.environment
   }
 }
 
@@ -143,7 +161,6 @@ export function saveMCPConnectionDraft(draft: MCPConnectionDraft): MCPConnection
       connection.id !== draft.id && connection.name.toLowerCase() === name.toLowerCase()
   )
   if (duplicateName) throw new Error('Connection names must be unique')
-  const url = validateMCPConnectionURL(draft.url.trim()).toString()
   if (draft.id && !MCP_CONNECTION_ID_PATTERN.test(draft.id)) {
     throw new Error('Connection ID is invalid')
   }
@@ -156,8 +173,17 @@ export function saveMCPConnectionDraft(draft: MCPConnectionDraft): MCPConnection
     id,
     name,
     enabled: draft.enabled,
-    transport: { type: 'streamable-http', url },
-    authentication
+    transport:
+      draft.transportType === 'stdio'
+        ? v.parse(localTransportSchema, {
+            type: 'stdio',
+            command: draft.command,
+            args: draft.args ?? [],
+            ...(draft.hasEnvironment ? { environment: mcpEnvironmentRef(id) } : {})
+          })
+        : { type: 'streamable-http', url: validateMCPConnectionURL(draft.url.trim()).toString() },
+    authentication: draft.transportType === 'stdio' ? { type: 'none' } : authentication,
+    autoApprove: [...(draft.autoApprove ?? [])]
   }
   const index = mcpConnectionSettings.value.connections.findIndex((item) => item.id === id)
   if (index === -1) mcpConnectionSettings.value.connections.push(connection)
@@ -179,6 +205,7 @@ export function mcpConnectionCredentialStatus(id: MCPConnectionID): Promise<Cred
 
 export async function removeMCPConnection(id: MCPConnectionID): Promise<void> {
   await appCredentialServices.manager.clear(mcpConnectionCredentialRef(id))
+  await appCredentialServices.manager.clear(mcpEnvironmentRef(id))
   mcpConnectionSettings.value.connections = mcpConnectionSettings.value.connections.filter(
     (connection) => connection.id !== id
   )

@@ -2,6 +2,8 @@ import { isEqual } from 'es-toolkit'
 
 import {
   removeComponentProperty,
+  exposableInstances,
+  instanceExposureIssue,
   resolveComponentPropertyValue,
   OPEN_PENCIL_PLUGIN_DATA,
   readPluginData
@@ -9,6 +11,7 @@ import {
 import type { ComponentPropertyDefinition, SceneNode } from '@open-pencil/scene-graph'
 
 import { assertNodeEditable } from '#core/editor/capabilities'
+import { reorderPropertyDefinitions } from '#core/editor/components/variants/order'
 import type { EditorContext } from '#core/editor/types'
 import { randomHex } from '#core/random'
 
@@ -291,7 +294,54 @@ export function createComponentAuthoringActions(
     return true
   }
 
+  /**
+   * Move a property among its siblings; slots keep their place. `.fig` keeps the order, and a
+   * set's variant names follow its variant properties' order.
+   */
+  function moveComponentProperty(ownerId: string, propertyId: string, index: number): boolean {
+    const owner = ctx.graph.getNode(ownerId)
+    if (owner?.type !== 'COMPONENT' && owner?.type !== 'COMPONENT_SET') return false
+    assertNodeEditable(ctx.graph, ownerId)
+    const ids = owner.componentPropertyDefinitions.map((definition) => definition.id)
+    const movable = new Set(
+      owner.componentPropertyDefinitions
+        .filter((definition) => definition.type !== 'SLOT')
+        .map((definition) => definition.id)
+    )
+    if (!movable.has(propertyId)) return false
+    const order = moveWithin(ids, movable, propertyId, index)
+    if (!order || isEqual(order, ids)) return !!order
+    if (owner.type === 'COMPONENT_SET') return reorderPropertyDefinitions(ctx, owner.id, order)
+    const byId = new Map(owner.componentPropertyDefinitions.map((item) => [item.id, item]))
+    patch(
+      owner.id,
+      { componentPropertyDefinitions: order.flatMap((id) => byId.get(id) ?? []) },
+      'Reorder component properties'
+    )
+    return true
+  }
+
+  /** Show a nested instance's properties on instances of its component, as Figma does. */
+  function setInstanceExposed(nodeId: string, exposed: boolean): boolean {
+    const node = ctx.graph.getNode(nodeId)
+    if (node?.type !== 'INSTANCE') return false
+    const issue = instanceExposureIssue(ctx.graph, node)
+    if (issue === 'not-in-component' || issue === 'not-primary') return false
+    if (exposed && issue) return false
+    assertNodeEditable(ctx.graph, nodeId)
+    if (node.isExposedInstance === exposed) return true
+    patch(
+      nodeId,
+      { isExposedInstance: exposed },
+      exposed ? 'Expose nested instance' : 'Hide nested instance'
+    )
+    return true
+  }
+
   return {
+    getExposableInstances: (componentId: string) => exposableInstances(ctx.graph, componentId),
+    moveComponentProperty,
+    setInstanceExposed,
     getComponentPropertyAuthoring: (nodeId: string) => componentAuthoringContext(ctx.graph, nodeId),
     getComponentPropertyBindings: (ownerId: string, propertyId: string) =>
       componentBindingNodes(ctx.graph, ownerId).flatMap((node) =>
@@ -309,3 +359,15 @@ export function createComponentAuthoringActions(
     deleteComponentProperty
   }
 }
+
+function moveWithin(ids: string[], movable: Set<string>, sourceId: string, index: number) {
+  const subset = ids.filter((id) => movable.has(id))
+  const from = subset.indexOf(sourceId)
+  if (from === -1 || index < 0 || index >= subset.length) return null
+  subset.splice(from, 1)
+  subset.splice(index, 0, sourceId)
+  let next = 0
+  return ids.map((id) => (movable.has(id) ? subset[next++] : id))
+}
+
+/** Create, link, edit and remove a main component's text, boolean and swap properties. */

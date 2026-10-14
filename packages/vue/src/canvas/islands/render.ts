@@ -1,12 +1,17 @@
 import { h, type VNode } from 'vue'
 
 import { layerPath } from '@open-pencil/core/editor'
-import type { DesignElement, DesignNode } from '@open-pencil/dom-css/export'
-import type { SceneGraph } from '@open-pencil/scene-graph'
+import {
+  BUTTON_RESET,
+  type ControlModel,
+  type ControlRole,
+  type DesignElement,
+  type DesignNode
+} from '@open-pencil/dom-css/export'
+import { shaderOfPaint, type SceneGraph } from '@open-pencil/scene-graph'
 
 import { wrapRole } from './controls'
-import type { ControlModel } from './model'
-import type { IslandRole } from './roles'
+import IslandShader from './IslandShader.vue'
 import type { IslandState } from './state'
 
 export interface IslandRenderContext {
@@ -14,7 +19,7 @@ export interface IslandRenderContext {
   graph: SceneGraph
   rootId: string
   controls: ReadonlyMap<string, ControlModel>
-  roles: ReadonlyMap<string, IslandRole>
+  roles: ReadonlyMap<string, ControlRole>
   state: IslandState
 }
 
@@ -28,16 +33,11 @@ export interface ElementOverride {
   children?: () => (VNode | string)[]
 }
 
-/** Element styles a native `<button>` adds, cleared so the design's own styles show. */
-const BUTTON_RESET: Record<string, string> = {
-  border: 'none',
-  padding: '0',
-  margin: '0',
-  background: 'none',
-  font: 'inherit',
-  color: 'inherit',
-  'text-align': 'inherit',
-  cursor: 'pointer'
+/** The image a layer's shader fill shows: its first fill's, as the projection reads it. */
+function shaderImage(element: DesignElement): string | undefined {
+  const node = element.sourceSceneNode
+  const fill = node?.fills.at(0)
+  return node && fill ? (shaderOfPaint(node, fill)?.image ?? undefined) : undefined
 }
 
 /** Render an element as the design draws it, with a role's changes applied. */
@@ -57,8 +57,17 @@ export function renderElement(
       ...override.style
     }).filter(([key]) => !omitted.has(key))
   )
-  const children =
+  const content =
     override.children ?? (() => element.children.map((child) => renderNode(context, child, path)))
+  // A shader fill plays behind the content, whatever draws the content, from the canvas's own
+  // player for the image its paint shows.
+  const image = element.shader ? shaderImage(element) : undefined
+  const children = () => [
+    ...(image
+      ? [h(IslandShader, { key: `${path}\0shader`, image, frame: element.shader?.frame })]
+      : []),
+    ...content()
+  ]
   const { 'data-open-pencil-node-id': _id, ...attrs } = element.attrs
   return h(
     override.tag ?? element.tagName,

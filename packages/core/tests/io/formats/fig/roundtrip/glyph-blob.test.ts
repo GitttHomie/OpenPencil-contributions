@@ -2,21 +2,19 @@ import { beforeAll, describe, expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
+import { expectDefined } from '#core-tests/helpers/assert'
+import { FIXTURES } from '#core-tests/helpers/fig/fixtures'
+import { corePackagePath } from '#core-tests/helpers/paths'
+import { HEAVY_TEST_TIMEOUT_MS } from '#core-tests/helpers/test-utils'
+
 import { exportFigFile, initCodec, parseFigFile, SceneGraph } from '@open-pencil/core'
 import { fontManager } from '@open-pencil/core/text'
 import { parseFigBuffer } from '@open-pencil/fig'
 
-import { expectDefined } from '#core-tests/helpers/assert'
-import { HEAVY_TEST_TIMEOUT_MS } from '#core-tests/helpers/test-utils'
-
-import { FIXTURES } from '#core-tests/helpers/fig/fixtures'
-
-const INTER_ASSETS = resolve(import.meta.dir, '../../../../../assets')
+const INTER_ASSETS = corePackagePath('assets')
 
 function countGlyphBlobs(bytes: Uint8Array) {
-  const parsed = parseFigBuffer(
-    bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
-  )
+  const parsed = parseFigBuffer(bytes.slice().buffer)
   let glyphs = 0
   let glyphsWithBlob = 0
   const uniqueGlyphBlobs = new Set<number>()
@@ -38,11 +36,7 @@ function countGlyphBlobs(bytes: Uint8Array) {
 function loadInterFonts() {
   for (const style of ['Regular', 'Medium', 'SemiBold', 'Bold', 'ExtraBold']) {
     const bytes = readFileSync(resolve(INTER_ASSETS, `Inter-${style}.ttf`))
-    fontManager.markLoaded(
-      'Inter',
-      style,
-      bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
-    )
+    fontManager.markLoaded('Inter', style, bytes.slice().buffer)
   }
 }
 
@@ -56,7 +50,6 @@ describe('roundtrip: text glyph blobs', () => {
 
   test(
     'preserves imported Figma glyph blobs for fallback rendering',
-    { timeout: HEAVY_TEST_TIMEOUT_MS },
     async () => {
       const fixtureBytes = new Uint8Array(readFileSync(resolve(FIXTURES, 'gold-preview.fig')))
       const input = countGlyphBlobs(fixtureBytes)
@@ -73,7 +66,8 @@ describe('roundtrip: text glyph blobs', () => {
       expect(input.glyphsWithBlob).toBeGreaterThan(0)
       expect(output.glyphsWithBlob).toBe(input.glyphsWithBlob)
       expect(output.uniqueGlyphBlobs).toBeLessThanOrEqual(input.uniqueGlyphBlobs)
-    }
+    },
+    { timeout: HEAVY_TEST_TIMEOUT_MS }
   )
 
   test('deduplicates generated glyph blobs across repeated text', async () => {
@@ -139,7 +133,8 @@ describe('roundtrip: text glyph blobs', () => {
       expect(message.derivedTextGlyphs).toEqual([])
       expect(message).toMatchObject({ width: 230, lineHeight: 16, textAutoResize: 'HEIGHT' })
       const raw = parseFigBuffer(new Uint8Array(bytes).buffer)
-      const glyphs = raw.nodeChanges.find((node) => node.name === 'Message')?.derivedTextData?.glyphs ?? []
+      const glyphs =
+        raw.nodeChanges.find((node) => node.name === 'Message')?.derivedTextData?.glyphs ?? []
       expect(glyphs.length).toBeGreaterThan(0)
       for (const glyph of glyphs) expect(glyph.position.x).toBeLessThan(230)
       reopened.updateNode(message.id, { opacity: 0.8 })

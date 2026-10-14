@@ -15,7 +15,8 @@ export function bindNudgeKeys(store: EditorStore) {
   useEventListener(window, 'keydown', (e: KeyboardEvent) => {
     if (isEditing(e) || store.state.editingTextId) return
     if (isReservedModShortcut(e)) e.preventDefault()
-    if (e.metaKey || e.ctrlKey || e.altKey) return
+    // Option keeps measurements active; Cmd/Ctrl only changes their targeting depth.
+    if (!e.altKey && (e.metaKey || e.ctrlKey)) return
 
     const delta = NUDGE_DELTAS[e.code]
     if (!delta || store.state.selectedIds.size === 0) return

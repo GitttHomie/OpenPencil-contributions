@@ -1,8 +1,13 @@
 import { computed, type ComputedRef } from 'vue'
 
-import { layoutSizingPatch, type Editor } from '@open-pencil/core/editor'
+import { type Editor } from '@open-pencil/core/editor'
 import type { SceneNode } from '@open-pencil/scene-graph'
-import { numberPropertyValue } from '@open-pencil/scene-graph'
+import {
+  layoutSizingUpdates,
+  numberPropertyValue,
+  sharedNumberGroup,
+  independentNumberGroup
+} from '@open-pencil/scene-graph'
 
 import type { BindingTarget } from '#vue/controls/binding-provider/types'
 import { useNodePreview } from '#vue/controls/node-preview/use'
@@ -23,12 +28,30 @@ export function createNumberPropertyActions(editor: Editor, targets: ComputedRef
         const patch = changes.get(id) ?? {}
         const node = editor.getNode(id)
         if (!node) return patch
-        const parent = node.parentId ? editor.getNode(node.parentId) : undefined
-        const parentMode =
-          node.layoutPositioning === 'ABSOLUTE' ? 'NONE' : (parent?.layoutMode ?? 'NONE')
+        const prepared = new Set<string>()
+        for (const path of Object.keys(patch)) {
+          const group = sharedNumberGroup(node, path)
+          if (!group || prepared.has(group.shared)) continue
+          prepared.add(group.shared)
+          if (group.paths.every((side) => typeof patch[side] === 'number')) {
+            patch[group.shared] = value
+            if (group.shared === 'strokeWeight')
+              patch.strokes = node.strokes.map((stroke) => ({ ...stroke, weight: value }))
+          } else {
+            Object.assign(patch, { ...independentNumberGroup(node, group), ...patch })
+          }
+        }
         for (const axis of ['width', 'height'] as const) {
           if (typeof patch[axis] === 'number') {
-            Object.assign(patch, layoutSizingPatch(node, axis, 'FIXED', parentMode))
+            Object.assign(
+              patch,
+              layoutSizingUpdates(
+                editor.graph,
+                node,
+                axis === 'width' ? 'HORIZONTAL' : 'VERTICAL',
+                'FIXED'
+              )
+            )
           }
         }
         return patch

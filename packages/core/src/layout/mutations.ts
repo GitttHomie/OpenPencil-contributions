@@ -5,23 +5,14 @@ import {
   type SceneMutationImpact
 } from '@open-pencil/scene-graph'
 
-import { computeAllLayouts, computeLayout } from '#core/layout'
+import { computeAllLayouts, computeLayoutForNode } from '#core/layout'
+
+import { trackLayoutEdits } from './invalidation'
 
 export function createLayoutRunner(getGraph: () => SceneGraph) {
+  trackLayoutEdits(getGraph())
   function runLayoutForNode(id: string) {
-    const graph = getGraph()
-    const node = graph.getNode(id)
-    if (!node) return
-
-    computeAllLayouts(graph, id)
-
-    let parent = node.parentId ? graph.getNode(node.parentId) : undefined
-    while (parent) {
-      if (parent.layoutMode !== 'NONE') {
-        computeLayout(graph, parent.id)
-      }
-      parent = parent.parentId ? graph.getNode(parent.parentId) : undefined
-    }
+    computeLayoutForNode(getGraph(), id)
   }
 
   function compactLayoutScope(impact: SceneMutationImpact): string[] {
@@ -45,14 +36,16 @@ export function createLayoutRunner(getGraph: () => SceneGraph) {
     const graph = getGraph()
     const { result, impact } = await collectSceneMutation(graph, operation)
     await beforeLayout?.(result)
-    const scopeIds = compactLayoutScope(impact)
-    if (scopeIds.length > 0) {
-      for (const id of scopeIds) runLayoutForNode(id)
-    } else if (fallbackId) {
-      computeAllLayouts(graph, fallbackId)
-    }
+    if (!runLayoutForImpact(impact) && fallbackId) computeAllLayouts(graph, fallbackId)
     return result
   }
 
-  return { runLayoutForNode, runMutationWithLayout }
+  /** Lays out what an edit touched; returns whether there was anything to lay out. */
+  function runLayoutForImpact(impact: SceneMutationImpact): boolean {
+    const scopeIds = compactLayoutScope(impact)
+    for (const id of scopeIds) runLayoutForNode(id)
+    return scopeIds.length > 0
+  }
+
+  return { runLayoutForNode, runLayoutForImpact, runMutationWithLayout }
 }

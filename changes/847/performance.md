@@ -1,0 +1,6 @@
+- Reuse bounded foreground-blur previews while moving shapes and navigating effect-heavy frames, with full-quality rendering after interaction.
+- Decode large `.fig` records on demand, share unchanged component-instance values, and save edited archives by rewriting changed records in a worker, including dependent instances on unopened pages.
+- Record incremental page changes for AI and MCP undo instead of copying the entire page for every structural tool call.
+- Apply AI-generated component trees with one instance synchronization per mutation instead of one per awaited layer, and limit JSX layout to the destination and its ancestors.
+- Reuse glyph coverage and text measurements across layout passes and avoid scheduling component synchronization for layout-only writes.
+- Reuse CLI discovery sessions while switching models and avoid resending the full design workflow on follow-up messages. Include first-output time and tool-call counts in local diagnostics.

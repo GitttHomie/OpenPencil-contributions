@@ -49,7 +49,7 @@ function commit() {
         v-model="name"
         size="xs"
         tone="panel"
-        :aria-label="panels.variantPropertyName"
+        :aria-label="panels.componentPropertyName"
         :state="invalid ? 'invalid' : 'idle'"
         @change="commit"
         @enter="commit"

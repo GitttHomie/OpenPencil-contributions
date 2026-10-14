@@ -6,5 +6,8 @@ export const APP_DATABASE_NAMES = {
   localCanvas: 'open-pencil-cloud-local',
   outbox: 'open-pencil-cloud-outbox',
   recovery: 'open-pencil-recovery',
-  diagnostics: 'open-pencil-diagnostics'
+  diagnostics: 'open-pencil-diagnostics',
+  aiSessions: 'open-pencil-ai-sessions',
+  /** Written and deleted once per page, to learn whether the engine stores Blobs. */
+  blobProbe: 'open-pencil-blob-probe'
 } as const

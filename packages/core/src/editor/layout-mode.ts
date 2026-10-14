@@ -1,7 +1,16 @@
-import type { LayoutMode, LayoutSizing, SceneNode } from '@open-pencil/scene-graph'
+import {
+  layoutSizing,
+  layoutSizingError,
+  layoutSizingUpdates,
+  type LayoutMode,
+  type LayoutSizing,
+  type SceneNode
+} from '@open-pencil/scene-graph'
+
+import { hasIndependentCrossAxisChild } from '#core/layout/hug-fill'
 
 import type { NodePreview } from './node-preview'
-import type { EditorContext } from './types'
+import type { EditorContext, LayoutSizingConversion } from './types'
 
 export function createLayoutModeActions(
   ctx: EditorContext,
@@ -39,11 +48,7 @@ export function createLayoutModeActions(
           x: node.x,
           y: node.y,
           width: node.width,
-          height: node.height,
-          layoutGrow: 0,
-          layoutAlignSelf: 'AUTO',
-          primaryAxisSizing: node.primaryAxisSizing === 'FILL' ? 'FIXED' : node.primaryAxisSizing,
-          counterAxisSizing: node.counterAxisSizing === 'FILL' ? 'FIXED' : node.counterAxisSizing
+          height: node.height
         })
       }
       return [{ id: node.id, patch }]
@@ -67,34 +72,61 @@ export function createLayoutModeActions(
     const parent = node.parentId ? ctx.graph.getNode(node.parentId) : undefined
     const parentMode =
       node.layoutPositioning === 'ABSOLUTE' ? 'NONE' : (parent?.layoutMode ?? 'NONE')
-    if (sizing === 'FILL' && parentMode === 'NONE') return
+    if (layoutSizingError(ctx.graph, node, sizing)) return
+    const sizingAxis = axis === 'width' ? 'HORIZONTAL' : 'VERTICAL'
 
     const preview = beginNodePreview(`Set ${axis} sizing`)
+    let conversion: LayoutSizingConversion | undefined
     // Fill needs a definite parent extent. Freeze only the affected Hug axis,
     // before touching the child, so layout cannot resolve the cycle to zero.
     if (sizing === 'FILL' && parent && parentMode !== 'GRID') {
       const key = sizingKey(parent, axis)
-      if (parent[key] === 'HUG') {
+      if (parent[key] === 'HUG' && !hasIndependentCrossAxisChild(ctx.graph, parent, axis, id)) {
         preview.update(
           parent.id,
           editedLayoutChanges(parent, { [key]: 'FIXED', [axis]: parent[axis] })
         )
+        conversion = { kind: 'container', axis, containerName: parent.name, layerName: node.name }
       }
     }
     // Conversely, Hug must measure children rather than depend on their Fill.
-    if (sizing === 'HUG' && node.layoutMode !== 'NONE') {
-      for (const child of ctx.graph.getChildren(id)) {
-        if (child.layoutPositioning === 'ABSOLUTE') continue
-        if (fillsLayoutAxis(child, axis, node.layoutMode)) {
-          preview.update(
-            child.id,
-            editedLayoutChanges(child, layoutSizingPatch(child, axis, 'FIXED', node.layoutMode))
-          )
-        }
+    if (
+      sizing === 'HUG' &&
+      node.layoutMode !== 'NONE' &&
+      !hasIndependentCrossAxisChild(ctx.graph, node, axis)
+    ) {
+      // Capture before the first conversion can lay out and resize later siblings.
+      const children = ctx.graph
+        .getChildren(id)
+        .filter(
+          (child) =>
+            child.layoutPositioning !== 'ABSOLUTE' &&
+            layoutSizing(ctx.graph, child, sizingAxis) === 'FILL'
+        )
+        .map((child) => ({ child, size: child[axis] }))
+      for (const { child, size } of children) {
+        preview.update(
+          child.id,
+          editedLayoutChanges(child, {
+            ...layoutSizingUpdates(ctx.graph, child, sizingAxis, 'FIXED'),
+            [axis]: size
+          })
+        )
       }
+      if (children.length)
+        conversion = {
+          kind: 'contents',
+          axis,
+          containerName: node.name,
+          count: children.length
+        }
     }
-    preview.update(id, editedLayoutChanges(node, layoutSizingPatch(node, axis, sizing, parentMode)))
+    preview.update(
+      id,
+      editedLayoutChanges(node, layoutSizingUpdates(ctx.graph, node, sizingAxis, sizing))
+    )
     preview.commit()
+    if (conversion) ctx.emitEditorEvent('layout:sizing-converted', conversion)
   }
 
   return { setLayoutMode, setLayoutPositioning, setLayoutSizing }
@@ -114,36 +146,6 @@ function editedLayoutChanges(node: SceneNode, changes: Partial<SceneNode>): Part
 function sizingKey(node: SceneNode, axis: 'width' | 'height') {
   const primary = axis === (node.layoutMode === 'HORIZONTAL' ? 'width' : 'height')
   return primary ? 'primaryAxisSizing' : 'counterAxisSizing'
-}
-
-function fillsLayoutAxis(node: SceneNode, axis: 'width' | 'height', parentMode: LayoutMode) {
-  const flex = node.layoutMode === 'HORIZONTAL' || node.layoutMode === 'VERTICAL'
-  if (flex && node[sizingKey(node, axis)] === 'FILL') return true
-  const main = axis === (parentMode === 'VERTICAL' ? 'height' : 'width')
-  return main ? node.layoutGrow > 0 : node.layoutAlignSelf === 'STRETCH'
-}
-
-/** Physical-axis sizing; grow and stretch follow the parent's direction. */
-export function layoutSizingPatch(
-  node: SceneNode,
-  axis: 'width' | 'height',
-  sizing: LayoutSizing,
-  parentMode: LayoutMode
-): Partial<SceneNode> {
-  const patch: Partial<SceneNode> = {}
-  const flex = node.layoutMode === 'HORIZONTAL' || node.layoutMode === 'VERTICAL'
-  if (flex) patch[sizingKey(node, axis)] = sizing
-  else {
-    const key = axis === 'width' ? 'counterAxisSizing' : 'primaryAxisSizing'
-    if (sizing === 'HUG' && node.childIds.length > 0) patch[key] = 'HUG'
-    else if (node[key] === 'HUG') patch[key] = 'FIXED'
-  }
-  if (parentMode !== 'NONE') {
-    const main = axis === (parentMode === 'VERTICAL' ? 'height' : 'width')
-    if (main) patch.layoutGrow = sizing === 'FILL' ? 1 : 0
-    else patch.layoutAlignSelf = sizing === 'FILL' ? 'STRETCH' : 'AUTO'
-  }
-  return patch
 }
 
 function layoutModeUpdates(

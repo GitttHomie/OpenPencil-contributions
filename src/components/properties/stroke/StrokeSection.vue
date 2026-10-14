@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 
 import type { Color, Fill, SceneNode, Stroke } from '@open-pencil/scene-graph'
 import { colorToHexRaw } from '@open-pencil/scene-graph/color'
@@ -8,6 +8,7 @@ import {
   BORDER_WIDTH_PATHS,
   applyStrokePaint,
   BindableValueRoot,
+  MIXED,
   useColorBindingProvider,
   useI18n,
   useOkHCL,
@@ -17,6 +18,7 @@ import type { BindableValueActions } from '@open-pencil/vue'
 
 import FillPicker from '@/components/fill-picker/FillPicker.vue'
 import NumberField from '@/components/inputs/NumberField.vue'
+import PaintField from '@/components/inputs/PaintField.vue'
 import VariableBindingPicker from '@/components/properties/binding/VariableBindingPicker.vue'
 import PropertyItemRow from '@/components/properties/item-list/PropertyItemRow.vue'
 import {
@@ -26,8 +28,8 @@ import {
   paintBindingTargets,
   startCanvasPaintGesture
 } from '@/components/properties/paint/binding'
+import { useGradientEditing } from '@/components/properties/paint/gradient-edit'
 import { createStrokeOkhclAdapter } from '@/components/properties/paint/okhcl'
-import PaintField from '@/components/properties/paint/PaintField.vue'
 import PaintValue from '@/components/properties/paint/PaintValue.vue'
 import PropertyListRoot from '@/components/properties/PropertyListRoot.vue'
 import { useSharedStylePicker } from '@/components/properties/shared-style/useSharedStylePicker'
@@ -48,8 +50,25 @@ import StrokeSettingsPopover from './StrokeSettingsPopover.vue'
 
 const strokeCtx = useStrokeControls()
 const { advancedActive } = strokeCtx
+/** Empty when the layers align their strokes differently, so the field reads Mixed. */
+const alignValue = computed(() => {
+  const align = strokeCtx.currentAlign()
+  return align === MIXED ? '' : align
+})
 const colorProvider = useColorBindingProvider()
 const okhcl = useOkHCL()
+const gradients = useGradientEditing()
+
+/** Opening a paint's picker shows its gradient handles on the canvas; closing commits the edit. */
+function onPickerOpenChange(
+  nodeIds: readonly string[],
+  index: number,
+  open: boolean,
+  binding: BindableValueActions<Color>
+) {
+  gradients.setOpen(gradients.target(nodeIds, 'strokes', index), open)
+  if (!open) commitPaintMutation(binding)
+}
 const { panels, common } = useI18n()
 
 /** A bound variable colours the swatch, but only a solid stroke has one colour to replace. */
@@ -92,6 +111,11 @@ function supportsSides(node: SceneNode | null) {
     ['FRAME', 'COMPONENT', 'INSTANCE', 'RECTANGLE', 'ROUNDED_RECTANGLE'].includes(node.type)
   )
 }
+const canEditSides = computed(
+  () =>
+    strokeCtx.nodes.value.length > 0 &&
+    strokeCtx.nodes.value.every((node) => supportsSides(node) && node.strokes.length > 0)
+)
 function showSides(node: SceneNode | null) {
   return supportsSides(node) && node
     ? (sideVisibility.value[node.id] ?? node.independentStrokeWeights)
@@ -128,7 +152,7 @@ function onToggleSides(node: SceneNode | null) {
           @patch="actions.patch(0, $event)"
         />
         <IconButton
-          v-if="!isMixed && items.length > 0 && supportsSides(activeNode)"
+          v-if="!isMixed && items.length > 0 && canEditSides"
           :label="panels.strokeSides"
           size="xs"
           class="size-[26px] shrink-0"
@@ -178,20 +202,20 @@ function onToggleSides(node: SceneNode | null) {
             <template #preview>
               <FillPicker
                 :label="panels.stroke"
-                :gradient-target="
-                  selectedNodeIds.length === 1 && activeNode
-                    ? { nodeId: activeNode.id, property: 'strokes', index }
-                    : undefined
-                "
                 :fill="displayStroke(stroke, binding.resolvedValue)"
                 :okhcl="createStrokeOkhclAdapter(okhcl, activeNode, index)"
                 @canvas-gesture="startCanvasPaintGesture(binding.actions, flush)"
+                :keep-open="gradients.pressesHandle"
+                :active-stop="gradients.stop(gradients.target(selectedNodeIds, 'strokes', index))"
+                @update:active-stop="
+                  gradients.setStop(gradients.target(selectedNodeIds, 'strokes', index), $event)
+                "
                 @update="
                   updateStrokePaint(binding.actions, flush, stroke, $event, (next) =>
                     actions.update(index, next)
                   )
                 "
-                @open-change="!$event && commitPaintMutation(binding.actions)"
+                @open-change="onPickerOpenChange(selectedNodeIds, index, $event, binding.actions)"
                 @cancel="cancelPaintMutation(binding.actions)"
               />
             </template>
@@ -239,14 +263,15 @@ function onToggleSides(node: SceneNode | null) {
         <AppSelect
           :label="panels.strokeType"
           :ui="{ trigger: 'w-[88px] flex-none' }"
-          :model-value="strokeCtx.currentAlign(activeNode)"
+          :model-value="alignValue"
+          :placeholder="panels.mixed"
           :options="strokeCtx.alignOptions"
           data-property="stroke-align"
-          @update:model-value="strokeCtx.updateAlign($event as Stroke['align'], activeNode)"
+          @update:model-value="strokeCtx.updateAlign($event as Stroke['align'])"
         />
         <Tip :label="panels.strokeWeight">
           <VariableNumberField
-            v-if="activeNode && supportsSides(activeNode) && !showSides(activeNode)"
+            v-if="activeNode && canEditSides && !showSides(activeNode)"
             class="flex-1"
             icon="W"
             :aria-label="panels.strokeWeight"
@@ -260,7 +285,7 @@ function onToggleSides(node: SceneNode | null) {
             edit-properties
           />
           <NumberField
-            v-else-if="activeNode && !supportsSides(activeNode)"
+            v-else-if="activeNode && !canEditSides"
             icon="W"
             :aria-label="panels.strokeWeight"
             :model-value="items[0]?.weight ?? 1"
@@ -274,7 +299,7 @@ function onToggleSides(node: SceneNode | null) {
       </div>
 
       <div
-        v-if="!isMixed && items.length > 0 && activeNode && showSides(activeNode)"
+        v-if="!isMixed && items.length > 0 && activeNode && canEditSides && showSides(activeNode)"
         class="mt-1.5 grid grid-cols-2 gap-1.5"
       >
         <VariableNumberField

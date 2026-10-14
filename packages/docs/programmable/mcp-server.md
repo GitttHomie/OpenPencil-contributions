@@ -11,11 +11,25 @@ Two transports: **stdio** for MCP clients, and **Streamable HTTP** for browser e
 
 Tool definitions own native Valibot input schemas, execution/mutation metadata, capabilities, and optional interface exposure exclusions. Tools are included by default; `exposure: { mcp: false, ai: false, webmcp: false }` can exclude them independently from each adapter. Exposure does not bypass execution support or user permissions: WebMCP still requires supported execution and explicit Off, Inspect, or Edit access. AI and MCP consume the same schema through Standard Schema; WebMCP derives its JSON Schema from that input. Numeric strings are accepted consistently across adapters, while non-finite values are rejected. Programmatic integrations use MCP SDK v2; custom tools replace the former `params`/`ParamDef` contract with `input` and execution metadata.
 
+## Design inspection and edits
+
+For large libraries, search `get_components` by name and set `include_variants: true` to include up to 12 direct variant IDs, names and sizes per document set. `list_variables` and `find_variables` accept `compact: true` to omit descriptive/import metadata while retaining IDs, collections and mode values; combine it with `type: "FLOAT"` for spacing tokens.
+
+Property tools accept `ids` with shared arguments—for example `set_font {ids: ["0:1", "0:2"], family: "Inter", size: 16}`—or `items` with complete per-target arguments. Existing single-target calls remain supported. Batches accept at most 200 items, validate their arguments before editing, roll back on a failed operation, and share one editor undo step.
+
+Variable and collection creation accept `items`; variable updates, deletion, binding and unbinding accept `ids` or `items`. For example, `create_variable {items: [{name: "space/md", type: "FLOAT", collection_id: "…", value: 16}, {name: "enabled", type: "BOOLEAN", collection_id: "…", value: true}]}` creates both tokens together. Returned results include the input index and created ID. Use `import_design_tokens` for complete token files with collections, modes and aliases.
+
+Create repeated content with `create_instance {items:[{component_id:"…",parent_id:"…",sizing_horizontal:"FILL",values:{"property-id":"First label"}},{component_id:"…",parent_id:"…",sizing_horizontal:"FILL",values:{"property-id":"Second label"}}]}`. Read stable property IDs with `get_component_properties` first. Omitted sizing preserves the component definition. Batch later overrides with `set_instance_properties` using shared `ids` or distinct `items`; keep the instances connected. Component-property creation, editing, deletion and binding also accept batches.
+
+Inspect related targets with `get_node {ids:["…","…"]}`, `get_component_properties`, `node_bounds`, `node_bindings`, `get_variable`, `get_collection`, or `analyze_spacing`. Bulk reads return indexed results and per-item errors within a 48,000-character budget; retry omitted or oversized targets with smaller scopes. Batch `get_node` defaults to depth 0 and `node_tree` to depth 1; single-target defaults stay unchanged.
+
+`batch_update` accepts a native `operations` array of `{id, props}` for related text, font, appearance and layout changes. Legacy JSON-encoded arrays are still accepted. Unsupported properties and invalid values are errors; a missing or invalid target no longer leaves earlier changes applied. `reparent_node` accepts a final zero-based `index` for section ordering, including within the same parent; omitting it moves the node to the end. `analyze_spacing` accepts a node `id` to scope its report and includes actual adjacent box gaps and inner content-box gaps, which account for immediate child offsets and wrapper padding. These are geometry measurements, not painted-pixel distances. Both `analyze_spacing` and `describe` run grid checks only when an explicit `grid` is supplied.
+
 ## Tool access settings
 
 Use **Settings → Tool access** (select **Local MCP**) to search and toggle the local server's tools, individually or by read-only/side-effect group. Group switches affect all group members, even during search. **Restore defaults** enables the configurable MCP tools again. Existing MCP preferences are preserved separately from the **Built-in AI** settings.
 
-Restart the MCP server, then reconnect stdio clients, to apply changes. For an externally managed server, restart its owning process. The list reflects the tools discovered from the server; disabling a dedicated tool does not prevent an enabled script tool from performing the same operation. These switches are not a sandbox and do not configure remote MCP servers or WebMCP.
+Restart the MCP server, then reconnect stdio clients, to apply changes. For an externally managed server, restart its owning process. The list shows the tools the server offers, also while it is stopped; disabling a dedicated tool does not prevent an enabled script tool from performing the same operation. These switches are not a sandbox and do not configure remote MCP servers or WebMCP.
 
 ## Browser-native WebMCP (experimental) {#webmcp}
 
@@ -27,11 +41,17 @@ In supported browsers, OpenPencil registers the selected reviewed set of tools d
 
 Tools target the document and page active when the call starts. Switching tabs does not redirect an in-flight call. Closing the workspace unregisters the tools. Tool inputs are validated and large inspection results require a narrower query. Oversized editing results are omitted with a committed-edit notice rather than reporting a successful edit as failed.
 
-Edits to geometry, paints, layout, text, and variable bindings/values commit synchronously as individual undoable operations. Failed edits roll back, and undo targets the original document/page even after a page switch. Cancellation prevents an edit from starting; cancellation after commit does not reverse it. Font loading finishes separately without holding a mutation transaction open. Atomic editing currently requires a document with at most 10,000 nodes and variables combined; this shared limit also applies when the same editing tools run through app AI/MCP.
+Edits to geometry, paints, layout, text, and variable bindings/values commit synchronously as individual undoable operations. Failed edits roll back, and undo targets the original document/page even after a page switch. Cancellation prevents an edit from starting; cancellation after commit does not reverse it. Font loading finishes separately without holding a mutation transaction open. Atomic editing captures changed nodes incrementally rather than imposing a document-size limit.
 
 This surface does **not** expose structural creation/deletion, arbitrary JavaScript/JSX execution, image loading, filesystem operations, or credentials. Those tools retain their existing AI/MCP paths. WebMCP is an evolving browser proposal, not universally available; unsupported browsers continue to use OpenPencil normally. The stdio and HTTP integrations below remain independent.
 
-## Install
+## Desktop connection
+
+The desktop app bundles its canvas helper and runtime, starts it directly, and stops it on exit. **Settings → MCP** shows its status and can restart it. No global npm installation, runtime download, or source checkout is required. If the bundled helper is missing, reinstall the complete application. If an older manually started helper occupies the local address, stop that process before starting the app.
+
+HTTP-capable agents can connect to `http://127.0.0.1:7600/mcp` using the bearer token from the local discovery file. The app configures this connection for its coding agents automatically. The optional stdio bridge below remains a separate package for clients that require stdio.
+
+## Optional standalone and stdio installation
 
 ```sh
 npm install -g @open-pencil/mcp
@@ -178,6 +198,8 @@ OpenPencil currently registers 100+ shared design tools, plus MCP-only document 
 
 Use `get_component_properties` to inspect definitions, bindings, slot settings and instance overrides. `create_component_property`, `bind_component_property`, `edit_component_property`, and `delete_component_property` manage reusable String, Boolean and instance-swap properties. `set_instance_properties` changes one instance while preserving its component link and text-sizing mode. Unbinding one field preserves its current value; deleting a definition retains the objects.
 
+Agent guidance requires keeping instances connected when customizing their content. For example, expose a nested icon through an `INSTANCE_SWAP` property, then use `set_instance_properties` on the parent instance with the chosen icon component ID. Variants and content slots are also available; guidance reserves detaching for an explicit user request. This is an instruction to the agent, not a removal of the scripting API's detach capability.
+
 Component-set inspection includes each binding's source variant and custom default. `edit_component_property` accepts `variant_id` alongside `default_value` for a variant-specific default, or `reset_variant_default: true` to restore inheritance. Shared defaults, variant defaults, and instance overrides remain independent.
 
 `create_component_slot` converts an existing frame inside a main component into a slot. `configure_component_slot` sets child limits, preferred components, empty display and stretching; `reset_instance_slot` restores an instance slot's default children. Insert custom content into the instance's slot frame with normal creation or move tools.
@@ -186,31 +208,37 @@ Component-set inspection includes each binding's source variant and custom defau
 
 These tools use the same definitions in built-in AI chat and MCP. Availability still follows user permissions and the installed companion version. Call `get_design_guidance` with `{"topics":["creation"]}` for workflow details.
 
+### Import original image files
+
+Use `import_image` with `{"id":"<frame-id>","path":"renders/final.png","scale_mode":"FILL"}` to apply a PNG, JPEG, or WebP file without resizing or recompressing its bytes. The tool preserves the frame's geometry, children and overlay fills, and returns the source path, byte count and stored image hash. Files are limited to 20 MiB. MCP resolves relative paths against its configured root and rejects paths or symlinks escaping that root; the tool description identifies the allowed directory.
+
+For Blender and other asset tools, save the final render inside that directory, then import its path. Screenshots, thumbnails and image previews supplied to a model are not substitutes for the original file. Built-in API models can use the same tool in the desktop app through native file access; the browser alone cannot read arbitrary local paths. Install the matching MCP companion to expose this tool to CLI agents.
+
 ### Document
 
-| Tool | Description |
-|------|-------------|
-| `open_file` | Open a `.fig` file for editing |
-| `close_file` | Close an open document tab; `unsaved: "save"` or `"discard"` decides what happens to unsaved changes |
-| `save_file` | Save the current document to a `.fig` file |
-| `new_document` | Create a new empty document |
-| `list_documents` | List open app documents/tabs and their pages |
-| `activate_document` | Bring a document tab to the front, optionally on a given page |
+| Tool                | Description                                                                                          |
+| ------------------- | ---------------------------------------------------------------------------------------------------- |
+| `open_file`         | Open a `.fig` file for editing                                                                       |
+| `close_file`        | Close an open document tab; `unsaved: "save"` or `"discard"` decides what happens to unsaved changes |
+| `save_file`         | Save the current document to a `.fig` file                                                           |
+| `new_document`      | Create a new empty document                                                                          |
+| `list_documents`    | List open app documents/tabs and their pages                                                         |
+| `activate_document` | Bring a document tab to the front, optionally on a given page                                        |
 
 ### History
 
-| Tool | Description |
-|------|-------------|
-| `undo` | Undo the newest change made through MCP or the CLI |
+| Tool   | Description                                          |
+| ------ | ---------------------------------------------------- |
+| `undo` | Undo the newest change made through MCP or the CLI   |
 | `redo` | Redo the newest change undone through MCP or the CLI |
 
 The history is shared with the person in the editor. `undo` and `redo` refuse when the newest step was made in the editor, so an agent never reverts the user's work. Each editing tool call is one undo step. An `eval` script is recorded against its target page, so edits it makes after switching `figma.currentPage` are not undoable.
 
 ### Settings
 
-| Tool | Description |
-|------|-------------|
-| `get_settings` | Read editor settings: appearance, snapping, canvas rendering, recovery, AI chat, and design check preferences |
+| Tool              | Description                                                                                                   |
+| ----------------- | ------------------------------------------------------------------------------------------------------------- |
+| `get_settings`    | Read editor settings: appearance, snapping, canvas rendering, recovery, AI chat, and design check preferences |
 | `update_settings` | Change settings with a partial object shaped like `get_settings` output; invalid keys and values are rejected |
 
 Settings tools never expose credentials, AI models, MCP connections, storage, or tool access. The available keys are listed in [Controlling the App](/programmable/cli/app-control#settings).
@@ -224,7 +252,7 @@ Settings tools never expose credentials, AI models, MCP connections, storage, or
 | `get_current_page`     | Get the current page name and ID                                                                                            |
 | `get_node`             | Get detailed properties of a node by ID                                                                                     |
 | `find_nodes`           | Find nodes by name pattern and/or type                                                                                      |
-| `get_components`       | List all components in the document                                                                                         |
+| `get_components`       | Search components by name, including unopened pages                                                                         |
 | `list_pages`           | List all pages                                                                                                              |
 | `list_variables`       | List design variables                                                                                                       |
 | `list_collections`     | List variable collections                                                                                                   |
@@ -240,19 +268,19 @@ Settings tools never expose credentials, AI models, MCP connections, storage, or
 
 ### Create
 
-| Tool | Description |
-|------|-------------|
-| `create_shape` | Create a shape (`FRAME`, `RECTANGLE`, `ELLIPSE`, `TEXT`, `LINE`, `STAR`, `POLYGON`, `SECTION`) |
-| `create_vector` | Create a vector node from a path string |
-| `create_slice` | Create an export slice |
-| `create_page` | Create a new page |
-| `render` | Render JSX to design nodes — create entire component trees in one call |
-| `create_component` | Convert a frame/group into a component |
-| `create_instance` | Create an instance of a component |
-| `create_slot` | Make a frame inside a main component a slot |
-| `set_behaviour` | Make a component behave as a Reka UI control, by its property and slot names; `null` removes it |
-| `get_behaviour` | Read a component's behaviour and what it still misses; without an ID, list every kind |
-| `node_to_component` | Convert an existing node into a component in-place |
+| Tool                | Description                                                                                     |
+| ------------------- | ----------------------------------------------------------------------------------------------- |
+| `create_shape`      | Create a shape (`FRAME`, `RECTANGLE`, `ELLIPSE`, `TEXT`, `LINE`, `STAR`, `POLYGON`, `SECTION`)  |
+| `create_vector`     | Create a vector node from a path string                                                         |
+| `create_slice`      | Create an export slice                                                                          |
+| `create_page`       | Create a new page                                                                               |
+| `render`            | Render JSX to design nodes — create entire component trees in one call                          |
+| `create_component`  | Convert a frame/group into a component                                                          |
+| `create_instance`   | Create an instance of a component                                                               |
+| `create_slot`       | Make a frame inside a main component a slot                                                     |
+| `set_behaviour`     | Make a component behave as a Reka UI control, by its property and slot names; `null` removes it |
+| `get_behaviour`     | Read a component's behaviour and what it still misses; without an ID, list every kind           |
+| `node_to_component` | Convert an existing node into a component in-place                                              |
 
 ### Modify
 
@@ -317,6 +345,8 @@ Settings tools never expose credentials, AI models, MCP connections, storage, or
 | `export_image` | Export nodes as PNG, JPG, or WEBP. Returns base64-encoded image data |
 | `export_svg`   | Export nodes as SVG markup                                           |
 
+Chat image previews automatically reduce resolution when needed to fit the response budget. Use `export_image` with `path`, `scale`, and `maxEdge` to save a file at the requested resolution.
+
 ### Viewport
 
 | Tool                   | Description                                  |
@@ -341,14 +371,14 @@ Settings tools never expose credentials, AI models, MCP connections, storage, or
 
 ### Analyze
 
-| Tool | Description |
-|------|-------------|
-| `analyze_colors` | Analyze color palette usage across the document |
-| `analyze_typography` | Analyze font/size/weight distribution |
-| `analyze_spacing` | Analyze gap and padding values |
-| `analyze_clusters` | Detect repeated patterns (potential components) |
-| `lint` | Check accessibility and consistency issues, with fixes and suggestions |
-| `lint_fix` | Apply safe lint fixes, and optionally the first suggestion of each finding |
+| Tool                 | Description                                                                |
+| -------------------- | -------------------------------------------------------------------------- |
+| `analyze_colors`     | Analyze color palette usage across the document                            |
+| `analyze_typography` | Analyze font/size/weight distribution                                      |
+| `analyze_spacing`    | Analyze gap and padding values                                             |
+| `analyze_clusters`   | Detect repeated patterns (potential components)                            |
+| `lint`               | Check accessibility and consistency issues, with fixes and suggestions     |
+| `lint_fix`           | Apply safe lint fixes, and optionally the first suggestion of each finding |
 
 ### Diff
 
@@ -359,6 +389,15 @@ Settings tools never expose credentials, AI models, MCP connections, storage, or
 | `diff_show`   | Preview the patch that setting JSX attributes on a node would produce |
 | `diff_apply`  | Apply a patch after checking the nodes still match its old values     |
 | `diff_visual` | Pixel diff between two rendered nodes, returned as an image           |
+
+### Comments
+
+| Tool               | Description                                                                                                        |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| `get_comments`     | Read the comments left on the canvas, open ones unless asked for resolved too, with their layer, page, and replies |
+| `add_comment`      | Pin a comment on a layer or at a point of a page, in Markdown                                                      |
+| `reply_to_comment` | Answer a thread, which reopens it if it was resolved                                                               |
+| `resolve_comment`  | Resolve a thread once its feedback is addressed, or reopen it                                                      |
 
 ### Navigation
 

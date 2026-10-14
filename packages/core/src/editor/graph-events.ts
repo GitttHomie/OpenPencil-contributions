@@ -6,6 +6,8 @@ import {
 } from '@open-pencil/scene-graph'
 
 import type { SkiaRenderer } from '#core/canvas/renderer'
+import { markFlowChanged } from '#core/layout/derived'
+import { trackLayoutEdits } from '#core/layout/invalidation'
 
 import type { ComponentSyncChange } from './component-sync'
 
@@ -72,7 +74,8 @@ function invalidateRenderersForChange(
   const invalidation = rendererInvalidationForChanges(changes, { preview: !invalidateNodePicture })
   for (const renderer of renderers) {
     if (invalidation.geometryCache) renderer.invalidateVectorPath(id)
-    if (invalidation.nodePicture) renderer.invalidateNodePicture(id)
+    if (invalidation.nodePicture)
+      renderer.invalidateNodePicture(id, Object.keys(changes) as (keyof SceneNode)[])
     if (Object.keys(changes).some((key) => TILED_CHUNK_TOPOLOGY_KEYS.has(key as keyof SceneNode))) {
       renderer.tiledScene.invalidateStructure()
     } else {
@@ -83,12 +86,32 @@ function invalidateRenderersForChange(
 
 export function createGraphEventSubscription(options: GraphEventOptions) {
   let unbindGraphEvents: (() => void) | null = null
+  let batchRenderPending = false
+
+  /**
+   * A layout pass or a page's layers loading updates many layers at once, and each render
+   * request bumps reactive versions; the batch asks for one render after it, before the next
+   * frame draws.
+   */
+  function requestRenderFor(graph: SceneGraph) {
+    if (!graph.isApplyingLayout && !graph.isApplyingImportedState) {
+      options.requestRender()
+      return
+    }
+    if (batchRenderPending) return
+    batchRenderPending = true
+    queueMicrotask(() => {
+      batchRenderPending = false
+      options.requestRender()
+    })
+  }
 
   function onNodeUpdated(id: string, changes: Partial<SceneNode>) {
-    invalidateRenderersForChange(options.getGraph(), options.getRenderers(), id, changes, true)
+    const graph = options.getGraph()
+    invalidateRenderersForChange(graph, options.getRenderers(), id, changes, true)
     options.emitEditorEvent('node:updated', id, changes)
-    options.scheduleComponentSync(id)
-    options.requestRender()
+    options.scheduleComponentSync(id, 'visible' in changes ? 'visibility' : undefined)
+    requestRenderFor(graph)
   }
 
   function onNodePreviewUpdated(id: string, changes: Partial<SceneNode>) {
@@ -109,31 +132,48 @@ export function createGraphEventSubscription(options: GraphEventOptions) {
       renderer.tiledScene.invalidateStructure()
     }
     options.scheduleComponentSync(nodeId, change)
-    options.requestRender()
+    requestRenderFor(options.getGraph())
+  }
+
+  /**
+   * An edit that adds, removes, or moves a layer changes its parent's flow, which then stops
+   * keeping the geometry a file saved for it. Loading a page and laying out are not edits.
+   */
+  function flowChanged(parentId: string | null | undefined) {
+    const graph = options.getGraph()
+    if (!parentId || graph.isApplyingImportedState || graph.isApplyingLayout) return
+    markFlowChanged(graph, parentId)
   }
 
   function subscribeToGraph() {
     unbindGraphEvents?.()
+    trackLayoutEdits(options.getGraph())
     unbindGraphEvents = options.getGraph().onNodeEvents({
       updated: onNodeUpdated,
       previewUpdated: onNodePreviewUpdated,
       created: (node) => {
         options.emitEditorEvent('node:created', node)
         onNodeStructureChanged(node.id, 'creation')
+        flowChanged(node.parentId)
       },
       deleted: (id, parentId) => {
         options.emitEditorEvent('node:deleted', id, parentId)
         onNodeStructureChanged(id)
+        flowChanged(parentId)
         if (parentId) options.scheduleComponentSync(parentId, 'structure')
       },
       reparented: (nodeId, oldParentId, newParentId) => {
         options.emitEditorEvent('node:reparented', nodeId, oldParentId, newParentId)
         onNodeStructureChanged(nodeId)
+        flowChanged(oldParentId)
+        flowChanged(newParentId)
         if (oldParentId) options.scheduleComponentSync(oldParentId, 'structure')
       },
       reordered: (nodeId, parentId, index, previousParentId) => {
         options.emitEditorEvent('node:reordered', nodeId, parentId, index, previousParentId)
         onNodeStructureChanged(nodeId)
+        flowChanged(parentId)
+        flowChanged(previousParentId)
         if (previousParentId && previousParentId !== parentId)
           options.scheduleComponentSync(previousParentId, 'structure')
       }

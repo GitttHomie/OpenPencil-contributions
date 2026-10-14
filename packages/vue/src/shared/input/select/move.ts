@@ -1,7 +1,12 @@
-import { captureMoveState, getNodeEditCapability, type Editor } from '@open-pencil/core/editor'
+import {
+  captureMoveState,
+  getNodeEditCapability,
+  type Editor,
+  type MoveState
+} from '@open-pencil/core/editor'
 
-import type { DragOriginal as MoveOriginal } from '#vue/shared/input/drag-original'
 import { duplicateAndDrag } from '#vue/shared/input/duplicate-drag'
+import { collectFlowDrags } from '#vue/shared/input/flow-reorder'
 import type { DragState } from '#vue/shared/input/types'
 
 export function selectionIsLocked(editor: Editor) {
@@ -28,8 +33,8 @@ function autoLayoutMoveTarget(id: string, editor: Editor): string {
   return target?.id ?? id
 }
 
-function collectMoveOriginals(editor: Editor) {
-  const originals = new Map<string, MoveOriginal>()
+function collectMoveStates(editor: Editor) {
+  const originals = new Map<string, MoveState>()
   const movingIds = new Set(
     [...editor.state.selectedIds].map((id) => autoLayoutMoveTarget(id, editor))
   )
@@ -49,7 +54,7 @@ function collectMoveOriginals(editor: Editor) {
   return originals
 }
 
-function detectDragAutoLayoutParent(originals: Map<string, MoveOriginal>, editor: Editor) {
+function detectDragAutoLayoutParent(originals: Map<string, MoveState>, editor: Editor) {
   if (originals.size === 0) return undefined
   const [id, original] = [...originals][0]
   const node = editor.graph.getNode(id)
@@ -79,7 +84,7 @@ export function createSelectionMoveDrag(
   if (duplicate && editor.state.selectedIds.size > 0)
     return duplicateAndDrag(cx, cy, sx, sy, editor).drag
 
-  const originals = collectMoveOriginals(editor)
+  const originals = collectMoveStates(editor)
 
   return {
     type: 'move',
@@ -93,6 +98,7 @@ export function createSelectionMoveDrag(
     startScreenY: sy,
     dragStarted: false,
     originals,
-    autoLayoutParentId: detectDragAutoLayoutParent(originals, editor)
+    autoLayoutParentId: detectDragAutoLayoutParent(originals, editor),
+    flows: collectFlowDrags(originals, editor)
   }
 }

@@ -66,6 +66,7 @@ Feature-by-feature comparison of Figma Design capabilities with Open Pencil's cu
 |---------|--------|-------|
 | Vector networks | ✅ | Figma-compatible model, not simple paths |
 | Pen tool | ✅ | Corner points, bezier curves, open/closed paths |
+| Pencil tool | ✅ | Freehand strokes smoothed into curves, <kbd>⇧</kbd> for straight lines |
 | Edit vector layers | 🟡 | Creation works; advanced vertex editing (bend, delete points, join) limited |
 | Boolean operations (Union, Subtract, Intersect, Exclude) | 🔲 | Combine shapes with boolean ops |
 | Flatten layers | 🔲 | Merge vector paths into single path |
@@ -132,7 +133,7 @@ Feature-by-feature comparison of Figma Design capabilities with Open Pencil's cu
 | Dash patterns | ✅ | Dash-on/dash-off stroke pattern |
 | Stroke alignment | ✅ | Inside/Center/Outside with clip-based rendering matching Figma behavior |
 | Individual stroke weights per side | ✅ | Top/Right/Bottom/Left with side selector dropdown |
-| Corner radius | ✅ | Uniform and per-corner radius with independent toggle in properties panel |
+| Corner radius | ✅ | Uniform and per-corner radius with independent toggle in properties panel; canvas handles on rectangles, polygons, and stars |
 | Corner smoothing (iOS-style) | 🔲 | Figma's continuous corner rounding |
 | Multiple fills/strokes per layer | 🔲 | Figma allows stacking fills and strokes |
 

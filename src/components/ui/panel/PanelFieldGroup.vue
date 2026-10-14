@@ -8,6 +8,7 @@ import type { PanelFieldGroupTheme } from '@/theme/panel/field-group'
 export interface PanelFieldGroupProps {
   label?: string
   for?: string
+  layout?: 'stacked' | 'inline'
   class?: ClassValue
   ui?: ComponentUI<PanelFieldGroupTheme>
 }
@@ -19,12 +20,19 @@ export interface PanelFieldGroupSlots {
 
 <script setup lang="ts">
 import { tv } from 'tailwind-variants'
+import { computed } from 'vue'
 
 import theme from '@/theme/panel/field-group'
 
-const { label, for: labelFor, class: className, ui } = defineProps<PanelFieldGroupProps>()
+const {
+  label,
+  for: labelFor,
+  layout = 'stacked',
+  class: className,
+  ui
+} = defineProps<PanelFieldGroupProps>()
 defineSlots<PanelFieldGroupSlots>()
-const styles = tv(theme)()
+const styles = computed(() => tv(theme)({ layout }))
 </script>
 
 <template>

@@ -1,7 +1,9 @@
 import type { UIMessage } from 'ai'
 
 import type { ACPAgentID } from '@open-pencil/core/constants'
+import { DESIGN_COMPOSITION_GUIDANCE } from '@open-pencil/core/tools'
 
+import EXTERNAL_TOOL_GUIDANCE from '@/app/ai/chat/external-guidance'
 import SYSTEM_PROMPT from '@/app/ai/chat/system-prompt'
 
 import { getACPAgentAdapter } from './adapters/registry'
@@ -15,7 +17,8 @@ export function buildACPUserPrompt(
 ): string {
   return [
     canvasInstructions.trim(),
-    includeReference ? SYSTEM_PROMPT : undefined,
+    includeReference ? SYSTEM_PROMPT : EXTERNAL_TOOL_GUIDANCE,
+    includeReference ? undefined : DESIGN_COMPOSITION_GUIDANCE,
     agentId ? getACPAgentAdapter(agentId).instructions?.trim() : undefined,
     '# Current user request',
     text

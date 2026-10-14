@@ -68,6 +68,7 @@ test('text selection matches painted line spacing and refreshes after typography
     const original = editor.state?.paragraph
     node.fontSize = 44
     node.lineHeight = 72
+    editor.invalidateParagraph(node)
     check()
     expect(editor.state?.paragraph).not.toBe(original)
     expect(editor.getSelectedText()).toBe(node.text)

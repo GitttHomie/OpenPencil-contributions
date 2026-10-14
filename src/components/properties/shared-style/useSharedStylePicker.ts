@@ -8,7 +8,7 @@ export function useSharedStylePicker(kind: SharedStyleKind) {
   const binding = useSharedStyleBinding(kind)
   const { active, styleId, styles } = binding
   const visible = computed(
-    () => active.value && (styles.value.length > 0 || styleId.value !== null)
+    () => active.value && (kind === 'text' || styles.value.length > 0 || styleId.value !== null)
   )
   const hasStyle = computed(() => styleId.value !== null)
   const value = computed(() => (styleId.value === MIXED ? 'MIXED' : (styleId.value ?? 'NONE')))
@@ -17,7 +17,14 @@ export function useSharedStylePicker(kind: SharedStyleKind) {
       { value: 'NONE', label: panels.value.none }
     ]
     if (styleId.value === MIXED) result.unshift({ value: 'MIXED', label: panels.value.mixed })
-    for (const style of styles.value) result.push({ value: style.id, label: style.name })
+    for (const style of styles.value)
+      result.push({
+        value: style.id,
+        label:
+          style.id === styleId.value && binding.modified.value
+            ? panels.value.modifiedStyle({ name: style.name })
+            : style.name
+      })
     if (
       typeof styleId.value === 'string' &&
       !styles.value.some((style) => style.id === styleId.value)
@@ -31,5 +38,5 @@ export function useSharedStylePicker(kind: SharedStyleKind) {
     if (next === 'NONE') binding.unbind()
     else binding.bind(next)
   }
-  return { visible, hasStyle, value, options, update }
+  return { visible, hasStyle, value, options, update, authoring: binding }
 }

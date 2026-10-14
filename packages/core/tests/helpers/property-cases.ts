@@ -12,7 +12,15 @@ function solidFill(color = RED, fields: Partial<Fill> = {}): Fill {
 }
 
 function stroke(fields: Partial<Stroke> = {}): Stroke {
-  return { type: 'SOLID', color: BLUE, weight: 1, opacity: 1, visible: true, align: 'INSIDE', ...fields }
+  return {
+    type: 'SOLID',
+    color: BLUE,
+    weight: 1,
+    opacity: 1,
+    visible: true,
+    align: 'INSIDE',
+    ...fields
+  }
 }
 
 export interface RoundTripCase {
@@ -137,7 +145,14 @@ export const PROPERTY_CASES: RoundTripCase[] = [
   }),
   leafCase('single stroke with every option', 'RECTANGLE', {
     strokes: [
-      stroke({ type: 'SOLID', weight: 3, align: 'OUTSIDE', dashPattern: [4, 2], cap: 'ROUND', join: 'BEVEL' })
+      stroke({
+        type: 'SOLID',
+        weight: 3,
+        align: 'OUTSIDE',
+        dashPattern: [4, 2],
+        cap: 'ROUND',
+        join: 'BEVEL'
+      })
     ]
   }),
   leafCase('node-level stroke cap and join under a stroke without its own', 'RECTANGLE', {
@@ -241,6 +256,23 @@ export const PROPERTY_CASES: RoundTripCase[] = [
     textCase: 'UPPER',
     textDecoration: 'UNDERLINE'
   }),
+  leafCase('text decoration details', 'TEXT', {
+    text: 'Link',
+    textDecoration: 'UNDERLINE',
+    textDecorationStyle: 'WAVY',
+    textDecorationFills: [solidFill(BLUE)],
+    textDecorationThickness: 2,
+    textUnderlineOffset: 3,
+    textDecorationSkipInk: false
+  }),
+  leafCase('text paragraph spacing', 'TEXT', {
+    text: 'One\nTwo',
+    paragraphSpacing: 8,
+    listSpacing: 2,
+    paragraphIndent: 4,
+    hangingList: true
+  }),
+  leafCase('text without fills', 'TEXT', { text: 'Hidden', fills: [] }),
   leafCase('text that wraps at a fixed width', 'TEXT', {
     text: 'Wrapped',
     textAutoResize: 'HEIGHT'

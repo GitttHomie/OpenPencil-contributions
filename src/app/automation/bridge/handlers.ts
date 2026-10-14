@@ -1,6 +1,7 @@
 import type { FigmaAPI } from '@open-pencil/core/figma-api'
 
 import { canvasSessionStore, canvasSessionPage } from '@/app/ai/acp/canvas/session'
+import { endAgentSession } from '@/app/automation/agents'
 import {
   handleActivateDocument,
   handleGetSettings,
@@ -77,6 +78,10 @@ export function createAutomationCommandHandlers(makeFigma: FigmaFactory) {
     args: unknown,
     managedChatId?: string
   ): Promise<unknown> {
+    if (command === 'agent_session_closed') {
+      if (isUnknownRecord(args) && typeof args.session === 'string') endAgentSession(args.session)
+      return { ok: true }
+    }
     if (command === 'list_documents') {
       return { ok: true, result: { documents: listAutomationDocuments(store) } }
     }

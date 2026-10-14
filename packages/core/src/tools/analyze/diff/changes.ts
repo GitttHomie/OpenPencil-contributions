@@ -47,7 +47,7 @@ export const diffChanges = defineTool({
   execution: { kind: 'sync', mutation: 'none' },
   // Managed API and ACP chats provide a baseline; standalone clients receive an explanation.
   exposure: { webmcp: false },
-  input: v.object({
+  input: v.strictObject({
     id: v.optional(v.pipe(v.string(), v.description('Node to compare (default: the current page)')))
   }),
   execute: (figma, args) => {

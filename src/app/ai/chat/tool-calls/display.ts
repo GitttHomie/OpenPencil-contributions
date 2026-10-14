@@ -1,7 +1,7 @@
 import { getToolName, isToolUIPart } from 'ai'
 import type { UIDataTypes, UIMessagePart, UITools } from 'ai'
-import { isValid } from 'js-base64'
 
+import { projectChatMedia } from '../media'
 import { hasErrorOutput, toolResultData, toolResultOutput } from './result'
 
 export type ChatMessagePart = UIMessagePart<UIDataTypes, UITools>
@@ -9,7 +9,6 @@ export type ToolCallPart = Extract<ChatMessagePart, { toolCallId: string }>
 
 const MCP_PREFIX = /^mcp(?:__.+?__|\.[^.]+\.)/
 const SUMMARY_LENGTH = 60
-const IMAGE_MEDIA_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp'])
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -32,6 +31,12 @@ function toolInput(part: ToolCallPart): unknown {
 }
 
 export function toolDisplayName(part: ToolCallPart): string {
+  const rawName = getToolName(part)
+  if (rawName.startsWith('mcp_') && part.title) return part.title
+  const external = /^mcp(?:__(.+?)__|\.(.+?)\.)(.+)$/i.exec(rawName)
+  if (external && !['open-pencil', 'open_pencil'].includes(external[1] ?? external[2])) {
+    return `${external[1] ?? external[2]} · ${external[3].replaceAll('_', ' ')}`
+  }
   return toolName(part)
     .replace(/_/g, ' ')
     .replace(/\b\w/g, (c) => c.toUpperCase())
@@ -77,6 +82,9 @@ function stringIds(value: unknown): string[] {
 
 /** Nodes a call targeted or produced, for chips that bring them into view. */
 export function toolNodeIds(part: ToolCallPart): string[] {
+  const rawName = getToolName(part)
+  if (rawName.startsWith('mcp_') && !rawName.startsWith('mcp__open-pencil__')) return []
+  if (rawName.startsWith('mcp.') && !rawName.startsWith('mcp.open-pencil.')) return []
   const ids = new Set<string>()
   const input = toolInput(part)
   if (isRecord(input)) {
@@ -96,7 +104,7 @@ export function toolNodeIds(part: ToolCallPart): string[] {
   return [...ids]
 }
 
-export function toolErrorText(part: ToolCallPart): string | null {
+function rawToolErrorText(part: ToolCallPart): string | null {
   if (part.state === 'output-error') return part.errorText
   if (part.state !== 'output-available' || !hasErrorOutput(part.output)) return null
   const output = toolResultOutput(part.output)
@@ -113,39 +121,27 @@ export function toolErrorText(part: ToolCallPart): string | null {
   return text || null
 }
 
+export function toolErrorText(part: ToolCallPart): string | null {
+  const raw = rawToolErrorText(part)
+  if (!raw) return raw
+  const displayed = projectChatMedia(raw).value
+  return typeof displayed === 'string' ? displayed : JSON.stringify(displayed)
+}
+
 /** An image the tool returned for the model, such as `export_image`, as a data URL. */
 export function toolImage(part: ToolCallPart): string | null {
   if (part.state !== 'output-available' || hasErrorOutput(part.output)) return null
-  const output = toolResultData(part.output)
-  if (!isRecord(output)) return null
-  const result = toolResultOutput(part.output)
-  const image: unknown =
-    isRecord(result) && Array.isArray(result.content)
-      ? result.content.find((item: unknown) => isRecord(item) && item.type === 'image')
-      : undefined
-  const base64: unknown = isRecord(image) ? image.data : output.base64
-  const mimeType: unknown = isRecord(image) ? image.mimeType : output.mimeType
-  if (typeof base64 !== 'string' || typeof mimeType !== 'string') return null
-  if (!IMAGE_MEDIA_TYPES.has(mimeType) || !isValid(base64)) return null
-  return `data:${mimeType};base64,${base64}`
+  return projectChatMedia(part.output).images[0]?.url ?? null
 }
 
 /** Output with large binary payloads elided, for display as JSON. */
 export function displayedToolOutput(part: ToolCallPart): unknown {
   if (part.state !== 'output-available') return undefined
-  const output = toolResultData(part.output)
-  if (!isRecord(output)) return output
-  const displayed = { ...output }
-  if (typeof displayed.base64 === 'string')
-    displayed.base64 = `<${displayed.base64.length} base64 characters>`
-  if (Array.isArray(displayed.content)) {
-    displayed.content = displayed.content.map((item: unknown) =>
-      isRecord(item) && item.type === 'image' && typeof item.data === 'string'
-        ? { ...item, data: `<${item.data.length} base64 characters>` }
-        : item
-    )
-  }
-  return displayed
+  return projectChatMedia(toolResultData(part.output)).value
+}
+
+export function displayedToolInput(part: ToolCallPart): unknown {
+  return projectChatMedia(part.input).value
 }
 
 /** The source a call writes, shown highlighted instead of as a JSON string. */
@@ -154,8 +150,10 @@ export function toolSource(
 ): { code: string; language: 'design-jsx' | 'javascript' } | null {
   const input = toolInput(part)
   if (!isRecord(input)) return null
-  if (typeof input.jsx === 'string') return { code: input.jsx, language: 'design-jsx' }
-  if (typeof input.code === 'string') return { code: input.code, language: 'javascript' }
+  if (typeof input.jsx === 'string')
+    return { code: String(projectChatMedia(input.jsx).value), language: 'design-jsx' }
+  if (typeof input.code === 'string')
+    return { code: String(projectChatMedia(input.code).value), language: 'javascript' }
   return null
 }
 

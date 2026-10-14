@@ -18,7 +18,6 @@ const messages = ref({
   agentSetup: {
     'companion-missing': 'Companion missing',
     'companion-outdated': 'Companion outdated',
-    'mcp-outdated': 'MCP outdated',
     'pi-sign-in': 'Pi sign-in',
     'pi-model': 'Pi model'
   }
@@ -50,10 +49,10 @@ describe('useChatSubmission', () => {
 
   test('names the setup problem that stopped an agent chat and offers guided setup', async () => {
     const { chat, reportError, openSetup } = submission(async () => {
-      throw new AgentSetupError('mcp-outdated')
+      throw new AgentSetupError('companion-outdated')
     })
     expect(await chat.submit(message)).toBe(false)
-    expect(reportError).toHaveBeenCalledWith('MCP outdated', {
+    expect(reportError).toHaveBeenCalledWith('Companion outdated', {
       label: 'Run guided setup',
       run: openSetup
     })

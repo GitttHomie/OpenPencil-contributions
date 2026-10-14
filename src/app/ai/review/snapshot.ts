@@ -26,9 +26,12 @@ function reviewNode(node: SceneNode) {
   }
 }
 
-export function captureReviewSnapshot(store: EditorStore) {
-  const pageId = store.state.currentPageId
-  const selected = [...store.state.selectedIds]
+export function captureReviewSnapshot(
+  store: EditorStore,
+  scope?: { pageId: string; ids: string[] }
+) {
+  const pageId = scope?.pageId ?? store.state.currentPageId
+  const selected = scope?.ids ?? [...store.state.selectedIds]
   const roots = selected.length ? selected : store.graph.getChildren(pageId).map((node) => node.id)
   const rootIds = roots.filter((id) => store.graph.getNode(id)?.visible)
   const pending = [...rootIds]

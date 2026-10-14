@@ -14,6 +14,7 @@ import { useI18n, useRetainedPopup } from '@open-pencil/vue'
 import type { EditorStore } from '@/app/editor/session'
 import type { LibraryService } from '@/app/libraries'
 import { useInstanceUpdate } from '@/components/properties/component-properties/instance-update/use'
+import AppSpinner from '@/components/ui/feedback/AppSpinner.vue'
 import { useMenuUI } from '@/components/ui/menu/menu'
 import Tip from '@/components/ui/overlay/Tip.vue'
 
@@ -44,10 +45,8 @@ const { available, updating, updateSelectedInstance } = useInstanceUpdate(
           :disabled="updating"
           :aria-label="panels.updateSelectedInstance"
         >
-          <icon-lucide-refresh-cw
-            :data-loading="updating"
-            class="size-3.5 data-[loading=true]:animate-spin motion-reduce:data-[loading=true]:animate-none"
-          />
+          <AppSpinner v-if="updating" class="size-3.5" />
+          <icon-lucide-refresh-cw v-else class="size-3.5" />
         </button>
       </DropdownMenuTrigger>
     </Tip>

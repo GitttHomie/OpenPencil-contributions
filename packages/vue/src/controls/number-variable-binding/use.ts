@@ -15,6 +15,7 @@ export type NumberBindingPath =
   | 'minHeight'
   | 'maxHeight'
   | 'cornerRadius'
+  | 'cornerSmoothing'
   | 'topLeftRadius'
   | 'topRightRadius'
   | 'bottomLeftRadius'

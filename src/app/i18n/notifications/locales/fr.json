@@ -27,5 +27,11 @@
   "deepLinkCancelled": "Lien annulé : un fichier se terminant par « {file} » était attendu.",
   "deepLinkNodeNotFound": "Le calque « {node} » est introuvable dans « {file} ».",
   "openQueuedFilesFailed": "Impossible d’ouvrir les fichiers transmis à OpenPencil : {error}",
-  "tokensLeftOut": "Non inclus dans la feuille de style : {names}."
+  "tokensLeftOut": "Non inclus dans la feuille de style : {names}.",
+  "layoutContainerFixedWidth": "« {name} » passe à une largeur fixe pour que « {layer} » puisse remplir l’espace disponible.",
+  "layoutContainerFixedHeight": "« {name} » passe à une hauteur fixe pour que « {layer} » puisse remplir l’espace disponible.",
+  "layoutLayerFixedWidth": "1 calque dans « {name} » passe à une largeur fixe pour que « {name} » puisse s’adapter à son contenu.",
+  "layoutLayerFixedHeight": "1 calque dans « {name} » passe à une hauteur fixe pour que « {name} » puisse s’adapter à son contenu.",
+  "layoutLayersFixedWidth": "{count} calques dans « {name} » passent à une largeur fixe pour que « {name} » puisse s’adapter à son contenu.",
+  "layoutLayersFixedHeight": "{count} calques dans « {name} » passent à une hauteur fixe pour que « {name} » puisse s’adapter à son contenu."
 }

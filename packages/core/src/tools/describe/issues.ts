@@ -69,7 +69,7 @@ function detectStructuralIssues(
       suggestion: 'Min 44×44'
     })
   }
-  if (node.itemSpacing > 0 && node.itemSpacing % gridSize !== 0) {
+  if (gridSize > 0 && node.itemSpacing > 0 && node.itemSpacing % gridSize !== 0) {
     const nearest = Math.round(node.itemSpacing / gridSize) * gridSize
     issues.push({
       message: `Gap ${node.itemSpacing} not on ${gridSize}px grid`,
@@ -336,12 +336,10 @@ function detectTypographyIssues(node: SceneNode, graph: SceneGraph, issues: Desc
   }
 }
 
-const SPACING_GRID = 4
-
 function detectSpacingIssues(
   node: SceneNode,
   graph: SceneGraph,
-  _gridSize: number,
+  gridSize: number,
   issues: DescribeIssue[]
 ): void {
   if (node.layoutMode === 'NONE') return
@@ -365,10 +363,10 @@ function detectSpacingIssues(
     node.paddingLeft
   ].filter((v) => v > 0)
   for (const v of spacingValues) {
-    if (v % SPACING_GRID !== 0) {
+    if (gridSize > 0 && v % gridSize !== 0) {
       issues.push({
-        message: `Spacing ${v} in "${node.name}" off ${SPACING_GRID}px grid`,
-        suggestion: `Use ${Math.round(v / SPACING_GRID) * SPACING_GRID}`
+        message: `Spacing ${v} in "${node.name}" off ${gridSize}px grid`,
+        suggestion: `Use ${Math.round(v / gridSize) * gridSize}`
       })
       break
     }

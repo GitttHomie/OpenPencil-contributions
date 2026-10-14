@@ -4,7 +4,6 @@ import { computed } from 'vue'
 import type { LayoutMode } from '@open-pencil/scene-graph'
 import { useI18n, useSelectionLayout } from '@open-pencil/vue'
 
-import IconButton from '@/components/ui/button/IconButton.vue'
 import Tip from '@/components/ui/overlay/Tip.vue'
 import PanelFieldGroup from '@/components/ui/panel/PanelFieldGroup.vue'
 import SegmentedControl from '@/components/ui/select/SegmentedControl.vue'
@@ -36,7 +35,7 @@ function setLayoutMode(mode: string) {
         :options="layoutModes"
         :label="panels.flow"
         :ui="{ root: 'flex min-w-0 flex-1' }"
-        @change="setLayoutMode"
+        @change="setLayoutMode($event as LayoutMode)"
       >
         <template #option="{ option }">
           <Tip :label="option.label">

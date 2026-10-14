@@ -3,11 +3,12 @@ import { cloneInstanceOverrideState, instanceMainComponent } from '@open-pencil/
 import { buildVariantName, parseVariantName } from '@open-pencil/scene-graph/variant-name'
 
 import { assertNodeEditable } from '#core/editor/capabilities'
-import { restoreSubtree, snapshotSubtree } from '#core/editor/clipboard/subtree-history'
 import { reapplyInstanceComponentProperties } from '#core/editor/components/properties'
+import { restoreSubtree, snapshotSubtree } from '#core/editor/history/subtree'
 import type { EditorContext } from '#core/editor/types'
 import { invalidateDerivedLayout } from '#core/layout/derived'
 
+import { appendVariant } from './add'
 import {
   addPropertyDefinition,
   removePropertyDefinition,
@@ -157,42 +158,12 @@ export function createVariantActions(ctx: EditorContext) {
   }
 
   function cloneVariant(variantId: string): string | undefined {
-    assertNodeEditable(ctx.graph, variantId)
     const variant = ctx.graph.getNode(variantId)
-    const componentSetId = variant?.parentId
-    if (
-      variant?.type !== 'COMPONENT' ||
-      !componentSetId ||
-      !getComponentSet(ctx.graph, componentSetId)
-    ) {
+    const setId = variant?.parentId
+    if (variant?.type !== 'COMPONENT' || !setId || !getComponentSet(ctx.graph, setId))
       return undefined
-    }
-    const clone = ctx.graph.cloneTree(variantId, componentSetId, {
-      x: variant.x + variant.width + 40,
-      name: variant.name
-    })
-    if (!clone) return undefined
-    const snapshots = snapshotSubtree(ctx.graph, clone.id)
-    ctx.setSelectedIds(new Set([clone.id]))
-    ctx.undo.push({
-      label: 'Add variant',
-      forward: () => {
-        const root = snapshots.get(clone.id)
-        if (root) restoreSubtree(ctx.graph, root, componentSetId, snapshots)
-        ctx.setSelectedIds(new Set([clone.id]))
-        ctx.runLayoutForNode(componentSetId)
-        ctx.requestRender()
-      },
-      inverse: () => {
-        ctx.graph.deleteNode(clone.id)
-        ctx.setSelectedIds(new Set([variantId]))
-        ctx.runLayoutForNode(componentSetId)
-        ctx.requestRender()
-      }
-    })
-    ctx.runLayoutForNode(componentSetId)
-    ctx.requestRender()
-    return clone.id
+    assertNodeEditable(ctx.graph, variantId)
+    return appendVariant(ctx, setId, variant, false)
   }
 
   function duplicateVariant(variantId: string): string | undefined {

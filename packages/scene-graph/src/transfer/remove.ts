@@ -80,7 +80,11 @@ export function removeGraphTransfer(graph: SceneGraph, plan: GraphTransferPlan):
       throw new Error(`Transferred content is referenced by ${node.id}`)
   }
   for (const variable of graph.variables.values()) {
-    if (!variables.has(variable.id) && referencesOwned(variable.valuesByMode))
+    if (
+      !variables.has(variable.id) &&
+      (referencesOwned(variable.valuesByMode) ||
+        (variable.fontFamilyVariableId && variables.has(variable.fontFamilyVariableId)))
+    )
       throw new Error('Transferred variable has external aliases')
   }
   graph.withBufferedEvents(() => {

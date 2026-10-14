@@ -7,8 +7,8 @@ let page: Page
 let canvas: CanvasHelper
 let instanceId = ''
 
-async function selectOption(label: string, option: string) {
-  const section = propertySection(page, 'Component properties')
+async function selectOption(label: string, option: string, sectionName = 'Component properties') {
+  const section = propertySection(page, sectionName)
   await section.getByRole('combobox', { name: label }).click()
   await page.getByRole('option', { name: option, exact: true }).click()
   await canvas.waitForRender()
@@ -21,12 +21,14 @@ async function instanceState(id = instanceId) {
     const instance = store.graph.getNode(nodeId)
     if (!instance) return null
     const children = store.graph.getChildren(nodeId)
+    const icon = children.find((node) => node.type === 'INSTANCE')
     return {
       componentId: instance.componentId,
       assignments: instance.componentPropertyAssignments,
       label: children.find((node) => node.name === 'Label')?.text,
       badgeVisible: children.find((node) => node.name === 'Badge')?.visible,
-      iconName: children.find((node) => node.type === 'INSTANCE')?.name
+      iconName: icon?.name,
+      iconComponentName: icon?.componentId ? store.graph.getNode(icon.componentId)?.name : null
     }
   }, id)
 }
@@ -119,7 +121,9 @@ test('updates text while typing and undoes a burst as one edit', async () => {
 test('renders and applies all component property control types', async () => {
   const section = propertySection(page, 'Component properties')
   await expect(section).toBeVisible()
-  await expect(section.getByRole('combobox', { name: 'State' })).toBeVisible()
+  await expect(
+    propertySection(page, 'Variants').getByRole('combobox', { name: 'State' })
+  ).toBeVisible()
   await expect(section.getByRole('textbox', { name: 'Label' })).toBeVisible()
   await expect(section.getByRole('switch', { name: 'Show badge' })).toBeVisible()
   await expect(section.getByRole('combobox', { name: 'Icon' })).toBeVisible()
@@ -135,9 +139,9 @@ test('renders and applies all component property control types', async () => {
   expect(await instanceState()).toMatchObject({ badgeVisible: false })
 
   await selectOption('Icon', 'Icon B')
-  expect(await instanceState()).toMatchObject({ iconName: 'Icon B' })
+  expect(await instanceState()).toMatchObject({ iconName: 'Icon', iconComponentName: 'Icon B' })
 
-  await selectOption('State', 'Hover')
+  await selectOption('State', 'Hover', 'Variants')
   expect(await instanceState()).toMatchObject({ label: 'Custom label' })
   await expect(section).toHaveScreenshot('component-properties-controls.png')
 })

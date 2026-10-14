@@ -2,7 +2,12 @@ import type { LanguageModel } from 'ai'
 import { ref } from 'vue'
 
 import { createLanguageModel } from '@/app/ai/chat/model'
-import { modelConnection, resolveAIModelRole } from '@/app/ai/models/store'
+import {
+  modelConnection,
+  modelProfile,
+  canAssignModelRole,
+  resolveAIModelRole
+} from '@/app/ai/models/store'
 import type { AIModelConnection, AIModelRole, ResolvedAIModelRole } from '@/app/ai/models/types'
 import { appCredentialServices } from '@/app/settings/credentials/app'
 import {
@@ -67,6 +72,18 @@ export async function resolveModelConnectionAPIKey(connectionId: string): Promis
 export async function createAIModelRuntime(role: AIModelRole): Promise<AIModelRuntime | null> {
   const resolved = resolveAIModelRole(role)
   if (!resolved) return null
+  return createResolvedRuntime(resolved)
+}
+
+export async function createProfileVisionRuntime(id: string): Promise<AIModelRuntime | null> {
+  const profile = modelProfile(id)
+  if (!profile || !canAssignModelRole(profile, 'vision')) return null
+  const connection = modelConnection(profile.connectionId)
+  return connection ? createResolvedRuntime({ requestedRole: 'vision', profile, connection }) : null
+}
+
+async function createResolvedRuntime(resolved: ResolvedAIModelRole): Promise<AIModelRuntime> {
+  const role = resolved.requestedRole
   if ((role === 'design' || role === 'fast') && !resolved.profile.capabilities.includes('tools')) {
     throw new Error('The Design model must support tools')
   }
@@ -80,9 +97,6 @@ export async function createAIModelRuntime(role: AIModelRole): Promise<AIModelRu
     return { kind: 'harness', role: resolved }
   }
   if (resolved.connection.providerID.startsWith('acp:')) {
-    if (role !== 'design' && role !== 'review' && role !== 'fast') {
-      throw new Error('ACP agents support the Design, Review, and Fast tasks roles')
-    }
     return { kind: 'acp', role: resolved }
   }
 

@@ -5,9 +5,8 @@ import * as v from 'valibot'
 
 import { ACP_AGENTS } from '@open-pencil/core/constants'
 
-import { npmInstallArgs } from '@/app/ai/agents/native'
+import { bunInstallArgs, npmInstallArgs } from '@/app/ai/agents/native'
 import { HARNESS_PACKAGE } from '@/app/ai/harness/companion'
-import { MCP_PACKAGE_NAME } from '@/app/automation/mcp/failure'
 import { resolvePlatformCommand } from '@/app/tauri/command'
 
 import { repoPath } from '#tests/helpers/paths'
@@ -65,6 +64,7 @@ const ShellScope = v.object({
             v.object({
               name: v.optional(v.string()),
               cmd: v.optional(v.string()),
+              sidecar: v.optional(v.boolean()),
               args: v.optional(v.union([v.boolean(), v.array(v.unknown())]))
             })
           )
@@ -82,6 +82,20 @@ function spawnScope() {
   )
   return typeof spawn === 'string' ? [] : (spawn?.allow ?? [])
 }
+
+test('canvas setup permits only the bundled sidecar, never a global npm helper', () => {
+  const scope = spawnScope()
+  expect(scope.find((entry) => entry.name === 'binaries/openpencil-mcp-http')).toMatchObject({
+    sidecar: true,
+    args: false
+  })
+  expect(scope.some((entry) => entry.cmd === 'openpencil-mcp-http')).toBe(false)
+  for (const entry of scope.filter((item) => item.name === 'npm' || item.name === 'cmd-npm')) {
+    const args = npmInstallArgs('@open-pencil/mcp@0.15.1')
+    if (entry.name === 'cmd-npm') args.unshift('/c', 'npm')
+    expect(allowedArgs(entry.args, args)).not.toEqual(args)
+  }
+})
 
 /** The arguments a scope entry lets through for `args`, the way the shell plugin builds them. */
 function allowedArgs(scope: boolean | unknown[] | undefined, args: string[]): unknown[] | null {
@@ -106,14 +120,14 @@ describe('shell scope', () => {
   // tests stand in for with a placeholder the scope rightly refuses.
   const installs = [
     ...ACP_AGENTS.flatMap((agent) => (agent.adapterPackage ? [agent.adapterPackage] : [])),
-    `${MCP_PACKAGE_NAME}@${rootPackage.version}`,
     `${HARNESS_PACKAGE}@${rootPackage.version}`
   ]
   const spawns: [string, string[]][] = [
     ...ACP_AGENTS.map((agent): [string, string[]] => [agent.command, agent.args]),
-    ['openpencil-mcp-http', []],
     ['openpencil-harness', []],
-    ...installs.map((target): [string, string[]] => ['npm', npmInstallArgs(target)])
+    ...installs.map((target): [string, string[]] => ['npm', npmInstallArgs(target)]),
+    // Only the optional Harness companion is installed; canvas MCP is bundled.
+    ['bun', bunInstallArgs(`${HARNESS_PACKAGE}@${rootPackage.version}`)]
   ]
 
   for (const userAgent of [WINDOWS_UA, MAC_UA]) {
@@ -129,6 +143,7 @@ describe('shell scope', () => {
 
   test('allows nothing but those programs', () => {
     const expected = [
+      'binaries/openpencil-mcp-http',
       'npm',
       'cmd-npm',
       ...[WINDOWS_UA, MAC_UA].flatMap((userAgent) =>
@@ -149,9 +164,43 @@ describe('shell scope', () => {
     expect(validators.length).toBeGreaterThan(0)
     for (const validator of validators) {
       const pattern = new RegExp(v.parse(v.object({ validator: v.string() }), validator).validator)
-      for (const target of ['left-pad', '@open-pencil/mcp@0.15.1 & calc', '@open-pencil/mcp']) {
+      for (const target of [
+        'left-pad',
+        '@open-pencil/mcp@0.15.1 & calc',
+        '@open-pencil/mcp@0.16.0-beta.1 & calc',
+        '@open-pencil/mcp@0.16.0-rc.1',
+        '@open-pencil/mcp'
+      ]) {
         expect(pattern.test(target)).toBe(false)
       }
+    }
+  })
+
+  test('lets npm install companions pinned to a stable or beta app version', () => {
+    for (const target of ['@open-pencil/harness@0.16.0', '@open-pencil/harness@0.16.0-beta.1']) {
+      for (const userAgent of [WINDOWS_UA, MAC_UA]) {
+        const resolved = resolvePlatformCommand('npm', npmInstallArgs(target), userAgent)
+        const entry = spawnScope().find((candidate) => candidate.name === resolved.command)
+        expect(allowedArgs(entry?.args, resolved.args)).toEqual(resolved.args)
+      }
+    }
+  })
+
+  test('lets Bun install only the optional Harness companion', () => {
+    for (const userAgent of [WINDOWS_UA, MAC_UA]) {
+      const allowed = resolvePlatformCommand(
+        'bun',
+        bunInstallArgs('@open-pencil/harness@0.16.0-beta.1'),
+        userAgent
+      )
+      const entry = spawnScope().find((candidate) => candidate.name === allowed.command)
+      expect(allowedArgs(entry?.args, allowed.args)).toEqual(allowed.args)
+      const adapter = resolvePlatformCommand(
+        'bun',
+        bunInstallArgs('@agentclientprotocol/claude-agent-acp'),
+        userAgent
+      )
+      expect(allowedArgs(entry?.args, adapter.args)).not.toEqual(adapter.args)
     }
   })
 

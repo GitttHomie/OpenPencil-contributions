@@ -15,8 +15,8 @@ import AppButton from '@/components/ui/button/AppButton.vue'
 import AppAlert from '@/components/ui/feedback/AppAlert.vue'
 import AppPlaceholder from '@/components/ui/feedback/AppPlaceholder.vue'
 import AppProgress from '@/components/ui/feedback/AppProgress.vue'
+import AppSpinner from '@/components/ui/feedback/AppSpinner.vue'
 import { releaseNotesURL } from '@/constants'
-import { motionStyles } from '@/theme/motion/styles'
 import { updatePromptTheme, updateStatusUI } from '@/theme/updater'
 
 const {
@@ -60,7 +60,7 @@ const ui = computed(() => {
   return {
     ...mapValues(theme, (slot) => slot()),
     root: theme.root({ class: className }),
-    spinner: theme.spinner({ class: motionStyles.spinner })
+    spinner: theme.spinner()
   }
 })
 
@@ -118,7 +118,7 @@ function openNotesLink(event: MouseEvent) {
         <BrandMark variant="app-icon" decorative class="size-full" />
       </template>
       <template v-if="state.status === 'checking'">
-        <icon-lucide-loader-circle :class="ui.spinner" aria-hidden="true" />
+        <AppSpinner :class="ui.spinner" />
         <p>{{ t.checking }}</p>
       </template>
       <AppAlert v-else-if="failure" tone="error" :heading="failure" class="w-full text-start" />

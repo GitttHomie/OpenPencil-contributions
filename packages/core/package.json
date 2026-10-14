@@ -1,6 +1,6 @@
 {
   "name": "@open-pencil/core",
-  "version": "0.15.1",
+  "version": "0.16.0-beta.3",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -22,6 +22,7 @@
   },
   "exports": {
     "./package.json": "./package.json",
+    "./assets/*": "./assets/*",
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
@@ -113,10 +114,25 @@
       "import": "./dist/io/formats/fig/index.js",
       "default": "./dist/io/formats/fig/index.js"
     },
+    "./io/formats/html/import": {
+      "types": "./dist/io/formats/html/import.d.ts",
+      "import": "./dist/io/formats/html/import.js",
+      "default": "./dist/io/formats/html/import.js"
+    },
+    "./io/formats/html/layers": {
+      "types": "./dist/io/formats/html/layers.d.ts",
+      "import": "./dist/io/formats/html/layers.js",
+      "default": "./dist/io/formats/html/layers.js"
+    },
     "./io/formats/raster": {
       "types": "./dist/io/formats/raster/index.d.ts",
       "import": "./dist/io/formats/raster/index.js",
       "default": "./dist/io/formats/raster/index.js"
+    },
+    "./io/formats/design-tokens": {
+      "types": "./dist/io/formats/design-tokens/index.d.ts",
+      "import": "./dist/io/formats/design-tokens/index.js",
+      "default": "./dist/io/formats/design-tokens/index.js"
     },
     "./io/formats/svg": {
       "types": "./dist/io/formats/svg/index.d.ts",
@@ -209,7 +225,7 @@
     "svg-path-properties": "^2.0.2",
     "svg2pdf.js": "^2.8.1",
     "svgpath": "^2.6.0",
-    "twirlwind": "^0.4.0",
+    "twirlwind": "^0.4.1",
     "unifont": "0.7.4",
     "valibot": "^1.5.0",
     "yoga-layout": "npm:@open-pencil/yoga-layout@3.3.0-grid.3"

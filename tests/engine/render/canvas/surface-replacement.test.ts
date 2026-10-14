@@ -4,6 +4,8 @@ import type { Surface } from 'canvaskit-wasm'
 
 import { SkiaRenderer } from '#core/canvas/renderer'
 
+import { asDouble } from '#tests/helpers/doubles'
+
 function surface() {
   return { delete: mock() } as Surface & { delete: ReturnType<typeof mock> }
 }
@@ -15,13 +17,15 @@ describe('renderer surface replacement', () => {
     const renderer: Pick<
       SkiaRenderer,
       | 'surface'
+      | 'liveImages'
       | 'tiledScene'
       | 'sceneBackingAllocationFailed'
       | 'invalidateScenePicture'
       | 'replaceSurface'
     > = {
       surface: previous,
-      tiledScene: { destroy: mock() } as SkiaRenderer['tiledScene'],
+      liveImages: new Map(),
+      tiledScene: asDouble<SkiaRenderer['tiledScene']>({ destroy: mock() }),
       sceneBackingAllocationFailed: true,
       invalidateScenePicture: mock(),
       replaceSurface: SkiaRenderer.prototype.replaceSurface

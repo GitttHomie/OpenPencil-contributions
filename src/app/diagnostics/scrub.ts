@@ -8,7 +8,7 @@ const URL_RULES: ScrubRule[] = [
   [/\b((?:https?|tauri|file):\/\/[^\s?#'")]*)[?#][^\s'")]*/g, '$1'],
   // A query on a bare path or file name, such as `/Designs/app.fig?token=…`. It needs a
   // `name=` after the `?`, so optional chaining such as `a.b?.c` in a message stays.
-  [/([^\s?'"(]*[/.][^\s?#'")]*)\?[\w.~%-]+=[^\s'")]*/g, '$1'],
+  [/(^|[\s"'(])([^\s?'"(]{0,2048}[/.][^\s?#'")]{0,2048})\?[\w.~%-]+=[^\s'")]*/g, '$1$2'],
   [/(\/\/)[^/\s:@]+:[^/\s@]+@/g, `$1${REDACTED}@`]
 ]
 
@@ -84,4 +84,10 @@ function applyRule(text: string, [pattern, replacement]: ScrubRule): string {
  */
 export function scrubDiagnosticText(text: string): string {
   return RULES.reduce(applyRule, text)
+}
+
+/** Content logs retain design text and file paths, but never known credential patterns. */
+export function scrubSessionText(text: string): string {
+  // Encoded images are extracted by chat/media. Keep long code identifiers and design values.
+  return [...URL_RULES, ...CREDENTIAL_RULES.slice(0, -1)].reduce(applyRule, text)
 }

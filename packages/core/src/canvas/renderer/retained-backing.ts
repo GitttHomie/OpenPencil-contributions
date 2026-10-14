@@ -4,6 +4,7 @@ import type { Canvas, Image as CKImage, Surface } from 'canvaskit-wasm'
 import { type SceneGraph } from '@open-pencil/scene-graph'
 import {
   computeDescendantVisualBounds,
+  hasFiniteGeometry,
   unionVisualBounds,
   type VisualBounds
 } from '@open-pencil/scene-graph/geometry'
@@ -14,6 +15,7 @@ import { clearSubtreePictureCache } from '#core/canvas/renderer/state'
 import { worldNodeVisualBounds } from '#core/canvas/renderer/visual-bounds'
 import { emitNavigationTrace } from '#core/profiler/index'
 
+import { containsForegroundBlur } from './foreground-blur'
 import { clamp, smoothAverage } from './retained-backing/timing'
 import type { SceneBackingGeometry } from './retained-backing/types'
 
@@ -229,7 +231,7 @@ export function computeRetainedSubtreeBounds(
     const nodeId = pending.pop()
     if (!nodeId) continue
     const node = graph.getNode(nodeId)
-    if (!node?.visible) continue
+    if (!node?.visible || !hasFiniteGeometry(node)) continue
 
     transformedBounds = unionVisualBounds(transformedBounds, worldNodeVisualBounds(graph, node))
     pending.push(...node.childIds)
@@ -286,7 +288,7 @@ function drawRetainedChild(
   const hasCacheableEffects = child?.effects.some(
     (effect) => effect.visible && (effect.type === 'DROP_SHADOW' || effect.type === 'INNER_SHADOW')
   )
-  if (hasCacheableEffects) {
+  if ((renderingSceneBacking && containsForegroundBlur(graph, childId)) || hasCacheableEffects) {
     const previous = r.renderingSceneBacking
     r.renderingSceneBacking = renderingSceneBacking
     try {

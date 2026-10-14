@@ -49,6 +49,7 @@ export type AIModelProfile = {
   maxOutputTokens: number
   thinkingLevel: ThinkingLevel
   harnessPermissionMode?: HarnessPermissionMode
+  imageSupport?: 'advertised' | 'verified' | 'unsupported'
   capabilities: AIModelCapability[]
 }
 
@@ -82,6 +83,7 @@ export type AIModelProfileDraft = {
   maxOutputTokens: number
   thinkingLevel: ThinkingLevel
   harnessPermissionMode: HarnessPermissionMode
+  imageSupport?: 'advertised' | 'verified' | 'unsupported'
   capabilities: AIModelCapability[]
 }
 

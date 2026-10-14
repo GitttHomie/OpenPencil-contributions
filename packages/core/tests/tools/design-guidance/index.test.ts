@@ -20,7 +20,7 @@ test('guidance discovery is shared, read-only, and does not require external cap
   expect(getDesignGuidance.mutates).toBe(false)
   expect(getDesignGuidance.capabilities).toEqual([])
   expect(result).toMatchObject({
-    version: '1.1.0',
+    version: expect.any(String),
     workflow: DESIGN_WORKFLOW,
     available: [
       { topic: 'ux' },

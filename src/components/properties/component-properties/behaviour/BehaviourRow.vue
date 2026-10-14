@@ -94,7 +94,7 @@ function numberLabel(field: (typeof NUMBER_FIELDS)[number]) {
     :label="label"
     :data-row="id"
     :data-missing="missing || undefined"
-    :ui="{ root: 'group', label: 'group-data-[missing]:text-issue-warning' }"
+    :ui="{ root: 'group', label: 'group-data-[missing]:text-warning' }"
   >
     <BehaviourBindingField
       v-if="part"

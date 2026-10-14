@@ -34,6 +34,7 @@ test('saving and reopening keeps wrapped, aligned and mixed-style text in place'
     store.requestRender()
   })
   await editor.canvas.waitForRender()
+  await waitForSettledScene(editor.page)
   const before = await editor.canvas.screenshotCanvasRegion(760, 360)
   expect(before).toMatchSnapshot('native-paragraphs.png')
   const picker = await editor.page.evaluateHandle(() => {
@@ -97,9 +98,8 @@ test('saving and reopening keeps wrapped, aligned and mixed-style text in place'
   )
   await editor.canvas.waitForRender()
   await waitForSettledScene(editor.page)
-  expect(await editor.canvas.screenshotCanvasRegion(760, 360)).toMatchSnapshot(
-    'native-paragraphs.png',
-    { maxDiffPixels: 0, threshold: 0 }
-  )
+  const after = await editor.canvas.screenshotCanvasRegion(760, 360)
+  expect(after.equals(before), 'save/reopen preserves every canvas pixel').toBe(true)
+  expect(after).toMatchSnapshot('native-paragraphs.png', { maxDiffPixels: 0, threshold: 0 })
   editor.canvas.assertNoErrors()
 })

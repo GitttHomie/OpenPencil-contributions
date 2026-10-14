@@ -2,9 +2,15 @@ import { copyFills, copyStrokes } from '../copy'
 import type { SceneGraph } from '../index'
 import { hasInstanceOverride } from '../instances'
 import type { Color } from '../primitives'
-import type { Fill, SceneNode, Stroke } from '../types'
-import type { VariableModeFallback } from '../variables'
+import { retainEditedTextStyle } from '../shared-styles'
+import type { Fill, SceneNode, Stroke, StyleRun, VariableValue } from '../types'
 import { NUMERIC_FIELDS, isNumericVariableBindingField } from './fields'
+import {
+  createBatchVariableResolver,
+  type NodeVariableResolver,
+  type VariableModeFallback
+} from './resolution'
+import { variableValueReferences } from './value'
 export { isNumericVariableBindingField } from './fields'
 
 /** New declarations belong to the outermost occurrence, bounded by a component definition. */
@@ -39,22 +45,139 @@ export function assignVariableBindingUnits(
 export function resolvedNumericBindings(
   graph: SceneGraph,
   node: SceneNode,
-  fallback: VariableModeFallback = 'active'
+  fallback: VariableModeFallback = 'active',
+  resolve?: NodeVariableResolver
 ): Partial<SceneNode> {
   const updates: Partial<SceneNode> = {}
   for (const [field, variableId] of Object.entries(node.boundVariables)) {
     if (!NUMERIC_FIELDS.has(field)) continue
     if ((field === 'width' || field === 'height') && hasInstanceOverride(graph, node.id, field))
       continue
-    const value = graph.resolveNumberVariableForNode(node.id, variableId, fallback)
-    if (value === undefined || !Number.isFinite(value)) continue
+    const value = resolve
+      ? resolve(node.id, variableId)
+      : graph.resolveNumberVariableForNode(node.id, variableId, fallback)
+    if (typeof value !== 'number' || !Number.isFinite(value)) continue
     const scale = node.variableBindingScales[field] ?? 1
     const effective = value * scale
     if (!Number.isFinite(effective)) continue
-    const next = field === 'opacity' ? Math.max(0, Math.min(1, effective)) : effective
+    const next =
+      field === 'opacity' || field === 'cornerSmoothing'
+        ? Math.max(0, Math.min(1, effective))
+        : effective
     if (node[field as keyof SceneNode] !== next) Object.assign(updates, { [field]: next })
   }
   return updates
+}
+
+/**
+ * The text a variable bound to text content shows: a string as it is, and a number or boolean
+ * as Figma writes it, since Figma lets either be text content.
+ */
+export function variableText(value: VariableValue | undefined): string | undefined {
+  if (typeof value === 'string') return value
+  if (typeof value === 'boolean') return String(value)
+  if (typeof value === 'number' && Number.isFinite(value)) return numberText(value)
+  return undefined
+}
+
+const INT32_MIN = -2_147_483_648
+const INT32_MAX = 2_147_483_647
+
+/** How near a whole number a value must be for Figma to write it as one. */
+const WHOLE_NUMBER_TOLERANCE = 1e-6
+
+/**
+ * A number as Figma desktop 126 writes it as text: one within a millionth of a whole number as
+ * that integer, clamped to 32 bits, and anything else with two decimals, its sign kept and an
+ * exact tie rounded to even, as C's `%.2f` does (0.125 is "0.12", 0.999 is "1.00", -0.004 is
+ * "-0.00").
+ */
+function numberText(value: number): string {
+  const whole = Math.round(value)
+  if (Math.abs(value - whole) < WHOLE_NUMBER_TOLERANCE)
+    return String(Math.min(INT32_MAX, Math.max(INT32_MIN, whole)) || 0)
+  const scaled = Math.abs(value) * 100
+  const floor = Math.floor(scaled)
+  const tie = scaled - floor === 0.5
+  const cents = tie ? floor + (floor % 2) : Math.round(scaled)
+  const sign = value < 0 ? '-' : ''
+  return `${sign}${Math.floor(cents / 100)}.${String(cents % 100).padStart(2, '0')}`
+}
+
+/**
+ * The text and visibility a node's string and boolean bindings resolve to in its mode, for the
+ * fields whose stored value differs. Text or visibility an instance overrides, which typing in a
+ * layer or toggling its eye records, keeps its own value, as an overridden width or height does.
+ * The runtime loads changed fonts after resolving their stored family and weight.
+ */
+export function resolvedValueBindings(
+  graph: SceneGraph,
+  node: SceneNode,
+  fallback: VariableModeFallback = 'active',
+  resolveVariable?: NodeVariableResolver
+): Partial<SceneNode> {
+  const updates: Partial<SceneNode> = {}
+  const resolve = (field: 'text' | 'visible' | 'fontFamily') => {
+    const variableId = node.boundVariables[field]
+    if (!variableId || hasInstanceOverride(graph, node.id, field)) return undefined
+    return resolveVariable
+      ? resolveVariable(node.id, variableId)
+      : graph.resolveVariableForNode(node.id, variableId, fallback)
+  }
+  const text = node.type === 'TEXT' ? variableText(resolve('text')) : undefined
+  if (text !== undefined && text !== node.text) updates.text = text
+  const family = node.type === 'TEXT' ? resolve('fontFamily') : undefined
+  if (typeof family === 'string' && family.trim() && family !== node.fontFamily)
+    updates.fontFamily = family
+  const visible = resolve('visible')
+  if (typeof visible === 'boolean' && visible !== node.visible) updates.visible = visible
+  return updates
+}
+
+/** Fields of a range of characters a bound number gives its value; the rest need fonts loaded. */
+const NUMERIC_RUN_FIELDS = ['fontSize', 'fontWeight', 'letterSpacing', 'lineHeight'] as const
+
+/**
+ * The runs a text's bindings resolve to in its mode. Font loading belongs to the runtime.
+ */
+export function resolvedRunBindings(
+  graph: SceneGraph,
+  node: SceneNode,
+  fallback: VariableModeFallback = 'active',
+  resolve?: NodeVariableResolver
+): Pick<Partial<SceneNode>, 'styleRuns'> {
+  const styleRuns = node.styleRuns.map((run): StyleRun => {
+    const bound = run.style.boundVariables
+    if (!bound) return run
+    let style = run.style
+    if (bound.fontFamily) {
+      const family = resolve
+        ? resolve(node.id, bound.fontFamily)
+        : graph.resolveVariableForNode(node.id, bound.fontFamily, fallback)
+      if (typeof family === 'string' && family.trim() && family !== style.fontFamily)
+        style = { ...style, fontFamily: family }
+    }
+    for (const field of NUMERIC_RUN_FIELDS) {
+      const variableId = bound[field]
+      if (!variableId) continue
+      const value = resolve
+        ? resolve(node.id, variableId)
+        : graph.resolveNumberVariableForNode(node.id, variableId, fallback)
+      if (typeof value !== 'number' || !Number.isFinite(value) || style[field] === value) continue
+      style = { ...style, [field]: value }
+    }
+    return style === run.style ? run : { ...run, style }
+  })
+  const changed = styleRuns.some((run, index) => run !== node.styleRuns[index])
+  return changed ? { styleRuns } : {}
+}
+
+/** The variables a node binds, its own and its characters'. */
+function boundVariableIds(node: SceneNode): string[] {
+  return [
+    ...Object.values(node.boundVariables),
+    ...node.styleRuns.flatMap((run) => Object.values(run.style.boundVariables ?? {}))
+  ].filter((id): id is string => typeof id === 'string')
 }
 
 /**
@@ -81,6 +204,16 @@ export function resolvedPaintBindings(
     const color = graph.resolveColorVariableForNode(node.id, node.boundVariables[field], fallback)
     const index = Number(match[2])
     if (!color) continue
+    const paint = match[1] === 'fills' ? node.fills.at(index) : node.strokes.at(index)
+    if (
+      !paint ||
+      (paint.color.r === color.r &&
+        paint.color.g === color.g &&
+        paint.color.b === color.b &&
+        paint.color.a === 1 &&
+        paint.opacity === color.a)
+    )
+      continue
     if (match[1] === 'fills') {
       if (!node.fills[index]) continue
       changes.fills ??= copyFills(node.fills)
@@ -108,8 +241,8 @@ export function variablesResolvingThrough(graph: SceneGraph, ids: Iterable<strin
     grew = false
     for (const variable of graph.variables.values()) {
       if (found.has(variable.id)) continue
-      const aliases = Object.values(variable.valuesByMode).some(
-        (value) => typeof value === 'object' && 'aliasId' in value && found.has(value.aliasId)
+      const aliases = Object.values(variable.valuesByMode).some((value) =>
+        variableValueReferences(value).some((id) => found.has(id))
       )
       if (aliases) {
         found.add(variable.id)
@@ -132,13 +265,42 @@ function subtreeNodes(graph: SceneGraph, roots: Iterable<string>): SceneNode[] {
   return nodes
 }
 
+/**
+ * The collections whose variables the layers in these subtrees resolve: those they bind, and
+ * those the bound variables alias, so a mode set on the subtrees can change what they show.
+ */
+export function collectionsBoundIn(graph: SceneGraph, roots: Iterable<string>): Set<string> {
+  const pending = subtreeNodes(graph, roots).flatMap(boundVariableIds)
+  const seen = new Set<string>()
+  const collections = new Set<string>()
+  for (let id = pending.pop(); id !== undefined; id = pending.pop()) {
+    if (seen.has(id)) continue
+    seen.add(id)
+    const variable = graph.variables.get(id)
+    if (!variable) continue
+    collections.add(variable.collectionId)
+    for (const value of Object.values(variable.valuesByMode)) {
+      if (typeof value === 'object' && 'aliasId' in value) pending.push(value.aliasId)
+    }
+  }
+  return collections
+}
+
+/**
+ * The layers a change to these variables reaches: those binding one of them, or a variable that
+ * aliases one, on the layer itself or on its characters.
+ */
+export function layersUsingVariables(graph: SceneGraph, ids: Iterable<string>): SceneNode[] {
+  const variables = variablesResolvingThrough(graph, ids)
+  return [...graph.getAllNodes()].filter((node) =>
+    boundVariableIds(node).some((id) => variables.has(id))
+  )
+}
+
 function scopedNodes(graph: SceneGraph, scope: BindingScope | undefined): Iterable<SceneNode> {
   if (!scope) return graph.getAllNodes()
   if ('subtrees' in scope) return subtreeNodes(graph, scope.subtrees)
-  const variables = variablesResolvingThrough(graph, scope.variables)
-  return [...graph.getAllNodes()].filter((node) =>
-    Object.values(node.boundVariables).some((id) => variables.has(id))
-  )
+  return layersUsingVariables(graph, scope.variables)
 }
 
 /**
@@ -151,10 +313,15 @@ export function reconcileNumericVariableBindings(
   scope?: BindingScope
 ): string[] {
   const changed: string[] = []
+  const resolve = createBatchVariableResolver(graph)
   for (const node of scopedNodes(graph, scope)) {
-    const updates = resolvedNumericBindings(graph, node)
+    const updates = {
+      ...resolvedNumericBindings(graph, node, 'active', resolve),
+      ...resolvedValueBindings(graph, node, 'active', resolve),
+      ...resolvedRunBindings(graph, node, 'active', resolve)
+    }
     if (Object.keys(updates).length === 0) continue
-    graph.updateNode(node.id, updates)
+    graph.updateNode(node.id, retainEditedTextStyle(node, updates))
     changed.push(node.id)
   }
   return changed

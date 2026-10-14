@@ -1,12 +1,11 @@
 import type { Editor } from '@open-pencil/core/editor'
-import { computeAccurateBounds, regenerateFillGeometry } from '@open-pencil/core/vector'
 import {
   cloneVectorNetwork,
+  slotScope,
   transformVectorNetwork,
   vectorNetworksEqual
 } from '@open-pencil/scene-graph'
-import type { VectorNetwork } from '@open-pencil/scene-graph'
-import { getNodeLocalMatrix, getWorldMatrix } from '@open-pencil/scene-graph/coordinate'
+import { getWorldMatrix } from '@open-pencil/scene-graph/coordinate'
 import Matrix from '@open-pencil/scene-graph/matrix'
 
 import { getLiveNetwork } from './network'
@@ -22,6 +21,19 @@ export function createVectorEditLifecycle(editor: Editor, state: VectorEditState
     return state.nodeEditState
   }
 
+  // A path whose layer is gone, by undo, a script, or another document, has nothing to edit.
+  const close = () => {
+    state.nodeEditState = null
+    state.snapGuides = []
+    editor.requestRender()
+  }
+  editor.onEditorEvent('node:deleted', (id) => {
+    if (state.nodeEditState?.nodeId === id) close()
+  })
+  editor.onEditorEvent('graph:replaced', () => {
+    if (state.nodeEditState) close()
+  })
+
   function commitNodeEditChanges(es: NonNullable<typeof state.nodeEditState>) {
     const node = editor.graph.getNode(es.nodeId)
     if (node?.type !== 'VECTOR') return
@@ -36,43 +48,9 @@ export function createVectorEditLifecycle(editor: Editor, state: VectorEditState
 
     // Map the edited page-absolute network back into the node's local frame
     const localNetwork = transformVectorNetwork(inverse, getLiveNetwork(es))
-    const bounds = computeAccurateBounds(localNetwork)
-    const relativeNetwork: VectorNetwork = {
-      vertices: localNetwork.vertices.map((v) => ({
-        ...v,
-        x: v.x - bounds.x,
-        y: v.y - bounds.y
-      })),
-      segments: localNetwork.segments,
-      regions: localNetwork.regions
-    }
-
-    // The node rotates/flips about its center, so with rotation preserved the
-    // new x/y follow from where the new geometry's center lands in the parent
-    // frame (via the OLD local matrix — the geometry itself has not moved).
-    const localMatrix = getNodeLocalMatrix(node)
-    const center = Matrix.mapPoint(localMatrix, {
-      x: bounds.x + bounds.width / 2,
-      y: bounds.y + bounds.height / 2
-    })
-
-    editor.updateNodeWithUndo(
-      node.id,
-      {
-        x: center.x - bounds.width / 2,
-        y: center.y - bounds.height / 2,
-        width: bounds.width,
-        height: bounds.height,
-        vectorNetwork: relativeNetwork,
-        // Fills render from fillGeometry blobs when present — rebuild them from
-        // the edited network so fills follow the edit.
-        fillGeometry: regenerateFillGeometry(relativeNetwork, node.fillGeometry),
-        // Drop stale imported stroke outline blobs; post-edit strokes come from
-        // the live vector network path.
-        strokeGeometry: []
-      },
-      'Edit vector'
-    )
+    // Scene Graph fits the curves, rebases their paints, and rebuilds cached
+    // fill geometry. The editor captures every implicit change for undo.
+    editor.updateNodeWithUndo(node.id, { vectorNetwork: localNetwork }, 'Edit vector')
     const committed = editor.graph.getNode(es.nodeId)
     if (committed?.type === 'VECTOR' && committed.vectorNetwork) {
       const committedWorld = getWorldMatrix(committed, editor.graph)
@@ -93,6 +71,8 @@ export function createVectorEditLifecycle(editor: Editor, state: VectorEditState
   function enterNodeEditMode(nodeId: string) {
     const node = editor.graph.getNode(nodeId)
     if (node?.type !== 'VECTOR' || !node.vectorNetwork) return
+    // A vector inside an instance draws its component's path, so Figma does not open it.
+    if (node.parentId && slotScope(editor.graph, node.parentId).kind === 'locked') return
 
     const world = getWorldMatrix(node, editor.graph)
     const absNetwork = transformVectorNetwork(world, node.vectorNetwork)

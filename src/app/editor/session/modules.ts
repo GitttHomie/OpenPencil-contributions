@@ -9,12 +9,14 @@ import { createDocumentIOActions } from '@/app/document/io'
 import type { ViewportSize } from '@/app/document/io/types'
 import { createDesignCheck } from '@/app/editor/design-check/session'
 import { createFlashActions } from '@/app/editor/flash'
+import { bindLayoutNotifications } from '@/app/editor/layout/notifications'
 import { createMobileClipboardActions } from '@/app/editor/mobile-clipboard'
 import { createPenActions } from '@/app/editor/pen'
 import type { EditorPreparationController } from '@/app/editor/preparation/controller'
 import { createProfilerActions } from '@/app/editor/profiler'
 import type { AppEditorState } from '@/app/editor/session/types'
 import { createVectorEditActions } from '@/app/editor/vector'
+import { PREVIEW_ENABLED } from '@/constants'
 
 export function defineEditorStoreAccessors(store: object, editor: Editor) {
   Object.defineProperties(store, {
@@ -67,17 +69,28 @@ export function createEditorStoreModules(
   const mobileClipboard = createMobileClipboardActions(editor)
   const profiler = createProfilerActions(editor)
   const designCheck = createDesignCheck(editor, state)
+  const stopLayoutNotifications = bindLayoutNotifications(editor)
 
   return {
     ...flash,
     ...pen,
     ...vectorEdit,
+    startPlay() {
+      if (PREVIEW_ENABLED) editor.startPlay()
+    },
+    togglePlay() {
+      if (PREVIEW_ENABLED) editor.togglePlay()
+    },
     openFigFile: documentIO.openFigFile,
     openDOMFile: documentIO.openDOMFile,
     importDOMText: documentIO.importDOMText,
     setViewportSize: documentIO.setViewportSize,
+    getViewportSize: documentIO.getViewportSize,
     fitCurrentPageToViewport: documentIO.fitCurrentPageToViewport,
     hasUnsavedChanges: documentIO.hasUnsavedChanges,
+    /** Takes the document as it is now as its saved state, so closing it asks nothing. */
+    markDocumentSaved: documentIO.markDocumentSaved,
+    markDocumentChanged: documentIO.markDocumentChanged,
     saveFigFile: documentIO.saveFigFile,
     saveFigFileAs: documentIO.saveFigFileAs,
     getDocumentFilePath: documentIO.getDocumentFilePath,
@@ -92,9 +105,11 @@ export function createEditorStoreModules(
     setStorageDocumentSource: documentIO.setStorageDocumentSource,
     setPlannedFilePath: documentIO.setPlannedFilePath,
     saveFigFileToPath: documentIO.saveFigFileToPath,
+    saveFigFileToStorage: documentIO.saveFigFileToStorage,
     startWatchingCurrentFile: documentIO.startWatchingCurrentFile,
     designCheck,
     dispose: () => {
+      stopLayoutNotifications()
       designCheck.dispose()
       editor.releaseGraphResources()
       editor.dispose()

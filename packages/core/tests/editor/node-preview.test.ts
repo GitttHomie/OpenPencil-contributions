@@ -43,7 +43,7 @@ describe('owned node previews', () => {
     }
   })
 
-  test('captures implicit style detachment and text-cache invalidation for commit, undo and cancel', () => {
+  test('retains the editable text style and captures text-cache invalidation for commit, undo and cancel', () => {
     const editor = createEditor()
     try {
       const node = editor.graph.createNode('TEXT', editor.state.currentPageId, {
@@ -60,11 +60,10 @@ describe('owned node previews', () => {
       const preview = editor.beginNodePreview('Font size')
       preview.update(node.id, { fontSize: 32 })
       expect(updates).toEqual([])
-      expect(node.textStyleId).toBeNull()
+      expect(node.textStyleId).toBe('linked-style')
       preview.commit()
       expect(updates[0]).toMatchObject({
         fontSize: 32,
-        textStyleId: null,
         derivedTextGlyphs: null,
         textPicture: null
       })

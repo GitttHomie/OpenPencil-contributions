@@ -45,6 +45,9 @@
       "@open-pencil/harness": [
         "./packages/harness/src/index.ts"
       ],
+      "#feedback/*": [
+        "./packages/feedback/src/*"
+      ],
       "#dom-css/*": [
         "./packages/dom-css/src/*"
       ],
@@ -52,6 +55,9 @@
         "./tests/*"
       ],
       "#docs-config/*": [
+        "./packages/docs/.vitepress/*"
+      ],
+      "#docs/*": [
         "./packages/docs/.vitepress/*"
       ],
       "tinykeys": [
@@ -71,6 +77,15 @@
       ],
       "@open-pencil/dom-css": [
         "./packages/dom-css/src/index.ts"
+      ],
+      "@open-pencil/dom-css/scene-graph": [
+        "./packages/dom-css/src/import/scene-graph.ts"
+      ],
+      "@open-pencil/dom-css/export": [
+        "./packages/dom-css/src/export/index.ts"
+      ],
+      "@open-pencil/dom-css/*": [
+        "./packages/dom-css/src/*"
       ],
       "#scene-graph/*": [
         "./packages/scene-graph/src/*"
@@ -111,7 +126,9 @@
     "packages/vue/src/global.d.ts",
     "packages/dom-css/src/cssom.d.ts",
     "packages/dom-css/src/postcss-value-parser.d.ts",
-    "packages/design-jsx/src/global.d.ts"
+    "packages/design-jsx/src/global.d.ts",
+    "packages/docs/.vitepress/theme/landing/**/*.ts",
+    "packages/docs/.vitepress/theme/landing/**/*.vue"
   ],
   "references": [
     {

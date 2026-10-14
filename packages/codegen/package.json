@@ -1,9 +1,22 @@
 {
   "name": "@open-pencil/codegen",
-  "version": "0.15.1",
+  "version": "0.16.0-beta.3",
+  "description": "How OpenPencil exporters emit source: JavaScript, TypeScript, and JSX built as ESTree and printed with esrap.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/open-pencil/open-pencil.git",
+    "directory": "packages/codegen"
+  },
+  "files": [
+    "dist",
+    "src",
+    "README.md"
+  ],
   "type": "module",
-  "description": "Syntax-tree code generation for OpenPencil exporters: JavaScript, TypeScript, and JSX built as ESTree and printed with esrap.",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "imports": {
     "#codegen/*": {
       "types": "./src/*",
@@ -19,14 +32,10 @@
       "default": "./dist/index.js"
     }
   },
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "sideEffects": false,
-  "files": [
-    "dist",
-    "src",
-    "README.md"
-  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "scripts": {
     "build": "bunx tsdown --config tsdown.config.ts",
     "check": "bun run typecheck && bun run build && bun run smoke:dist",
@@ -37,20 +46,13 @@
   "dependencies": {
     "@sveltejs/acorn-typescript": "^1.0.13",
     "acorn": "^8.18.0",
+    "entities": "^8.0.0",
     "esrap": "^2.3.11"
   },
   "devDependencies": {
     "@types/bun": "^1.3.14",
     "tsdown": "^0.22.14",
-    "typescript": "~5.8.3"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/open-pencil/open-pencil.git",
-    "directory": "packages/codegen"
-  },
-  "publishConfig": {
-    "access": "public",
-    "provenance": true
+    "typescript": "~5.8.3",
+    "vue": "^3.5.43"
   }
 }

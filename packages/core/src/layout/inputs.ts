@@ -1,0 +1,37 @@
+import { TEXT_LAYOUT_FIELDS, TEXT_SHAPING_FIELDS, type SceneNode } from '@open-pencil/scene-graph'
+
+/** Inputs that can change an auto-layout tree's geometry, rather than only its appearance. */
+export const LAYOUT_INPUT_FIELDS: ReadonlySet<string> = new Set<keyof SceneNode>([
+  ...TEXT_LAYOUT_FIELDS,
+  ...TEXT_SHAPING_FIELDS,
+  'parentId',
+  'childIds',
+  'visible',
+  'layoutMode',
+  'layoutDirection',
+  'layoutWrap',
+  'primaryAxisSizing',
+  'counterAxisSizing',
+  'primaryAxisAlign',
+  'counterAxisAlign',
+  'counterAxisAlignContent',
+  'layoutGrow',
+  'layoutAlignSelf',
+  'layoutPositioning',
+  'paddingTop',
+  'paddingRight',
+  'paddingBottom',
+  'paddingLeft',
+  'itemSpacing',
+  'counterAxisSpacing',
+  'minWidth',
+  'maxWidth',
+  'minHeight',
+  'maxHeight',
+  'gridTemplateColumns',
+  'gridTemplateRows',
+  'gridColumnGap',
+  'gridRowGap',
+  'gridPosition',
+  'derivedLayout'
+])

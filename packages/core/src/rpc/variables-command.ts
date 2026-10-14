@@ -24,6 +24,7 @@ function formatVariableValue(variable: Variable, graph: SceneGraph): string {
   if (typeof raw === 'object' && 'r' in raw) {
     return colorToHex(raw).toLowerCase()
   }
+  if (typeof raw === 'object' && 'expression' in raw) return JSON.stringify(raw)
 
   return String(raw)
 }
@@ -101,11 +102,25 @@ function variableType(value: string | undefined): VariableType | undefined {
   return type
 }
 
+/** W3C design token files instead of a stylesheet, for `--format dtcg`. */
+async function designTokenFiles(graph: SceneGraph): Promise<TokensResult> {
+  const { designTokenIssueMessage, exportDesignTokens } =
+    await import('#core/io/formats/design-tokens')
+  const { files, issues } = exportDesignTokens(graph)
+  return {
+    css: '',
+    tokenCount: graph.variables.size,
+    issues: issues.map(designTokenIssueMessage),
+    files
+  }
+}
+
 export const tokensCommand: RPCCommand<TokensArgs, TokensResult> = {
   name: 'tokens',
   execute: (graph, args) => {
+    if (args.format === 'dtcg') return designTokenFiles(graph)
     if (args.format && args.format !== 'css' && args.format !== 'tailwind')
-      throw new Error(`Unknown token format: ${args.format}. Use css or tailwind.`)
+      throw new Error(`Unknown token format: ${args.format}. Use css, tailwind, or dtcg.`)
     return exportTokenStylesheet(graph, {
       format: args.format === 'tailwind' ? 'tailwind' : 'css',
       collection: args.collection,

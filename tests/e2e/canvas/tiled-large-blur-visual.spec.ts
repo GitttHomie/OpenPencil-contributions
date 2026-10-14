@@ -5,6 +5,7 @@ import * as v from 'valibot'
 import type { RecordedWheelSample } from '@open-pencil/core/profiler'
 
 import { expect, test, useEditorSetup } from '#tests/e2e/fixtures'
+import { keepEmbeddedDefinitions } from '#tests/helpers/document/open'
 
 const editor = useEditorSetup('/?test&no-chrome&no-rulers&renderer=tiled&navigation-benchmark')
 const WheelSample: v.GenericSchema<unknown, RecordedWheelSample> = v.object({
@@ -80,8 +81,9 @@ async function replayReversal() {
 
 test('large blur remains seamless after tiled mutation and zoom reversal', async () => {
   test.setTimeout(120_000)
-  await editor.page.evaluate(() =>
-    window.openPencil?.openFile?.('/tests/fixtures/gold-preview.fig')
+  await keepEmbeddedDefinitions(
+    editor.page,
+    editor.page.evaluate(() => window.openPencil?.openFile?.('/tests/fixtures/gold-preview.fig'))
   )
   await editor.page.waitForFunction(() => {
     const store = window.openPencil?.getStore?.()

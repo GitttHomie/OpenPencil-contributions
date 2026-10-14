@@ -1,7 +1,6 @@
-import { captureMoveState, type Editor } from '@open-pencil/core/editor'
+import { captureMoveState, type Editor, type MoveState } from '@open-pencil/core/editor'
 
 import { useI18n } from '#vue/i18n/useI18n.js'
-import type { DragOriginal } from '#vue/shared/input/drag-original'
 import type { DragState } from '#vue/shared/input/types'
 
 export function duplicateAndDrag(
@@ -10,11 +9,11 @@ export function duplicateAndDrag(
   sx: number,
   sy: number,
   editor: Editor
-): { originals: Map<string, DragOriginal>; drag: DragState } {
+): { originals: Map<string, MoveState>; drag: DragState } {
   const previousSelection = new Set(editor.state.selectedIds)
   const { panels } = useI18n()
   const newIds: string[] = []
-  const newOriginals = new Map<string, DragOriginal>()
+  const newOriginals = new Map<string, MoveState>()
   for (const id of previousSelection) {
     const source = editor.graph.getNode(id)
     if (!source) continue

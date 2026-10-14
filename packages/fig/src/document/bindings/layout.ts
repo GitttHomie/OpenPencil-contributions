@@ -3,7 +3,7 @@ import {
   numericVariableBindingScales
 } from '#fig/node-change/variable/bindings'
 
-import { forEachInstanceOverride } from '@open-pencil/scene-graph'
+import { forEachInstanceOverride, retainEditedTextStyle } from '@open-pencil/scene-graph'
 import type { SceneGraph, SceneNode } from '@open-pencil/scene-graph'
 
 /** Apply resolved scalar layout values after hierarchy and explicit modes exist. */
@@ -44,7 +44,8 @@ export function applyDocumentLayoutBindings(
       if (typeof value !== 'number') continue
       const effectiveValue = field === 'opacity' ? value : value * (scales[field] ?? 1)
       const updates = resolvedNumericBindingUpdate(field, effectiveValue)
-      if (updates) graph.updateNode(node.id, updates)
+      // Resolving a saved binding is not a manual typography override.
+      if (updates) graph.updateNode(node.id, retainEditedTextStyle(node, updates))
     }
   }
 }

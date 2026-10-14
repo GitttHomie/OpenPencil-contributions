@@ -8,6 +8,32 @@ import { indexRecords } from '#fig/instance-overrides/source-index'
 
 import type { NodeChange } from '@open-pencil/kiwi/fig/codec'
 
+test('page content metadata distinguishes normal layers from internal style resources', () => {
+  const records: NodeChange[] = [
+    { guid: guid(1), type: 'DOCUMENT' },
+    {
+      guid: guid(2),
+      type: 'CANVAS',
+      internalOnly: true,
+      parentIndex: { guid: guid(1), position: 'a' }
+    },
+    {
+      guid: guid(3),
+      type: 'TEXT',
+      styleType: 'TEXT',
+      parentIndex: { guid: guid(2), position: 'a' }
+    }
+  ]
+  expect(createDocumentReader(records).pages[0].hasContent).toBe(false)
+  records.push({
+    guid: guid(4),
+    type: 'RECTANGLE',
+    styleType: 'NONE',
+    parentIndex: { guid: guid(2), position: 'b' }
+  })
+  expect(createDocumentReader(records).pages[0].hasContent).toBe(true)
+})
+
 test('reads pages independently through one index with cross-page component expansion', () => {
   const changes: NodeChange[] = [
     { guid: guid(1), type: 'DOCUMENT' },
@@ -64,6 +90,8 @@ test('reads pages independently through one index with cross-page component expa
     }))
   ).toEqual([{ sourceId: '1:4', parentSourceId: '1:2', pageSourceId: '1:2' }])
   expect(reader.planComponents([page]).map((component) => component.sourceId)).toEqual(['1:4'])
+  // A component an earlier pass built is neither read again nor planned.
+  expect(reader.planComponents([page], {}, (id) => id === '1:4')).toEqual([])
   const { graph, sources } = materializeDocument(changes)
   expect(graph.getPages().map((node) => node.name)).toEqual(['Design', 'Components'])
   const componentId = sources.get('1:4')

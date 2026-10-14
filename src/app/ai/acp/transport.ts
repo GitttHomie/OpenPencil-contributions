@@ -16,6 +16,8 @@ import type { ACPAgentDef } from '@open-pencil/core/constants'
 import { MCPStartupError, failureFromError } from '@/app/automation/mcp/failure'
 import { describeDiagnosticError, recordACPTransportFailure } from '@/app/diagnostics'
 import { buildACPMCPServers } from '@/app/integrations/mcp'
+import { MCPConnectionError } from '@/app/integrations/mcp/failure'
+import { CredentialStoreError } from '@/app/settings/credentials/types'
 
 import { getACPAgentAdapter } from './adapters/registry'
 import { applyCatalogControls } from './configuration/catalog'
@@ -26,6 +28,8 @@ import {
   assertSessionControlValues,
   type ACPSessionValues
 } from './configuration/session'
+import { formatConnectionError } from './connection-error'
+import { imagePrompt } from './image-prompt'
 import { acpLaunchOptions, ACPLaunchSettingsError, type ACPLaunchSettings } from './launch'
 import {
   ACPModelSelectionError,
@@ -57,58 +61,32 @@ interface ACPSession {
 
 type ACPTransportDependencies = {
   spawn: typeof spawnACPProcess
-  mcpServers: (chatId?: string) => Promise<McpServer[]>
+  mcpServers: (chatId?: string, connectionIds?: readonly string[]) => Promise<McpServer[]>
 }
 
 const defaultDependencies: ACPTransportDependencies = {
   spawn: spawnACPProcess,
-  async mcpServers(chatId) {
+  async mcpServers(chatId, connectionIds) {
+    let authorizationToken: string | null
     try {
       const { getAutomationAuthToken } = await import('@/app/automation/mcp/spawn')
-      return await buildACPMCPServers({
-        authorizationToken: await getAutomationAuthToken(),
-        chatId
-      })
+      authorizationToken = await getAutomationAuthToken()
     } catch (error) {
       throw new MCPStartupError('The canvas connection is unavailable.', failureFromError(error))
     }
+    return buildACPMCPServers({ authorizationToken, chatId, connectionIds })
   }
-}
-
-function isMissingCommandError(message: string): boolean {
-  const normalized = message.toLowerCase()
-  return normalized.includes('enoent') || normalized.includes('program not found')
-}
-
-function missingCommandMessage(agentDef?: ACPAgentDef): string {
-  if (!agentDef) return 'ACP agent CLI is not installed.'
-  if (!agentDef.installCommand) {
-    return `"${agentDef.command}" is not installed. Install it and restart OpenPencil.`
-  }
-  return `"${agentDef.command}" is not installed. Install it with: ${agentDef.installCommand}`
-}
-
-export function formatConnectionError(e: unknown, agentDef?: ACPAgentDef): string {
-  const msg = e instanceof Error ? e.message : String(e)
-  if (
-    msg.includes('ECONNREFUSED') ||
-    msg.includes('fetch failed') ||
-    msg.includes('Failed to fetch')
-  ) {
-    return 'MCP server is not running. Make sure the editor is open.'
-  }
-  if (msg.includes('timeout') || msg.includes('Timeout') || msg.includes('ETIMEDOUT')) {
-    return 'MCP server did not respond in time.'
-  }
-  if (isMissingCommandError(msg)) {
-    return missingCommandMessage(agentDef)
-  }
-  return msg
 }
 
 function startupError(error: unknown, agentDef: ACPAgentDef): Error {
   recordACPTransportFailure({ operation: 'start', ...describeDiagnosticError(error) })
-  if (error instanceof MCPStartupError || error instanceof ACPModelSelectionError) return error
+  if (
+    error instanceof MCPStartupError ||
+    error instanceof ACPModelSelectionError ||
+    error instanceof MCPConnectionError ||
+    error instanceof CredentialStoreError
+  )
+    return error
   return new Error(formatConnectionError(error, agentDef))
 }
 
@@ -135,15 +113,18 @@ export class ACPChatTransport implements ChatTransport<UIMessage> {
   private destroying = false
   private startingChild: TauriChild | null = null
   private startupAbort: AbortController | null = null
-  private purpose: 'design' | 'review' | 'catalog' | 'verification'
+  private purpose: 'design' | 'review' | 'vision' | 'catalog' | 'verification'
   private integration?: ACPIntegration
   private sessionValues?: ACPSessionValues
   private launch?: ACPLaunchSettings
   private image?: string
+  private images: Array<{ data: string; mimeType: string }>
   private modelId: string
   private catalogDefaultModelId?: string
   private catalogDefaults = new Map<string, ACPSessionValues>()
   private chatId?: string
+  private onLog?: (type: string, data: unknown) => void
+  private connectionIds?: readonly string[]
   private thinking: () => ACPThinkingSelection | undefined
   private onCatalog?: (catalog: ACPModelCatalog) => void
   private activity?: {
@@ -153,23 +134,26 @@ export class ACPChatTransport implements ChatTransport<UIMessage> {
   }
 
   get imageIncluded(): boolean {
-    return Boolean(this.image && this.session?.supportsImages)
+    return Boolean((this.image || this.images.length) && this.session?.supportsImages)
   }
 
   constructor(
     options: {
       agentDef: ACPAgentDef
       cwd?: string
-      purpose?: 'design' | 'review' | 'catalog' | 'verification'
+      purpose?: 'design' | 'review' | 'vision' | 'catalog' | 'verification'
       integration?: ACPIntegration
       sessionValues?: ACPSessionValues
       launch?: ACPLaunchSettings
       image?: string
+      images?: Array<{ data: string; mimeType: string }>
       modelId?: string
       chatId?: string
+      connectionIds?: readonly string[]
       thinking?: () => ACPThinkingSelection | undefined
       onCatalog?: (catalog: ACPModelCatalog) => void
       activity?: ACPChatTransport['activity']
+      onLog?: (type: string, data: unknown) => void
     },
     private dependencies: ACPTransportDependencies = defaultDependencies
   ) {
@@ -180,11 +164,14 @@ export class ACPChatTransport implements ChatTransport<UIMessage> {
     this.sessionValues = options.sessionValues ? { ...options.sessionValues } : undefined
     this.launch = options.launch ? { ...options.launch } : undefined
     this.image = options.image
+    this.images = options.images ?? []
     this.modelId = options.modelId ?? ''
     this.chatId = options.chatId
+    this.connectionIds = options.connectionIds
     this.thinking = options.thinking ?? (() => undefined)
     this.onCatalog = options.onCatalog
     this.activity = options.activity
+    this.onLog = options.onLog
   }
 
   async listModels(modelId = '', values?: ACPSessionValues): Promise<ACPModelCatalog> {
@@ -207,7 +194,7 @@ export class ACPChatTransport implements ChatTransport<UIMessage> {
       this.catalogDefaults,
       values
     )
-    return this.session.models
+    return { ...this.session.models, imageInput: this.session.supportsImages }
   }
 
   private assertOpen() {
@@ -215,11 +202,13 @@ export class ACPChatTransport implements ChatTransport<UIMessage> {
   }
 
   /** Explicit inference probe; never attaches the canvas or the conversation. */
-  async verifyModel(): Promise<void> {
+  async verifyModel(probe?: { data: string; expected: string }): Promise<void> {
     if (this.purpose !== 'verification') throw new Error('A verification session is required.')
     this.assertOpen()
     this.session ??= await this.spawnAgent()
     const session = this.session
+    if (probe && !session.supportsImages)
+      throw new Error('This CLI connection does not accept images.')
     const turn = getACPAgentAdapter(this.agentDef.id).createTurn?.()
     let text = ''
     const observation = { usedTools: false }
@@ -234,26 +223,29 @@ export class ACPChatTransport implements ChatTransport<UIMessage> {
       session.onClose = () => reject(new Error('Model verification session closed.'))
     })
     try {
-      const probe = async () => {
+      const requestProbe = async () => {
         await this.applyThinking(session)
         return session.connection.prompt({
           sessionId: session.sessionId,
           prompt: [
             {
               type: 'text',
-              text: 'Connection test. Reply with exactly OK. Do not use tools, read files, or perform any other task.'
-            }
+              text: probe
+                ? 'Read the six digits in this image. Reply with only those digits. Do not use tools or read files.'
+                : 'Connection test. Reply with exactly OK. Do not use tools, read files, or perform any other task.'
+            },
+            ...(probe ? [{ type: 'image' as const, data: probe.data, mimeType: 'image/png' }] : [])
           ]
         })
       }
-      const response = await Promise.race([probe(), closed])
+      const response = await Promise.race([requestProbe(), closed])
       this.assertOpen()
       const failure = turn?.failure(response)
       if (failure) throw new Error(failure)
       if (
         response.stopReason !== 'end_turn' ||
         observation.usedTools ||
-        !/^OK[.!]?$/i.test(text.trim())
+        !(probe ? text.trim() === probe.expected : /^OK[.!]?$/i.test(text.trim()))
       ) {
         throw new Error('The selected model did not complete the verification request.')
       }
@@ -327,20 +319,19 @@ export class ACPChatTransport implements ChatTransport<UIMessage> {
     await this.applyThinking(session, abortSignal)
     const requestText = replay ? replayPrompt(messages, lastUserMessage, text) : text
     const promptText =
-      this.purpose === 'review'
+      this.purpose !== 'design'
         ? text
         : buildACPUserPrompt(requestText, !this.sentContext, this.agentDef.id)
     const prompt: ContentBlock[] = [{ type: 'text', text: promptText }]
-    if (this.purpose === 'review') {
-      if (this.imageIncluded && this.image) {
-        prompt.push({ type: 'image', data: this.image, mimeType: 'image/png' })
-      } else {
-        prompt.push({
-          type: 'text',
-          text: 'No screenshot is available. Review the structural snapshot only; do not claim to have checked rendered appearance.'
-        })
-      }
-    }
+    prompt.push(
+      ...imagePrompt(this.purpose, session.supportsImages, lastUserMessage, this.images, this.image)
+    )
+    this.onLog?.('agent.prompt', {
+      agent: this.agentDef.id,
+      model: this.modelId,
+      prompt,
+      thinking: this.thinking()
+    })
     this.sentContext = true
     this.lastUserMessage = lastUserMessage ? structuredClone(toRaw(lastUserMessage)) : undefined
 
@@ -475,7 +466,10 @@ export class ACPChatTransport implements ChatTransport<UIMessage> {
     this.catalogDefaults.clear()
     let mcpServers: McpServer[]
     try {
-      mcpServers = this.purpose === 'design' ? await this.dependencies.mcpServers(this.chatId) : []
+      mcpServers =
+        this.purpose === 'design'
+          ? await this.dependencies.mcpServers(this.chatId, this.connectionIds)
+          : []
       this.assertOpen()
     } catch (error) {
       throw startupError(error, this.agentDef)
@@ -519,13 +513,18 @@ export class ACPChatTransport implements ChatTransport<UIMessage> {
     const permissionScope = adapterSession.permissions
     const startupAbort = new AbortController()
     this.startupAbort = startupAbort
-    const publishCatalog = (catalog: ACPModelCatalog) => this.onCatalog?.(catalog)
+    const publishCatalog = (catalog: ACPModelCatalog) =>
+      this.onCatalog?.({ ...catalog, imageInput: activeSession?.supportsImages })
+    const log = this.onLog
     const clientImpl: Client = {
       async requestPermission(
         params: RequestPermissionRequest
       ): Promise<RequestPermissionResponse> {
         if (restricted) return { outcome: { outcome: 'cancelled' } }
-        return requestPermissionFromUser(params, permissionScope)
+        log?.('permission.request', params)
+        const response = await requestPermissionFromUser(params, permissionScope)
+        log?.('permission.response', { toolCallId: params.toolCall.toolCallId, ...response })
+        return response
       },
 
       async sessionUpdate(params: SessionNotification): Promise<void> {

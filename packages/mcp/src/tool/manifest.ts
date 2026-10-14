@@ -36,7 +36,9 @@ export function getMCPToolDefinitions() {
 }
 
 export function createToolDescriptors(filesystemEnabled: boolean): ToolDescriptor[] {
-  const descriptors = getMCPToolDefinitions().map(coreToolDescriptor)
+  const descriptors = getMCPToolDefinitions()
+    .filter((def) => filesystemEnabled || def.name !== 'import_image')
+    .map(coreToolDescriptor)
   descriptors.push(
     {
       name: 'list_documents',
@@ -116,7 +118,7 @@ export function createToolDescriptors(filesystemEnabled: boolean): ToolDescripto
     {
       name: 'get_settings',
       description:
-        'Read editor settings: appearance (theme, language, animations), snapping, canvas rendering, recovery, AI chat, and design check preferences.',
+        'Read editor settings: appearance (theme, language, animations, accent color), snapping, canvas rendering, recovery, AI chat, and design check preferences.',
       effect: 'read',
       availability: 'default',
       capabilities: ['settings:read'],

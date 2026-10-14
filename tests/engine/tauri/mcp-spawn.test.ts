@@ -8,6 +8,7 @@ import {
   spawnMCPIfNeeded
 } from '@/app/automation/mcp/spawn'
 
+import { fetchStub } from '#tests/helpers/fetch'
 import { clearTauriMocks, installTauriMockWindow, mockTauriIPC } from '#tests/helpers/tauri/mocks'
 
 const DISCOVERY_PATH = '/mock/home/.openpencil/mcp.json'
@@ -69,6 +70,35 @@ describe('MCP health probe diagnostics', () => {
 })
 
 describe('Tauri MCP spawning', () => {
+  test('does not attach to a globally installed helper or recover its token', async () => {
+    installTauriMockWindow()
+    Object.defineProperty(globalThis, 'navigator', {
+      configurable: true,
+      value: { platform: 'Linux', userAgent: 'Linux' }
+    })
+    vi.spyOn(globalThis, 'fetch').mockImplementation(
+      async () =>
+        new Response(
+          JSON.stringify({
+            status: 'ok',
+            version: '0.0.0-test',
+            authRequired: true
+          })
+        )
+    )
+    const calls: string[] = []
+    await mockTauriIPC((cmd) => {
+      calls.push(cmd)
+      if (cmd === 'plugin:path|resolve_directory') return '/mock/home'
+      if (cmd === 'plugin:fs|exists') return true
+      return null
+    })
+    expect(await spawnMCPIfNeeded()).toBeNull()
+    await expect(getAutomationAuthToken()).rejects.toThrow('A separate MCP server')
+    expect(calls).not.toContain('plugin:shell|spawn')
+    expect(calls).not.toContain('plugin:fs|read_text_file')
+  })
+
   test('retains an early startup failure for MCP-dependent features', async () => {
     installTauriMockWindow()
     Object.assign(globalThis.window, { location: { origin: 'tauri://localhost' } })
@@ -149,12 +179,44 @@ describe('Tauri MCP spawning', () => {
     })
 
     expect(await spawnMCPIfNeeded()).toBeNull()
-    expect(getAutomationAuthToken()).rejects.toThrow('MCP automation is not installed')
+    expect(getAutomationAuthToken()).rejects.toThrow('The bundled canvas helper is missing')
     expect(getAutomationStartupFailure()).toMatchObject({
       code: 'not-installed',
       // The searched directories let a report show where the app looked.
       detail: expect.stringContaining('/mock/home/.bun/bin')
     })
+  })
+
+  test('reports an incompatible bundled helper with restart guidance', async () => {
+    installTauriMockWindow()
+    Object.assign(globalThis.window, { location: { origin: 'tauri://localhost' } })
+    Object.defineProperty(globalThis, 'navigator', {
+      configurable: true,
+      value: { platform: 'MacIntel', userAgent: 'Macintosh' }
+    })
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(
+      fetchStub(async () =>
+        Response.json({
+          status: 'ok',
+          version: '0.15.1',
+          bundled: true
+        })
+      )
+    )
+    await mockTauriIPC((cmd) => {
+      if (cmd === 'plugin:path|resolve_directory') return '/mock/home'
+      if (cmd === 'plugin:fs|exists') return true
+      return null
+    })
+
+    expect(await spawnMCPIfNeeded()).toBeNull()
+    expect(getAutomationStartupFailure()).toEqual({ code: 'outdated', detail: '0.15.1' })
+    // Restart loads the matching helper included in the application.
+    const error = await getAutomationAuthToken().catch((reason: unknown) => reason)
+    expect(error).toBeInstanceOf(Error)
+    expect(String(error)).toContain('restart OpenPencil')
+    expect(String(error)).not.toContain('@open-pencil/mcp@0.15.1')
   })
 
   test('spawns MCP server with shell plugin when health check is missing', async () => {
@@ -172,6 +234,7 @@ describe('Tauri MCP spawning', () => {
       return new Response(
         JSON.stringify({
           status: 'ok',
+          bundled: true,
           version: '0.0.0-test',
           authRequired: true,
           discoveryPath: DISCOVERY_PATH
@@ -181,16 +244,20 @@ describe('Tauri MCP spawning', () => {
     })
 
     let onEvent: ((event: unknown) => void) | null = null
+    let launchedToken: string | undefined
     const calls: Array<{ cmd: string; args: unknown }> = []
     await mockTauriIPC((cmd, args) => {
       calls.push({ cmd, args })
       if (cmd === 'mcp_lookup')
         return { available: true, path: '/mock/bin/openpencil-mcp-http', searched: ['/mock/bin'] }
       if (cmd === 'plugin:shell|spawn') {
+        launchedToken = (args as { options: { env: { OPENPENCIL_MCP_AUTH_TOKEN: string } } })
+          .options.env.OPENPENCIL_MCP_AUTH_TOKEN
         expect(args).toMatchObject({
-          program: 'openpencil-mcp-http',
+          program: 'binaries/openpencil-mcp-http',
           args: [],
           options: {
+            sidecar: true,
             env: {
               PORT: '7600',
               OPENPENCIL_MCP_AUTH_TOKEN: expect.any(String),
@@ -221,12 +288,12 @@ describe('Tauri MCP spawning', () => {
     })
 
     const handle = await spawnMCPIfNeeded({ earlyExitMs: 5, healthPollMs: 5 })
-    await expect(getAutomationAuthToken()).resolves.toBe('discovery-token')
+    await expect(getAutomationAuthToken()).resolves.toBe(launchedToken)
     onEvent?.({ event: 'Stderr', payload: [119, 97, 114, 110] })
     handle?.disconnect()
     await Promise.resolve()
 
-    expect(handle?.authToken).toBe('discovery-token')
+    expect(handle?.authToken).toBe(launchedToken)
     expect(calls.some((c) => c.cmd === 'plugin:shell|spawn')).toBe(true)
     expect(
       calls.some(
@@ -234,7 +301,7 @@ describe('Tauri MCP spawning', () => {
           c.cmd === 'plugin:fs|read_text_file' &&
           (c.args as { path?: string })?.path === DISCOVERY_PATH
       )
-    ).toBe(true)
+    ).toBe(false)
     expect(calls.at(-1)).toEqual({ cmd: 'plugin:shell|kill', args: { cmd: 'killChild', pid: 77 } })
   })
 })

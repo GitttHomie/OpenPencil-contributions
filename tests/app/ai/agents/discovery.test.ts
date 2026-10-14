@@ -15,35 +15,31 @@ function lookup(...commands: string[]): AgentLookup {
 }
 
 describe('local agent discovery', () => {
-  test('installs the canvas companion once, discovers it, and restarts the bridge', async () => {
-    let installed = false
+  test('starts the bundled canvas helper without npm and blocks duplicate starts', async () => {
     const pending = createDeferred<undefined>()
-    const installBridge = mock(async () => {
+    const restartBridge = mock(async () => {
       await pending.promise
-      installed = true
     })
-    const restartBridge = mock(async () => undefined)
+    const install = mock(async () => undefined)
     const discovery = createAgentDiscovery({
       enabled: true,
-      lookup: async () => lookup('kiro-cli', 'npm', ...(installed ? ['openpencil-mcp-http'] : [])),
-      install: async () => undefined,
-      installBridge,
+      lookup: async () => lookup('kiro-cli', 'openpencil-mcp-http'),
+      install,
       restartBridge
     })
     await discovery.refresh()
-    expect(installBridge).not.toHaveBeenCalled()
+    expect(discovery.npmAvailable.value).toBe(false)
     const setup = discovery.setupCanvasBridge()
     await discovery.setupCanvasBridge()
-    expect(installBridge).toHaveBeenCalledTimes(1)
+    expect(restartBridge).toHaveBeenCalledTimes(1)
     pending.resolve(undefined)
     await setup
     expect(discovery.canvasBridgeAvailable.value).toBe(true)
-    expect(restartBridge).toHaveBeenCalledTimes(1)
+    expect(install).not.toHaveBeenCalled()
     expect(discovery.error.value).toBeNull()
   })
 
-  test('retries bridge startup without reinstalling a successfully installed companion', async () => {
-    const installBridge = mock(async () => undefined)
+  test('retries bundled helper startup without installing anything', async () => {
     const restartBridge = mock(async () => {
       throw new Error('Cannot start')
     })
@@ -51,7 +47,6 @@ describe('local agent discovery', () => {
       enabled: true,
       lookup: async () => lookup('kiro-cli', 'openpencil-mcp-http'),
       install: async () => undefined,
-      installBridge,
       restartBridge
     })
     await discovery.refresh()
@@ -59,7 +54,6 @@ describe('local agent discovery', () => {
     expect(discovery.error.value).toBe('canvas-start')
     restartBridge.mockImplementation(async () => undefined)
     await discovery.setupCanvasBridge()
-    expect(installBridge).not.toHaveBeenCalled()
     expect(discovery.error.value).toBeNull()
   })
   test('distinguishes native CLIs, adapters, and absent agents without starting them', () => {
@@ -196,7 +190,7 @@ describe('Harness companion setup', () => {
     await discovery.refresh()
     expect(discovery.harnessAvailable.value).toBe(false)
     await discovery.setupHarness()
-    expect(installHarness).toHaveBeenCalledWith('/test/bin')
+    expect(installHarness).toHaveBeenCalledWith('/test/bin', 'npm')
     expect(discovery.harnessAvailable.value).toBe(true)
     expect(discovery.error.value).toBeNull()
   })
@@ -223,26 +217,20 @@ describe('Harness companion setup', () => {
     expect(discovery.error.value).toBeNull()
   })
 
-  test('reports an update that left the old MCP server first on the path', async () => {
-    const installBridge = mock(async () => undefined)
+  test('does not start or install a helper missing from the application bundle', async () => {
     const restartBridge = mock(async () => undefined)
+    const install = mock(async () => undefined)
     const discovery = createAgentDiscovery({
       enabled: true,
-      lookup: async () => ({
-        searchPath: '/test/bin',
-        executables: { npm: '/test/bin/npm', 'openpencil-mcp-http': '/home/me/.bun/bin/mcp' },
-        versions: { '@open-pencil/mcp': '0.12.0' }
-      }),
-      install: async () => undefined,
-      installBridge,
+      lookup: async () => lookup('npm'),
+      install,
       restartBridge
     })
     await discovery.refresh()
-    expect(discovery.canvasBridgeCommand.value).toStartWith('bun add -g @open-pencil/mcp@')
     await discovery.setupCanvasBridge()
-    expect(installBridge).toHaveBeenCalledTimes(1)
     expect(restartBridge).not.toHaveBeenCalled()
-    expect(discovery.error.value).toBe('canvas-install')
+    expect(install).not.toHaveBeenCalled()
+    expect(discovery.error.value).toBe('canvas-start')
   })
 
   test('needs npm and reports a failed install without raw errors', async () => {

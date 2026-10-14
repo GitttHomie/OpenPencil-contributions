@@ -5,12 +5,7 @@ import { toolChangesDocument, type ToolDef } from '@open-pencil/core/tools'
 
 import { recordToolChange } from '@/app/ai/tools/changes/capture'
 import { createMutex } from '@/app/ai/tools/mutex'
-import {
-  recordRunBaseline,
-  recordRunUndoEntry,
-  runBaseline,
-  runUndoEntries
-} from '@/app/ai/tools/run'
+import { currentRun, recordRunBaseline, recordRunUndoEntry, runBaseline } from '@/app/ai/tools/run'
 import type { EditorStore } from '@/app/editor/active-store'
 
 interface CanvasSession {
@@ -40,10 +35,10 @@ export function createCanvasSession(store: EditorStore) {
   sessions.set(id, session)
   return {
     id,
-    start: () => {
+    start: (continuing = false) => {
       session.active = true
       session.generation++
-      session.pageId = store.state.currentPageId
+      if (!continuing) session.pageId = store.state.currentPageId
     },
     finish: () => {
       session.active = false
@@ -62,10 +57,17 @@ export function canvasSessionPage(id?: string): string | undefined {
   return id ? sessions.get(id)?.pageId : undefined
 }
 
-export function moveCanvasSession(id: string | undefined, pageId: string): void {
+export async function moveCanvasSession(
+  id: string | undefined,
+  pageId: string,
+  { reveal = false }: { reveal?: boolean } = {}
+): Promise<void> {
   const session = id ? sessions.get(id) : undefined
-  if (session?.active && session.store.graph.getNode(pageId)?.type === 'CANVAS')
-    session.pageId = pageId
+  if (!session?.active || session.store.graph.getNode(pageId)?.type !== 'CANVAS') return
+  session.pageId = pageId
+  // An explicit page switch in chat moves the view, just as it does for built-in AI.
+  // Calls merely targeting another page must not take the user away from their work.
+  if (reveal && session.store.state.currentPageId !== pageId) await session.store.switchPage(pageId)
 }
 
 export function canvasSessionBaseline(id: string | undefined, figma: FigmaAPI): void {
@@ -93,11 +95,11 @@ export async function captureCanvasTool(
     release()
     throw new Error('The originating chat turn has ended')
   }
-  const before = store.snapshotPage(pageId)
+  if (!runBaseline(store, pageId)) recordRunBaseline(currentRun(store), store.snapshotPage(pageId))
+  const finishChange = store.captureDocumentChange(pageId)
   const previousEntry = store.undo.peekUndo()
-  const entries = runUndoEntries(store)
+  const run = currentRun(store)
   const changeId = crypto.randomUUID()
-  recordRunBaseline(store, before)
   try {
     const response = await execute()
     if (response && typeof response === 'object' && 'result' in response) {
@@ -109,13 +111,13 @@ export async function captureCanvasTool(
     return response
   } finally {
     try {
-      const after = store.snapshotPage(pageId)
+      const change = finishChange()
       // The automation executor owns history for both atomic and structural edits.
       // Track its entry for chat Revert without adding a second copy of the same edit.
-      if (entries === runUndoEntries(store) && store.undo.peekUndo() !== previousEntry)
-        recordRunUndoEntry(store, `Agent: ${def.name}`)
+      if (run === currentRun(store) && store.undo.peekUndo() !== previousEntry)
+        recordRunUndoEntry(store, run, { tool: def.name, toolCallId: changeId }, previousEntry)
       try {
-        recordToolChange(store, changeId, before, after)
+        recordToolChange(store, changeId, change)
       } catch (error) {
         console.warn('Could not record agent tool change', error)
       }

@@ -3,11 +3,13 @@ import { computed } from 'vue'
 
 import { useAutomationMessages } from '@open-pencil/vue'
 
+import { rememberedCanvasApprovals, resetCanvasApprovals } from '@/app/ai/acp/canvas/approvals'
 import { mcpRuntime } from '@/app/automation/mcp/runtime'
 import { useMCPSettings } from '@/app/automation/mcp/settings/use'
 import { useToolAccess } from '@/app/automation/tool-access/settings/list'
 import { useToolAccessSettings } from '@/app/automation/tool-access/settings/use'
 import type { ToolAccessGroup } from '@/app/automation/tool-access/types'
+import SettingsSection from '@/components/settings/layout/SettingsSection.vue'
 import AppButton from '@/components/ui/button/AppButton.vue'
 import { AppDialogBody } from '@/components/ui/dialog'
 import AppPlaceholder from '@/components/ui/feedback/AppPlaceholder.vue'
@@ -67,12 +69,30 @@ function setExpanded(effect: 'read' | 'write', open: boolean) {
       />
     </div>
     <AppDialogBody :ui="{ body: 'p-5 sm:p-6' }">
+      <SettingsSection class="mb-4 border-b border-border pb-4">
+        <template #title>{{ automation.rememberedCanvasApprovals }}</template>
+        <template #description>{{ automation.rememberedCanvasApprovalsHint }}</template>
+        <template #actions>
+          <AppButton
+            size="xs"
+            variant="outline"
+            :disabled="rememberedCanvasApprovals.length === 0"
+            @click="resetCanvasApprovals"
+            >{{ automation.resetCanvasApprovals }}</AppButton
+          >
+        </template>
+      </SettingsSection>
       <p class="pb-3 text-xs leading-relaxed text-muted">
         {{
           target === 'ai' ? automation.aiToolAccessDescription : automation.mcpToolAccessDescription
         }}
       </p>
-      <AppPlaceholder v-if="!hasMatches" :label="automation.noMatchingTools" />
+      <AppPlaceholder
+        v-if="!hasMatches"
+        size="compact"
+        :fill="false"
+        :label="automation.noMatchingTools"
+      />
       <ToolAccessList
         v-else
         :groups="labelledGroups"

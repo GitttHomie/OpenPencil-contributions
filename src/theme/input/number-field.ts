@@ -21,7 +21,7 @@ const numberFieldTheme = {
       false: { display: 'pl-1.5', field: 'pl-1.5' }
     },
     suffix: {
-      true: { display: 'pr-0', field: 'pr-0' },
+      true: { display: 'pr-0', field: 'pr-0', suffix: 'pr-0.5' },
       false: { display: 'pr-1.5', field: 'pr-1.5' }
     }
   }

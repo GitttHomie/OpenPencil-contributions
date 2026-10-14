@@ -19,7 +19,10 @@ export const kiroAdapter: ACPAgentAdapter = {
       mcpServers.filter((server) => server.name === 'open-pencil').length === 1
     const readiness = createKiroCanvasReadiness(hasCanvas)
     return {
-      permissions: createCanvasPermissionScope(hasCanvas ? kiroCanvasToolName : undefined),
+      permissions: createCanvasPermissionScope(
+        hasCanvas ? kiroCanvasToolName : undefined,
+        'kiro-cli'
+      ),
       ready: readiness.wait,
       notification: async (method, params) => {
         if (method === '_kiro/mcp/status') readiness.observe(params)

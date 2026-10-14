@@ -1,6 +1,4 @@
-import { isEqual } from 'es-toolkit'
-
-import { executeAtomicTool } from '@open-pencil/core/editor'
+import { executeAtomicTool, isEmptyDocumentChange } from '@open-pencil/core/editor'
 import type { FigmaAPI } from '@open-pencil/core/figma-api'
 import type { ToolDef } from '@open-pencil/core/tools'
 
@@ -26,13 +24,28 @@ export async function executeAtomicEditorTool(
   args: Record<string, unknown>,
   options: Parameters<typeof executeAtomicTool>[4] = {}
 ): Promise<unknown> {
-  const result = executeAtomicTool(store, figma, def, args, options)
-  const targetId = typeof args.id === 'string' ? args.id : figma.currentPageId
-  if (figma.graph.getNode(targetId)?.type === 'TEXT') {
+  const textIds = new Set<string>()
+  const stop = figma.graph.onNodeEvents({
+    updated(id) {
+      if (figma.graph.getNode(id)?.type === 'TEXT') textIds.add(id)
+    }
+  })
+  let result: unknown
+  try {
+    result = executeAtomicTool(store, figma, def, args, options)
+  } finally {
+    stop()
+  }
+  if (textIds.size > 0) {
     try {
-      await ensureGraphFonts(figma.graph, [targetId], store.renderer)
-      if (store.graph === figma.graph && options.isLive?.() !== false) {
-        store.runLayoutForNode(targetId)
+      const loaded = await ensureGraphFonts(figma.graph, [...textIds], store.renderer)
+      if (loaded && store.graph === figma.graph && options.isLive?.() !== false) {
+        const pages = new Set(
+          [...textIds]
+            .map((id) => figma.graph.closest(id, (node) => node.type === 'CANVAS')?.id)
+            .filter((id) => id !== undefined)
+        )
+        for (const page of pages) store.runLayoutForNode(page)
         store.requestRender()
       }
     } catch (error) {
@@ -44,26 +57,27 @@ export async function executeAtomicEditorTool(
 }
 
 /**
- * Run a structural edit as one undo step by snapshotting its page around it, as the AI chat
- * does, so `undo` reverts what an automation client created, moved, or deleted.
+ * Run a structural edit as one undo step by recording what it changes in the document, as the
+ * AI chat does, so `undo` reverts what an automation client created, moved, or deleted on any
+ * page, and the variables it changed.
  */
-export async function executeWithPageUndo<T>(
+export async function executeWithDocumentUndo<T>(
   store: EditorStore,
   pageId: string,
   label: string,
   run: () => Promise<T>
 ): Promise<T> {
-  const before = store.snapshotPage(pageId)
+  const finishChange = store.captureDocumentChange(pageId)
   try {
     return await run()
   } finally {
-    const after = store.snapshotPage(pageId)
+    const change = finishChange()
     // Read-only scripts and no-op edits must not leave empty steps in the user's history.
-    if (!isEqual(before, after)) {
-      store.pushUndoEntry({
+    if (!isEmptyDocumentChange(change)) {
+      store.pushUndoStep({
         label,
-        forward: () => store.restorePageFromSnapshot(after),
-        inverse: () => store.restorePageFromSnapshot(before)
+        forward: () => store.restoreDocumentChange(change, 'after'),
+        inverse: () => store.restoreDocumentChange(change, 'before')
       })
     }
   }

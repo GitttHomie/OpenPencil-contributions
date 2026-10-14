@@ -13,6 +13,7 @@ const reasons: Record<MCPFailureCode, MCPFailure> = {
     code: 'not-installed',
     detail: '/opt/homebrew/bin, /usr/local/bin, /Users/you/.bun/bin'
   },
+  outdated: { code: 'outdated', detail: 'Bundled helper protocol mismatch' },
   'permission-denied': {
     code: 'permission-denied',
     detail: 'shell command openpencil-mcp-http not allowed by ACL'

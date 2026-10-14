@@ -25,8 +25,8 @@ function setup(
   const selected = shallowRef(text)
   const actions = createTypographyActions({
     editor,
-    node: computed(() => selected.value),
-    currentWeightLabel: computed(() => 'Semi Bold'),
+    nodes: computed(() => [selected.value]),
+    supports: () => true,
     activeFormatting: computed(() => []),
     options: { fontLoader: { load, styles } }
   })

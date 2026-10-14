@@ -1,11 +1,16 @@
 import { strict as assert } from 'node:assert'
 import { readFileSync, renameSync } from 'node:fs'
 
+import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client'
 import * as v from 'valibot'
 
 import { invokeNative } from '#tests/helpers/tauri/invoke'
 
-const HealthJSON = v.pipe(v.string(), v.parseJson(), v.object({ status: v.string() }))
+const HealthJSON = v.pipe(
+  v.string(),
+  v.parseJson(),
+  v.object({ status: v.string(), bundled: v.literal(true) })
+)
 
 const DiscoveryFileJSON = v.pipe(
   v.string(),
@@ -13,7 +18,7 @@ const DiscoveryFileJSON = v.pipe(
   v.object({ httpPort: v.number(), authToken: v.string() })
 )
 
-const NOT_INSTALLED = 'MCP automation is not installed'
+const NOT_INSTALLED = 'The bundled canvas helper is missing'
 
 async function openMCPSettings(): Promise<void> {
   // The platform shortcut is how the existing native settings spec opens Settings.
@@ -25,7 +30,11 @@ async function openMCPSettings(): Promise<void> {
       ),
     { timeout: 10_000, timeoutMsg: 'Settings did not open' }
   )
-  await (await $('[data-test-id="settings-section-mcp"]')).click()
+  await browser.execute(() => {
+    const tab = document.querySelector<HTMLElement>('[data-test-id="settings-section-mcp"]')
+    if (!tab) throw new Error('MCP settings tab is unavailable')
+    tab.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }))
+  })
   await browser.waitUntil(
     () =>
       browser.execute(() =>
@@ -73,21 +82,10 @@ function mcpFailureDetail(): Promise<string | null> {
   })
 }
 
-/**
- * Restart is offered by the healthy-state button and by the failure alert, so
- * click whichever one is currently rendered.
- */
+/** Restart lives in the Local server section header, whether or not the server failed. */
 function clickRestart(): Promise<void> {
   return browser.execute(() => {
-    const panel = document.querySelector<HTMLElement>(
-      '[data-test-id="settings-mcp-automation-panel"]'
-    )
-    for (const button of panel?.querySelectorAll<HTMLButtonElement>('button') ?? []) {
-      if (button.textContent?.includes('MCP server') && button.offsetParent !== null) {
-        button.click()
-        return
-      }
-    }
+    document.querySelector<HTMLButtonElement>('[data-test-id="settings-mcp-restart"]')?.click()
   })
 }
 
@@ -107,7 +105,9 @@ describe('native MCP server lifecycle', () => {
   // section. Restore General before closing so the next spec finds it.
   afterEach(async () => {
     await browser.execute(() => {
-      document.querySelector<HTMLElement>('[data-test-id="settings-section-general"]')?.click()
+      document
+        .querySelector<HTMLElement>('[data-test-id="settings-section-general"]')
+        ?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }))
       document.querySelector<HTMLElement>('[data-test-id="app-settings-done"]')?.click()
     })
     await browser.waitUntil(
@@ -116,36 +116,14 @@ describe('native MCP server lifecycle', () => {
     )
   })
 
-  it('uses the server it resolves, or reports why it cannot', async () => {
+  it('starts its bundled helper and edits the native canvas through MCP', async () => {
     await browser.waitUntil(
       async () => browser.execute(() => Boolean(window.openPencil?.getStore?.())),
       { timeout: 30_000, timeoutMsg: 'OpenPencil editor did not initialize' }
     )
     await openMCPSettings()
-
-    // The app resolves the binary through the PATH it derives from the login
-    // shell, so assert what it resolved rather than injecting a fixture.
     const lookup = await invokeNative<{ available: boolean; path: string | null }>('mcp_lookup')
-
-    if (!lookup.available || !lookup.path) {
-      // Without a global install the reason must be the install itself.
-      await waitForStatus('Error')
-      assert.equal(await mcpAlert(), NOT_INSTALLED)
-      return
-    }
-
-    // A resolvable binary either becomes healthy, or is refused with a reason.
-    await browser.waitUntil(async () => (await mcpStatus()) !== 'Starting', { timeout: 30_000 })
-    if ((await mcpStatus()) === 'Error') {
-      const detail = await mcpFailureDetail()
-      assert.match(
-        detail ?? '',
-        /requires @open-pencil\/mcp|major\.minor compatibility/,
-        `resolved ${lookup.path} but failed without a version explanation: ${detail}`
-      )
-      return
-    }
-
+    assert.ok(lookup.available && lookup.path, 'the desktop bundle must include its helper')
     await waitForStatus('Running')
     const discoveryPath = process.env.OPENPENCIL_MCP_DISCOVERY_PATH
     assert.ok(discoveryPath, 'discovery path missing from the wdio configuration')
@@ -159,8 +137,32 @@ describe('native MCP server lifecycle', () => {
     assert.equal(health.status, 200)
     assert.equal(v.parse(HealthJSON, await health.text()).status, 'ok')
 
-    // Hiding the resolved binary must report the missing install, and restoring
-    // it must recover without relaunching the app.
+    const client = new Client({ name: 'native-canvas-acceptance', version: '1' })
+    try {
+      await client.connect(
+        new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${discovery.httpPort}/mcp`), {
+          requestInit: { headers: { Authorization: `Bearer ${discovery.authToken}` } }
+        })
+      )
+      const created = await client.callTool({ name: 'new_document', arguments: {} })
+      assert.notEqual(created.isError, true, JSON.stringify(created))
+      const rendered = await client.callTool({
+        name: 'render',
+        arguments: { jsx: '<Frame name="Bundled MCP acceptance" w={180} h={80} bg="#ff0000" />' }
+      })
+      assert.notEqual(rendered.isError, true, JSON.stringify(rendered))
+      const tree = await client.callTool({ name: 'get_page_tree', arguments: {} })
+      assert.notEqual(tree.isError, true, JSON.stringify(tree))
+      assert.match(JSON.stringify(tree), /Bundled MCP acceptance/)
+      const undone = await client.callTool({ name: 'undo', arguments: {} })
+      assert.notEqual(undone.isError, true, JSON.stringify(undone))
+      const afterUndo = await client.callTool({ name: 'get_page_tree', arguments: {} })
+      assert.doesNotMatch(JSON.stringify(afterUndo), /Bundled MCP acceptance/)
+    } finally {
+      await client.close()
+    }
+
+    // Hiding only the test app's sidecar must fail explicitly, then recover.
     const hidden = `${lookup.path}.native-test-hidden`
     renameSync(lookup.path, hidden)
     try {

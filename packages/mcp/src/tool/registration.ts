@@ -10,10 +10,12 @@ import { CODEGEN_PROMPT } from '@open-pencil/core/tools'
 
 import type { RPCJSONObject } from '#mcp/json'
 import { MAX_RESULT_BYTES, fail, ok, resultTooLargeMessage } from '#mcp/result'
+import { importImageFile } from '#mcp/tool/image-file'
 import { createToolDescriptors, getMCPToolDefinitions } from '#mcp/tool/manifest'
 import type { ToolDescriptor, ToolEffect, ToolPolicy } from '#mcp/tool/metadata'
 import { resolveSafePath, writeToolOutput } from '#mcp/tool/output'
 import { isToolEnabled } from '#mcp/tool/policy'
+import { SELECTION_SCOPE_FILE_OUTPUT_ERROR } from '#mcp/tool/scope'
 
 export type RPCSender = (body: Record<string, unknown>) => Promise<unknown>
 
@@ -53,10 +55,21 @@ function withTarget<T extends object>(body: T, res: RPCResponse): T & { target?:
   return res.target ? { ...body, target: res.target } : body
 }
 
+/** Who sends a session's tool calls: any MCP client, or an ACP or Pi harness chat in the app. */
+export const MCP_AGENT_KINDS = ['mcp', 'acp', 'harness'] as const
+export type MCPAgentKind = (typeof MCP_AGENT_KINDS)[number]
+
+/** The session tool calls come from, so the app can show the client as an agent at work. */
+export interface MCPAgentSession {
+  id: string
+  kind: MCPAgentKind
+}
+
 export interface RegisterToolsOptions {
   policy: ToolPolicy
   mcpRoot?: string | null
   sendRPC: RPCSender
+  agentSession?: MCPAgentSession
 }
 
 function toolAnnotations(effect: ToolEffect): ToolAnnotations {
@@ -71,7 +84,16 @@ function descriptorByName(descriptors: readonly ToolDescriptor[]): Map<string, T
 }
 
 export function registerTools(mcpServer: McpServer, options: RegisterToolsOptions): void {
-  const { policy, sendRPC } = options
+  const { policy, sendRPC, agentSession } = options
+  // Sent with each tool call: the session, and the client's name once it has introduced itself.
+  const agent = () =>
+    agentSession
+      ? {
+          session: agentSession.id,
+          kind: agentSession.kind,
+          client: mcpServer.server.getClientVersion()?.name
+        }
+      : undefined
   const resolvedRoot = options.mcpRoot ? resolve(options.mcpRoot) : null
   const descriptors = descriptorByName(createToolDescriptors(resolvedRoot !== null))
   const register = <InputArgs extends v.GenericSchema>(
@@ -95,18 +117,34 @@ export function registerTools(mcpServer: McpServer, options: RegisterToolsOption
   }
 
   for (const def of getMCPToolDefinitions()) {
+    if (def.name === 'import_image' && !resolvedRoot) continue
     register(
       def.name,
       {
-        description: def.description,
-        inputSchema: v.object({ ...def.input.entries, ...automationTargetSchema })
+        description:
+          def.name === 'import_image' && resolvedRoot
+            ? `${def.description} Files must be inside the MCP root: ${resolvedRoot}. Have the producing application save its final render there if needed.`
+            : def.description,
+        inputSchema: v.strictObject({ ...def.input.entries, ...automationTargetSchema })
       },
       async (args: Record<string, unknown>) => {
         try {
           const { target, args: toolArgs } = splitAutomationTarget(args)
+          if (policy.scope === 'selection' && toolArgs.path !== undefined) {
+            return fail(new Error(SELECTION_SCOPE_FILE_OUTPUT_ERROR))
+          }
+          if (def.name === 'import_image' && resolvedRoot)
+            return ok(await importImageFile(sendRPC, resolvedRoot, target, toolArgs), def.name)
           const result = await sendRPC({
             command: 'tool',
-            args: { ...target, name: def.name, args: toolArgs }
+            args: {
+              ...target,
+              name: def.name,
+              args: toolArgs,
+              agent: agent(),
+              // A client limited to the selection says so, whatever the server's own scope.
+              ...(policy.scope === 'selection' ? { scope: policy.scope } : {})
+            }
           })
           const res = result as { ok?: boolean; result?: unknown; error?: string }
           if (res.ok === false) return fail(new Error(res.error))
@@ -132,6 +170,14 @@ export function registerTools(mcpServer: McpServer, options: RegisterToolsOption
             }
             return {
               content: [
+                ...(r.previewReduced === true
+                  ? [
+                      {
+                        type: 'text' as const,
+                        text: 'Canvas preview resolution was reduced to fit the image response budget. Use export_image with path for a file export at the requested scale and maxEdge.'
+                      }
+                    ]
+                  : []),
                 {
                   type: 'image' as const,
                   data: base64,
@@ -153,7 +199,7 @@ export function registerTools(mcpServer: McpServer, options: RegisterToolsOption
     {
       description:
         'List open OpenPencil documents/tabs with their IDs, file paths, current pages, and pages.',
-      inputSchema: v.object({})
+      inputSchema: v.strictObject({})
     },
     async () => {
       try {
@@ -174,7 +220,7 @@ export function registerTools(mcpServer: McpServer, options: RegisterToolsOption
         ? 'Save the current document to disk. If path is provided, it must be inside the configured MCP root.'
         : 'Save the current document to disk. Uses the existing file path if available, otherwise prompts for a location.',
       inputSchema: resolvedRoot
-        ? v.object({
+        ? v.strictObject({
             path: v.optional(
               v.pipe(
                 v.string(),
@@ -184,7 +230,7 @@ export function registerTools(mcpServer: McpServer, options: RegisterToolsOption
             ),
             ...automationTargetSchema
           })
-        : v.object({ ...automationTargetSchema })
+        : v.strictObject({ ...automationTargetSchema })
     },
     async (args: { path?: string; document_id?: string; page_id?: string }) => {
       try {
@@ -214,7 +260,7 @@ export function registerTools(mcpServer: McpServer, options: RegisterToolsOption
       'open_file',
       {
         description: 'Open a .fig or .pen file from inside the configured MCP root.',
-        inputSchema: v.object({
+        inputSchema: v.strictObject({
           path: v.pipe(
             v.string(),
             v.minLength(1),
@@ -247,7 +293,7 @@ export function registerTools(mcpServer: McpServer, options: RegisterToolsOption
       {
         description:
           'Create a new empty document with an optional save path inside the configured MCP root.',
-        inputSchema: v.object({
+        inputSchema: v.strictObject({
           path: v.optional(
             v.pipe(
               v.string(),
@@ -295,7 +341,7 @@ export function registerTools(mcpServer: McpServer, options: RegisterToolsOption
     'close_file',
     {
       inputSchema: resolvedRoot
-        ? v.object({
+        ? v.strictObject({
             ...closeEntries,
             path: v.optional(
               v.pipe(
@@ -307,7 +353,7 @@ export function registerTools(mcpServer: McpServer, options: RegisterToolsOption
               )
             )
           })
-        : v.object(closeEntries)
+        : v.strictObject(closeEntries)
     },
     async (args: {
       unsaved?: 'error' | 'save' | 'discard'
@@ -336,7 +382,7 @@ export function registerTools(mcpServer: McpServer, options: RegisterToolsOption
   register(
     'activate_document',
     {
-      inputSchema: v.object({
+      inputSchema: v.strictObject({
         document_id: v.pipe(v.string(), v.description('Document/tab ID from list_documents')),
         page_id: automationTargetSchema.page_id
       })
@@ -353,18 +399,22 @@ export function registerTools(mcpServer: McpServer, options: RegisterToolsOption
   )
 
   for (const command of ['undo', 'redo'] as const) {
-    register(command, { inputSchema: v.object({ ...automationTargetSchema }) }, async (args) => {
-      try {
-        const { target } = splitAutomationTarget(args)
-        const res = await sendCommand(sendRPC, command, target)
-        return ok(withTarget({ ...(res.result as RPCJSONObject | undefined) }, res))
-      } catch (e) {
-        return fail(e)
+    register(
+      command,
+      { inputSchema: v.strictObject({ ...automationTargetSchema }) },
+      async (args) => {
+        try {
+          const { target } = splitAutomationTarget(args)
+          const res = await sendCommand(sendRPC, command, target)
+          return ok(withTarget({ ...(res.result as RPCJSONObject | undefined) }, res))
+        } catch (e) {
+          return fail(e)
+        }
       }
-    })
+    )
   }
 
-  register('get_settings', { inputSchema: v.object({}) }, async () => {
+  register('get_settings', { inputSchema: v.strictObject({}) }, async () => {
     try {
       const res = await sendCommand(sendRPC, 'get_settings', {})
       return ok(res.result ?? {})
@@ -376,7 +426,7 @@ export function registerTools(mcpServer: McpServer, options: RegisterToolsOption
   register(
     'update_settings',
     {
-      inputSchema: v.object({
+      inputSchema: v.strictObject({
         settings: v.pipe(
           v.record(v.string(), v.unknown()),
           v.description(
@@ -401,7 +451,7 @@ export function registerTools(mcpServer: McpServer, options: RegisterToolsOption
     {
       description:
         'Get design-to-code generation guidelines. Call before generating frontend code.',
-      inputSchema: v.object({})
+      inputSchema: v.strictObject({})
     },
     async () => ok({ prompt: CODEGEN_PROMPT })
   )

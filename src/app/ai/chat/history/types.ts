@@ -27,6 +27,7 @@ export interface ConversationMeta {
   profileId: string | null
   backend: 'direct' | 'acp' | 'harness'
   interrupted: boolean
+  mcpConnectionIds?: string[]
 }
 
 export interface ConversationMessage {

@@ -1,6 +1,5 @@
 import type { Canvas } from 'canvaskit-wasm'
 
-import { isInComponent } from '@open-pencil/scene-graph'
 import type { SceneNode, SceneGraph } from '@open-pencil/scene-graph'
 import { computeBounds } from '@open-pencil/scene-graph/geometry'
 
@@ -12,7 +11,7 @@ import {
   SIZE_PILL_RADIUS,
   SIZE_PILL_TEXT_OFFSET_Y
 } from '#core/constants'
-import { createSceneGeometry } from '#core/geometry/index'
+import { createSceneGeometry, hasTransformHandles } from '#core/geometry/index'
 
 import { measureGlyphWidth } from './paragraph-cache'
 import { frameLabelPlacement, labelScreenMatrix } from './transform'
@@ -43,7 +42,8 @@ function drawSizePill(
   text: string,
   x: number,
   y: number,
-  color: ReturnType<SkiaRenderer['selColor']>
+  color: ReturnType<SkiaRenderer['selColor']>,
+  textColor: ReturnType<SkiaRenderer['selColor']>
 ): void {
   const pillW = measureGlyphWidth(sizeFont, text) + SIZE_PILL_PADDING_X * 2
   const pillX = x - pillW / 2
@@ -56,7 +56,7 @@ function drawSizePill(
   )
   canvas.drawRRect(rrect, r.auxFill)
 
-  r.auxFill.setColor(r.ck.WHITE)
+  r.auxFill.setColor(textColor)
   canvas.drawText(
     text,
     pillX + SIZE_PILL_PADDING_X,
@@ -85,7 +85,8 @@ export function drawSingleSelectionSize(
   canvas.save()
   canvas.concat(labelScreenMatrix(transform, r))
 
-  drawSizePill(r, canvas, sizeFont, sizeText, 0, 0, pillColor)
+  const textColor = r.outlineForegroundColor(node, graph)
+  drawSizePill(r, canvas, sizeFont, sizeText, 0, 0, pillColor, textColor)
   canvas.restore()
 }
 function drawMultiSelectionSize(
@@ -104,10 +105,11 @@ function drawMultiSelectionSize(
   const sx2 = maxX * r.zoom + r.panX
   const sy2 = maxY * r.zoom + r.panY
   const smx = (sx1 + sx2) / 2
-  const allComponents = nodes.length > 0 && nodes.every((n) => isInComponent(graph, n.id))
+  const allComponents = nodes.length > 0 && nodes.every((n) => r.isInComponent(n, graph))
   const pillColor = allComponents ? r.compColor() : r.selColor()
+  const textColor = allComponents ? r.ck.WHITE : r.selForegroundColor()
 
-  drawSizePill(r, canvas, sizeFont, sizeText, smx, sy2, pillColor)
+  drawSizePill(r, canvas, sizeFont, sizeText, smx, sy2, pillColor, textColor)
 }
 
 export function drawSelectionLabels(
@@ -127,6 +129,11 @@ export function drawSelectionLabels(
     activeOverlays
   )
   if (nodes.length === 0) return
+  // A selection too small on screen for handles has no size label either, as in Figma.
+  const [only] = nodes
+  const width = nodes.length === 1 ? only.width : maxX - minX
+  const height = nodes.length === 1 ? only.height : maxY - minY
+  if (!hasTransformHandles(width * r.zoom, height * r.zoom)) return
 
   if (nodes.length === 1) {
     drawSingleSelectionSize(r, canvas, graph, nodes[0], activeOverlays, sizeFont)

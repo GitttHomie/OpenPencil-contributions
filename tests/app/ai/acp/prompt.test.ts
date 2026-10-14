@@ -2,9 +2,18 @@ import { expect, test } from 'bun:test'
 
 import * as v from 'valibot'
 
-import { ALL_TOOLS } from '@open-pencil/core/tools'
+import { ALL_TOOLS, DESIGN_COMPOSITION_GUIDANCE } from '@open-pencil/core/tools'
 
 import { buildACPUserPrompt } from '@/app/ai/acp/prompt'
+
+test('component composition guidance reaches every CLI on initial and continuation turns', () => {
+  for (const agent of ['kiro-cli', 'codex', 'claude-code', 'gemini-cli'] as const) {
+    for (const includeReference of [true, false]) {
+      const prompt = buildACPUserPrompt('Continue the design', includeReference, agent)
+      expect(prompt.split(DESIGN_COMPOSITION_GUIDANCE)).toHaveLength(2)
+    }
+  }
+})
 
 test('Kiro receives executable dispatcher arguments on first and later turns', () => {
   const render = ALL_TOOLS.find((tool) => tool.name === 'render')

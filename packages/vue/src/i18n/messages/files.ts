@@ -4,6 +4,25 @@ import { i18n } from '#vue/i18n/create'
 
 export const filesMessageDefaults = {
   importLabel: 'Import',
+  cleanupHeading: 'Clean up embedded components?',
+  cleanupIntro: params(
+    'Choose how to open “{name}”. Your original file stays unchanged until you save.'
+  ),
+  cleanupDescription: params(
+    'Remove {count} unused definitions from internal canvases. Keep all instances, their required definitions, and components on regular pages.'
+  ),
+  cleanupInternalHeading: 'Remove internal canvases and linked instances',
+  cleanupInternalDescription: params(
+    'Remove {canvases} internal canvases and {components} embedded definitions, plus {instances} linked instance layers across {pages} regular pages.'
+  ),
+  cleanupInternalWarning:
+    'This changes your designs, including hidden content and external-library instances. Nested linked layers are removed without deleting their containing buttons or frames. Valid components on regular pages stay.',
+  cleanupHiddenInstances: params(
+    'Hide {count} nested swapped instances whose replacements are removed, preserving their containing components.'
+  ),
+  cleanupInternalRemove: 'Remove canvases and linked instances',
+  cleanupKeep: 'Keep everything',
+  cleanupRemove: 'Remove unused components',
   importHTMLCSS: 'Import HTML/CSS',
   importHTMLCSSDescription: 'Paste HTML plus optional CSS or compiled Tailwind CSS.',
   importFailed: 'Import failed. Check the HTML and CSS, then try again.',

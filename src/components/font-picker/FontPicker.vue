@@ -12,12 +12,21 @@ import {
 } from '@/app/editor/fonts'
 import { createFontPreviewQueue } from '@/app/editor/fonts/previews'
 import { usePopoverUI } from '@/components/ui/overlay/popover'
-import { useSelectUI } from '@/components/ui/select/select'
+import { useSelectUI, type SelectUI } from '@/components/ui/select/select'
 
 import FontPickerItem from './FontPickerItem.vue'
 
 const { panels } = useI18n()
-const { label: labelProp, placeholder } = defineProps<{ label?: string; placeholder?: string }>()
+/** The placeholder shows while no family is set, such as Mixed for texts in different fonts. */
+const {
+  label: labelProp,
+  placeholder,
+  ui: uiOverrides
+} = defineProps<{
+  label?: string
+  placeholder?: string
+  ui?: Pick<SelectUI, 'trigger' | 'item'>
+}>()
 const label = computed(() => labelProp ?? panels.value.fontFamily)
 const modelValue = defineModel<string>({ required: true })
 const emit = defineEmits<{ select: [family: string] }>()
@@ -25,19 +34,25 @@ const emit = defineEmits<{ select: [family: string] }>()
 const cls = usePopoverUI({
   content: 'w-[var(--reka-combobox-trigger-width)] min-w-56 overflow-hidden p-0'
 })
-const selectCls = useSelectUI({
-  trigger: 'w-full rounded px-2 py-1 text-xs',
-  item: 'h-9 w-full gap-2 px-3 py-2 text-sm leading-tight'
-})
+const selectCls = computed(() =>
+  useSelectUI({
+    ...uiOverrides,
+    trigger: ['w-full rounded px-2 py-1 text-xs', uiOverrides?.trigger].filter(Boolean).join(' '),
+    item: ['h-9 w-full gap-2 px-3 py-2 text-sm leading-tight', uiOverrides?.item]
+      .filter(Boolean)
+      .join(' ')
+  })
+)
 
 const ui = computed<FontPickerUI>(() => ({
-  trigger: selectCls.trigger,
+  trigger: selectCls.value.trigger,
   content: cls.content,
-  item: selectCls.item,
+  item: selectCls.value.item,
   search:
     'w-full border-b border-border bg-transparent px-3 py-2 text-sm text-surface outline-none placeholder:text-muted',
   empty: 'px-2 py-3 text-center text-xs text-muted',
-  emptyAction: 'mt-2 rounded bg-accent px-2 py-1 text-xs font-medium text-white disabled:opacity-50'
+  emptyAction:
+    'mt-2 rounded bg-accent px-2 py-1 text-xs font-medium text-on-accent disabled:opacity-50'
 }))
 
 const requestPreview = createFontPreviewQueue(loadWebFontPreview)
@@ -68,7 +83,11 @@ const localFontAccess = {
         :aria-label="label"
         :class="selectCls.trigger"
       >
-        <span class="truncate">{{ modelValue || placeholder }}</span>
+        <slot name="value">
+          <span class="truncate" :class="{ 'text-muted': !modelValue }">{{
+            modelValue || placeholder
+          }}</span>
+        </slot>
         <icon-lucide-chevron-down class="size-3 shrink-0 text-muted" />
       </button>
     </template>

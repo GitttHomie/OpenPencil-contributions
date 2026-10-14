@@ -158,7 +158,7 @@ describe('tool call display', () => {
     })
     expect(toolImage(part)).toBe(`data:image/png;base64,${base64}`)
     expect(displayedToolOutput(part)).toEqual({
-      base64: `<${base64.length} base64 characters>`,
+      base64: '[image/png, 4 bytes]',
       mimeType: 'image/png',
       width: 10
     })

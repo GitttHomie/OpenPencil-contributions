@@ -5,7 +5,10 @@ import { createGroupedValuesScene } from '#tests/helpers/properties/grouped-valu
 
 async function bind(page: Page, field: Locator, name: string) {
   await field.getByRole('button', { name: 'Apply variable' }).click()
-  await page.getByRole('option', { name, exact: true }).click()
+  await page
+    .getByRole('option')
+    .filter({ has: page.getByText(name, { exact: true }) })
+    .click()
 }
 async function detach(page: Page, field: Locator) {
   await field.getByRole('button', { name: 'Apply variable' }).click()

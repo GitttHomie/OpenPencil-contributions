@@ -1,5 +1,6 @@
 export * from './vectorize'
 export * from './handle-selection'
+export { freehandNetwork, simplifyFreehand } from './freehand'
 
 export {
   breakAtVertex,
@@ -21,10 +22,14 @@ export {
   encodeVectorNetworkBlob
 } from '@open-pencil/fig/node-change'
 import type { VectorNetwork, WindingRule } from '@open-pencil/scene-graph'
-
-import { addLoopToPath, addOpenSegmentsToPath } from './path-helpers'
+import { addLoopToPath, addOpenSegmentsToPath } from '@open-pencil/scene-graph/vector-network'
 export { vectorNetworkToCenterlinePath, fitCircleArc, isClosedThinCrescent } from './centerline'
-export { regenerateFillGeometry } from './fill-geometry'
+export { regenerateFillGeometry } from '@open-pencil/scene-graph/vector-network'
+export {
+  addStrokeRunToPath,
+  strokeRuns,
+  type StrokeRun
+} from '@open-pencil/scene-graph/vector-network'
 
 export function vectorNetworkToPath(ck: CanvasKit, network: VectorNetwork): Path[] {
   const { vertices, segments, regions } = network

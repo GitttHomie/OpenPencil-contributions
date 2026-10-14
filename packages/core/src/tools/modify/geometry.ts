@@ -1,139 +1,154 @@
 import * as v from 'valibot'
 
+import { withBatch } from '#core/tools/batch/define'
 import { toolNumber, nodeIdInput } from '#core/tools/input'
 import { defineTool, nodeNotFound } from '#core/tools/schema'
 
-export const setRotation = defineTool({
-  name: 'set_rotation',
+export const setRotation = withBatch(
+  defineTool({
+    name: 'set_rotation',
 
-  description: 'Set rotation angle of a node in degrees.',
-  execution: { kind: 'sync', mutation: 'properties' },
-  input: v.object({
-    id: nodeIdInput,
-    angle: toolNumber(v.pipe(v.number(), v.description('Rotation angle in degrees')))
+    description: 'Set rotation angle of a node in degrees.',
+    execution: { kind: 'sync', mutation: 'properties' },
+    input: v.strictObject({
+      id: nodeIdInput,
+      angle: toolNumber(v.pipe(v.number(), v.description('Rotation angle in degrees')))
+    }),
+    execute: (figma, { id, angle }) => {
+      const node = figma.getNodeById(id)
+      if (!node) return { error: `Node "${id}" not found` }
+      node.rotation = angle
+      return { id, rotation: angle }
+    }
   }),
-  execute: (figma, { id, angle }) => {
-    const node = figma.getNodeById(id)
-    if (!node) return { error: `Node "${id}" not found` }
-    node.rotation = angle
-    return { id, rotation: angle }
-  }
-})
+  { target: 'id' }
+)
 
-export const setOpacity = defineTool({
-  name: 'set_opacity',
+export const setOpacity = withBatch(
+  defineTool({
+    name: 'set_opacity',
 
-  description: 'Set opacity of a node (0-1).',
-  execution: { kind: 'sync', mutation: 'properties' },
-  input: v.object({
-    id: nodeIdInput,
-    value: toolNumber(
-      v.pipe(v.number(), v.minValue(0), v.maxValue(1), v.description('Opacity (0-1)'))
-    )
+    description: 'Set opacity of a node (0-1).',
+    execution: { kind: 'sync', mutation: 'properties' },
+    input: v.strictObject({
+      id: nodeIdInput,
+      value: toolNumber(
+        v.pipe(v.number(), v.minValue(0), v.maxValue(1), v.description('Opacity (0-1)'))
+      )
+    }),
+    execute: (figma, { id, value }) => {
+      const node = figma.getNodeById(id)
+      if (!node) return { error: `Node "${id}" not found` }
+      node.opacity = value
+      return { id, opacity: value }
+    }
   }),
-  execute: (figma, { id, value }) => {
-    const node = figma.getNodeById(id)
-    if (!node) return { error: `Node "${id}" not found` }
-    node.opacity = value
-    return { id, opacity: value }
-  }
-})
+  { target: 'id' }
+)
 
-export const setRadius = defineTool({
-  name: 'set_radius',
+export const setRadius = withBatch(
+  defineTool({
+    name: 'set_radius',
 
-  description:
-    'Set corner radius and optional corner smoothing (0–1). Use individual corners for independent radii. Smoothing needs a nonzero radius; choose it to suit the design.',
-  execution: { kind: 'sync', mutation: 'properties' },
-  input: v.object({
-    id: nodeIdInput,
-    radius: v.optional(
-      toolNumber(v.pipe(v.number(), v.minValue(0), v.description('Corner radius for all corners')))
-    ),
-    corner_smoothing: v.optional(
-      toolNumber(
-        v.pipe(
-          v.number(),
-          v.minValue(0),
-          v.maxValue(1),
-          v.description(
-            'Corner smoothing: 0 = circular rounding, 1 = maximum smoothing (not percent)'
+    description:
+      'Set corner radius and optional corner smoothing (0–1). Use individual corners for independent radii. Smoothing needs a nonzero radius; choose it to suit the design.',
+    execution: { kind: 'sync', mutation: 'properties' },
+    input: v.strictObject({
+      id: nodeIdInput,
+      radius: v.optional(
+        toolNumber(
+          v.pipe(v.number(), v.minValue(0), v.description('Corner radius for all corners'))
+        )
+      ),
+      corner_smoothing: v.optional(
+        toolNumber(
+          v.pipe(
+            v.number(),
+            v.minValue(0),
+            v.maxValue(1),
+            v.description(
+              'Corner smoothing: 0 = circular rounding, 1 = maximum smoothing (not percent)'
+            )
           )
         )
+      ),
+      top_left: v.optional(
+        toolNumber(v.pipe(v.number(), v.minValue(0), v.description('Top-left radius')))
+      ),
+      top_right: v.optional(
+        toolNumber(v.pipe(v.number(), v.minValue(0), v.description('Top-right radius')))
+      ),
+      bottom_right: v.optional(
+        toolNumber(v.pipe(v.number(), v.minValue(0), v.description('Bottom-right radius')))
+      ),
+      bottom_left: v.optional(
+        toolNumber(v.pipe(v.number(), v.minValue(0), v.description('Bottom-left radius')))
       )
-    ),
-    top_left: v.optional(
-      toolNumber(v.pipe(v.number(), v.minValue(0), v.description('Top-left radius')))
-    ),
-    top_right: v.optional(
-      toolNumber(v.pipe(v.number(), v.minValue(0), v.description('Top-right radius')))
-    ),
-    bottom_right: v.optional(
-      toolNumber(v.pipe(v.number(), v.minValue(0), v.description('Bottom-right radius')))
-    ),
-    bottom_left: v.optional(
-      toolNumber(v.pipe(v.number(), v.minValue(0), v.description('Bottom-left radius')))
-    )
+    }),
+    execute: (figma, args) => {
+      const node = figma.getNodeById(args.id)
+      if (!node) return nodeNotFound(args.id)
+      if (args.radius !== undefined) {
+        node.cornerRadius = args.radius
+      }
+      if (args.top_left !== undefined) node.topLeftRadius = args.top_left
+      if (args.top_right !== undefined) node.topRightRadius = args.top_right
+      if (args.bottom_right !== undefined) node.bottomRightRadius = args.bottom_right
+      if (args.bottom_left !== undefined) node.bottomLeftRadius = args.bottom_left
+      if (args.corner_smoothing !== undefined) node.cornerSmoothing = args.corner_smoothing
+      const cr = node.cornerRadius
+      if (typeof cr === 'number') {
+        return { id: args.id, cornerRadius: cr, cornerSmoothing: node.cornerSmoothing }
+      }
+      return {
+        id: args.id,
+        cornerSmoothing: node.cornerSmoothing,
+        topLeftRadius: node.topLeftRadius,
+        topRightRadius: node.topRightRadius,
+        bottomRightRadius: node.bottomRightRadius,
+        bottomLeftRadius: node.bottomLeftRadius
+      }
+    }
   }),
-  execute: (figma, args) => {
-    const node = figma.getNodeById(args.id)
-    if (!node) return nodeNotFound(args.id)
-    if (args.radius !== undefined) {
-      node.cornerRadius = args.radius
-    }
-    if (args.top_left !== undefined) node.topLeftRadius = args.top_left
-    if (args.top_right !== undefined) node.topRightRadius = args.top_right
-    if (args.bottom_right !== undefined) node.bottomRightRadius = args.bottom_right
-    if (args.bottom_left !== undefined) node.bottomLeftRadius = args.bottom_left
-    if (args.corner_smoothing !== undefined) node.cornerSmoothing = args.corner_smoothing
-    const cr = node.cornerRadius
-    if (typeof cr === 'number') {
-      return { id: args.id, cornerRadius: cr, cornerSmoothing: node.cornerSmoothing }
-    }
-    return {
-      id: args.id,
-      cornerSmoothing: node.cornerSmoothing,
-      topLeftRadius: node.topLeftRadius,
-      topRightRadius: node.topRightRadius,
-      bottomRightRadius: node.bottomRightRadius,
-      bottomLeftRadius: node.bottomLeftRadius
-    }
-  }
-})
+  { target: 'id' }
+)
 
-export const setMinMax = defineTool({
-  name: 'set_minmax',
+export const setMinMax = withBatch(
+  defineTool({
+    name: 'set_minmax',
 
-  description: 'Set min/max width and height constraints on a node.',
-  execution: { kind: 'sync', mutation: 'properties' },
-  input: v.object({
-    id: nodeIdInput,
-    min_width: v.optional(
-      toolNumber(v.pipe(v.number(), v.minValue(0), v.description('Minimum width')))
-    ),
-    max_width: v.optional(
-      toolNumber(v.pipe(v.number(), v.minValue(0), v.description('Maximum width')))
-    ),
-    min_height: v.optional(
-      toolNumber(v.pipe(v.number(), v.minValue(0), v.description('Minimum height')))
-    ),
-    max_height: v.optional(
-      toolNumber(v.pipe(v.number(), v.minValue(0), v.description('Maximum height')))
-    )
+    description: 'Set min/max width and height constraints on a node.',
+    execution: { kind: 'sync', mutation: 'properties' },
+    input: v.strictObject({
+      id: nodeIdInput,
+      min_width: v.optional(
+        toolNumber(v.pipe(v.number(), v.minValue(0), v.description('Minimum width')))
+      ),
+      max_width: v.optional(
+        toolNumber(v.pipe(v.number(), v.minValue(0), v.description('Maximum width')))
+      ),
+      min_height: v.optional(
+        toolNumber(v.pipe(v.number(), v.minValue(0), v.description('Minimum height')))
+      ),
+      max_height: v.optional(
+        toolNumber(v.pipe(v.number(), v.minValue(0), v.description('Maximum height')))
+      )
+    }),
+    execute: (figma, args) => {
+      const node = figma.getNodeById(args.id)
+      if (!node) return nodeNotFound(args.id)
+      if (args.min_width !== undefined) node.minWidth = args.min_width
+      if (args.max_width !== undefined) node.maxWidth = args.max_width
+      if (args.min_height !== undefined) node.minHeight = args.min_height
+      if (args.max_height !== undefined) node.maxHeight = args.max_height
+      return {
+        id: args.id,
+        minWidth: node.minWidth,
+        maxWidth: node.maxWidth,
+        minHeight: node.minHeight,
+        maxHeight: node.maxHeight
+      }
+    }
   }),
-  execute: (figma, args) => {
-    const node = figma.getNodeById(args.id)
-    if (!node) return nodeNotFound(args.id)
-    if (args.min_width !== undefined) node.minWidth = args.min_width
-    if (args.max_width !== undefined) node.maxWidth = args.max_width
-    if (args.min_height !== undefined) node.minHeight = args.min_height
-    if (args.max_height !== undefined) node.maxHeight = args.max_height
-    return {
-      id: args.id,
-      minWidth: node.minWidth,
-      maxWidth: node.maxWidth,
-      minHeight: node.minHeight,
-      maxHeight: node.maxHeight
-    }
-  }
-})
+  { target: 'id' }
+)

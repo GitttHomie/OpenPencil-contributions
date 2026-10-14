@@ -9,6 +9,7 @@ import { appRuntimeConfig } from '@/app/runtime/config'
 import { IS_BROWSER } from '@/constants'
 
 export interface OpenPencilTestHooks {
+  automation?: (command: string, args: unknown) => Promise<unknown>
   savedOpen?: Window['open']
   navigation?: NavigationBenchmarkHooks
   collab?: Pick<
@@ -72,6 +73,20 @@ export function exposeCollaborationActions(
       collab.shareCurrentDoc(roomId)
     },
     status: () => collab.state.value.status
+  }
+}
+
+/** Test runs send MCP requests the way the bridge delivers them, without a separate server. */
+export function exposeAutomationRequests(
+  handleRequest: (store: EditorStore, command: string, args: unknown) => Promise<unknown>
+) {
+  if (!IS_BROWSER || !import.meta.env.DEV) return
+  if (!appRuntimeConfig.test) return
+  const testHooks = (windowAPI().test ??= {})
+  testHooks.automation = async (command, args) => {
+    const store = windowAPI().getStore?.()
+    if (!store) throw new Error('OpenPencil store not initialized')
+    return handleRequest(store, command, args)
   }
 }
 

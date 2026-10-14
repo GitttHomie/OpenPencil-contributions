@@ -2,7 +2,7 @@ import type { Editor, EditorState } from '@open-pencil/core/editor'
 
 import { describeDiagnosticError, recordDocumentFailure } from '@/app/diagnostics'
 import { yieldToUI } from '@/app/document/io/browser'
-import { readFigDocument } from '@/app/document/io/fig'
+import { readFigDocument, wasFigCleanedOnOpen } from '@/app/document/io/fig'
 import { applyImportedDocument } from '@/app/document/io/imported-document'
 import { readReloadSource } from '@/app/document/io/reload-source'
 import { captureReloadState, restoreReloadState } from '@/app/document/io/reload-state'
@@ -19,6 +19,7 @@ type ReloadDocumentState = EditorState & { documentName: string }
 type OpenFigFileOptions = {
   editor: Editor
   state: OpenDocumentState
+  markDocumentChanged: () => void
   setDocumentSource: (
     fileName: string,
     sourceFormat: string,
@@ -34,7 +35,7 @@ type ReloadActionsOptions = {
   state: ReloadDocumentState
   getFilePath: () => string | null
   getFileHandle: () => FileSystemFileHandle | null
-  setSavedVersion: (version: number) => void
+  markDocumentSaved: () => void
   preparationController: EditorPreparationController
 }
 
@@ -42,22 +43,29 @@ export function createOpenActions({
   editor,
   state,
   setDocumentSource,
+  markDocumentChanged,
   fitCurrentPageToViewport,
   preparationController
 }: OpenFigFileOptions) {
-  async function openFigFile(file: File, handle?: FileSystemFileHandle, path?: string) {
+  async function openFigFile(
+    file: File,
+    handle?: FileSystemFileHandle,
+    path?: string,
+    options: { offerCleanup?: boolean } = {}
+  ) {
     const load = preparationController.begin({ kind: 'document-open', subject: file.name })
     let succeeded = false
     try {
       load.update({ phase: 'reading', detail: file.name })
       await yieldToUI()
       load.update({ phase: 'decoding', detail: file.name })
-      const imported = await readFigDocument(file, load.signal)
+      const imported = await readFigDocument(file, load.signal, options.offerCleanup !== false)
       await yieldToUI()
       load.update({ phase: 'materializing', detail: file.name })
       await applyImportedDocument(editor, imported, load)
       state.documentName = file.name.replace(/\.fig$/i, '')
       setDocumentSource(file.name, 'fig', handle, path)
+      if (wasFigCleanedOnOpen(imported)) markDocumentChanged()
       await fitCurrentPageToViewport()
       load.update({ phase: 'preparing-render', detail: state.documentName })
       editor.requestRender()
@@ -96,7 +104,7 @@ export function createReloadActions({
   state,
   getFilePath,
   getFileHandle,
-  setSavedVersion,
+  markDocumentSaved,
   preparationController
 }: ReloadActionsOptions) {
   async function reloadFromDisk() {
@@ -121,7 +129,7 @@ export function createReloadActions({
       await applyImportedDocument(editor, imported, load)
       restoreReloadState(editor, state, snapshot)
       editor.requestRender()
-      setSavedVersion(state.sceneVersion)
+      markDocumentSaved()
       succeeded = true
     } catch (error) {
       if (load.signal.aborted) return

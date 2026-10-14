@@ -27,3 +27,41 @@ test('resolves exact resource versions and refuses ambiguous unversioned referen
   expect(resolve({ assetRef: { key: 'collection' } })).toBeUndefined()
   expect(resolve({ guid: { sessionID: 2, localID: 3 } })).toBe('2:3')
 })
+
+test('duplicate library identities do not block explicit local references', () => {
+  const records: NodeChange[] = [
+    { guid: { sessionID: 1, localID: 1 }, key: 'collection' },
+    { guid: { sessionID: 1, localID: 2 }, key: 'collection' },
+    { guid: { sessionID: 1, localID: 3 }, key: 'collection', version: 'v2' },
+    { guid: { sessionID: 1, localID: 4 }, key: 'other' }
+  ]
+  for (const entries of [records, records.toReversed()]) {
+    const resolve = createResourceResolver(entries)
+    expect(resolve({ guid: { sessionID: 1, localID: 2 } })).toBe('1:2')
+    expect(resolve({ guid: { sessionID: 1, localID: 1 }, assetRef: { key: 'collection' } })).toBe(
+      '1:1'
+    )
+    expect(resolve({ assetRef: { key: 'other' } })).toBe('1:4')
+    expect(resolve({ assetRef: { key: 'collection', version: 'v2' } })).toBe('1:3')
+    expect(() => resolve({ assetRef: { key: 'collection' } })).toThrow('Ambiguous resource')
+  }
+})
+
+test('duplicate versioned targets reject only the conflicting lookup', () => {
+  const a: NodeChange = { guid: { sessionID: 1, localID: 1 }, key: 'library', version: 'v1' }
+  const b: NodeChange = { guid: { sessionID: 1, localID: 2 }, key: 'library', version: 'v1' }
+  expect(createResourceResolver([a, a])({ assetRef: { key: 'library', version: 'v1' } })).toBe(
+    '1:1'
+  )
+  for (const entries of [
+    [a, b, a],
+    [b, a, b]
+  ]) {
+    const resolve = createResourceResolver(entries)
+    expect(resolve({ assetRef: { key: 'library', version: 'missing' } })).toBeUndefined()
+    expect(() => resolve({ assetRef: { key: 'library', version: 'v1' } })).toThrow(
+      'Ambiguous resource'
+    )
+    expect(() => resolve({ assetRef: { key: 'library' } })).toThrow('Ambiguous resource')
+  }
+})

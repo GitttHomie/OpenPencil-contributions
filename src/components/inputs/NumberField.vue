@@ -44,6 +44,7 @@ import { computed, normalizeClass, useAttrs } from 'vue'
 import { NumberFieldRoot, NumberFieldInput, NumberFieldValue, useI18n } from '@open-pencil/vue'
 
 import { useEditorStore } from '@/app/editor/active-store'
+import { formatInputNumber } from '@/app/i18n/number'
 import theme from '@/theme/input/number-field'
 
 const attrs = useAttrs()
@@ -94,6 +95,7 @@ defineOptions({ inheritAttrs: false })
   <NumberFieldRoot
     v-slot="{ editing, actions, attrs: rootAttrs, placeholder: ph }"
     :model-value="modelValue"
+    :format-value="formatInputNumber"
     :min="min"
     :max="max"
     :step="step"

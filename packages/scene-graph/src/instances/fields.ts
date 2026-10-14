@@ -17,6 +17,12 @@ export const INSTANCE_SYNC_TEXT_PROPS = [
   'textUnderlineOffset'
 ] as const
 
+/** Fields that belong to another one: overriding the owner keeps them too. */
+export const INSTANCE_SYNC_FIELD_OWNERS: Readonly<Partial<Record<string, string>>> = {
+  styleRuns: 'text',
+  textParagraphs: 'text'
+}
+
 export const INSTANCE_SYNC_PROPS: (keyof SceneNode)[] = [
   'width',
   'height',
@@ -24,6 +30,7 @@ export const INSTANCE_SYNC_PROPS: (keyof SceneNode)[] = [
   'maxWidth',
   'minHeight',
   'maxHeight',
+  'targetAspectRatio',
   'fills',
   'strokes',
   'strokeWeight',
@@ -56,6 +63,14 @@ export const INSTANCE_SYNC_PROPS: (keyof SceneNode)[] = [
   'gridRowGap',
   'gridPosition',
   'clipsContent',
+  'itemReverseZIndex',
+  'strokesIncludedInLayout',
+  'layoutGrids',
+  'blendMode',
+  'strokeCap',
+  'strokeJoin',
+  'strokeMiterLimit',
+  'dashPattern',
   'independentStrokeWeights',
   'borderTopWeight',
   'borderRightWeight',
@@ -71,17 +86,41 @@ export const INSTANCE_SYNC_PROPS: (keyof SceneNode)[] = [
   'gridStyleId'
 ]
 
-export const INSTANCE_SYNC_FIELDS = [
-  ...INSTANCE_SYNC_PROPS,
-  ...INSTANCE_SYNC_TEXT_PROPS,
-  // Descendant placement follows the definition; an instance root's placement
-  // belongs to its own parent and is deliberately absent from INSTANCE_SYNC_PROPS.
-  'x',
-  'y',
-  'layoutPositioning',
-  'layoutGrow',
-  'layoutAlignSelf',
+/** How a layer inside an instance sits in its parent and whether it is locked, which its overrides may change. */
+export const INSTANCE_SYNC_CHILD_PROPS = ['layoutGrow', 'layoutAlignSelf', 'locked'] as const
+
+/**
+ * Where a component's layer sits and how it is shaped, which Figma refuses to override in an
+ * instance ("This property cannot be overridden in an instance"), so its copies always follow.
+ * A layer in an auto layout flow takes its position from the layout instead.
+ */
+export const INSTANCE_FOLLOWED_FIELDS = [
+  'rotation',
+  'flipX',
+  'flipY',
   'horizontalConstraint',
   'verticalConstraint',
+  'layoutPositioning',
+  'counterAxisAlignContent',
+  'isMask',
+  'maskType',
+  'arcData',
+  'pointCount',
+  'starInnerRadius'
+] as const
+
+/** Fields an edit to a layer inside an instance records as that instance's override. */
+export const INSTANCE_OVERRIDE_FIELDS = [
+  'x',
+  'y',
+  ...INSTANCE_SYNC_PROPS,
+  ...INSTANCE_SYNC_TEXT_PROPS,
+  ...INSTANCE_SYNC_CHILD_PROPS,
   'visible'
+] as const
+
+/** Fields a component's layer gives the copies of it in every instance. */
+export const INSTANCE_SYNC_FIELDS = [
+  ...INSTANCE_OVERRIDE_FIELDS,
+  ...INSTANCE_FOLLOWED_FIELDS
 ] as const

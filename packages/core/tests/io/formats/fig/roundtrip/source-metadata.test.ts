@@ -1,11 +1,13 @@
 import { beforeAll, describe, expect, test } from 'bun:test'
 
+import { expectDefined } from '#core-tests/helpers/assert'
+
 import { exportFigFile, initCodec, parseFigFile, SceneGraph } from '@open-pencil/core'
 import { effectiveFigmaRawNodeFields, parseFigBuffer } from '@open-pencil/fig'
 import { guidToString } from '@open-pencil/fig/node-change'
 
 function decodeExport(bytes: Uint8Array) {
-  return parseFigBuffer(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength))
+  return parseFigBuffer(bytes.slice().buffer)
 }
 
 describe('fig roundtrip source metadata', () => {
@@ -64,7 +66,7 @@ describe('fig roundtrip source metadata', () => {
     const changes = new Map(
       decoded.nodeChanges
         .filter((nodeChange) => nodeChange.guid)
-        .map((nodeChange) => [guidToString(nodeChange.guid), nodeChange])
+        .map((nodeChange) => [guidToString(expectDefined(nodeChange.guid)), nodeChange])
     )
 
     expect(changes.get('0:0')?.strokeJoin).toBe('BEVEL')
@@ -162,7 +164,7 @@ describe('fig roundtrip source metadata', () => {
 
     const decoded = decodeExport(await exportFigFile(graph))
     const exported = decoded.nodeChanges.find(
-      (nodeChange) => nodeChange.guid && guidToString(nodeChange.guid) === '4:501'
+      (nodeChange) => nodeChange.guid && guidToString(expectDefined(nodeChange.guid)) === '4:501'
     )
 
     expect(exported).toBeDefined()
@@ -205,7 +207,7 @@ describe('fig roundtrip source metadata', () => {
 
     const decoded = decodeExport(await exportFigFile(graph))
     const exported = decoded.nodeChanges.find(
-      (nodeChange) => nodeChange.guid && guidToString(nodeChange.guid) === '4:502'
+      (nodeChange) => nodeChange.guid && guidToString(expectDefined(nodeChange.guid)) === '4:502'
     )
 
     expect(exported?.leadingTrim).toBe('CAP_HEIGHT')
@@ -255,7 +257,7 @@ describe('fig roundtrip source metadata', () => {
 
     const decoded = decodeExport(await exportFigFile(graph))
     const exported = decoded.nodeChanges.find(
-      (nodeChange) => nodeChange.guid && guidToString(nodeChange.guid) === '4:505'
+      (nodeChange) => nodeChange.guid && guidToString(expectDefined(nodeChange.guid)) === '4:505'
     )
 
     expect(exported?.layoutGrids?.[0]?.type).toBe('MIN')
@@ -330,7 +332,7 @@ describe('fig roundtrip source metadata', () => {
 
     const decoded = decodeExport(await exportFigFile(graph))
     const exported = decoded.nodeChanges.find(
-      (nodeChange) => nodeChange.guid && guidToString(nodeChange.guid) === '4:503'
+      (nodeChange) => nodeChange.guid && guidToString(expectDefined(nodeChange.guid)) === '4:503'
     )
 
     expect(exported?.effects?.[0]?.type).toBe('NOISE')
@@ -415,7 +417,7 @@ describe('fig roundtrip source metadata', () => {
 
     const decoded = decodeExport(await exportFigFile(graph))
     const exported = decoded.nodeChanges.find(
-      (nodeChange) => nodeChange.guid && guidToString(nodeChange.guid) === '4:501'
+      (nodeChange) => nodeChange.guid && guidToString(expectDefined(nodeChange.guid)) === '4:501'
     )
 
     expect(effectiveFigmaRawNodeFields(text).fontVariations).toBeUndefined()
@@ -450,7 +452,7 @@ describe('fig roundtrip source metadata', () => {
 
     const decoded = decodeExport(await exportFigFile(graph))
     const exported = decoded.nodeChanges.find(
-      (nodeChange) => nodeChange.guid && guidToString(nodeChange.guid) === '4:465'
+      (nodeChange) => nodeChange.guid && guidToString(expectDefined(nodeChange.guid)) === '4:465'
     )
 
     expect(exported?.vectorData?.normalizedSize).toEqual({ x: 0, y: 0 })

@@ -1,20 +1,12 @@
 <script setup lang="ts">
-import {
-  SelectRoot,
-  SelectTrigger,
-  SelectPortal,
-  SelectContent,
-  SelectViewport,
-  SelectItem,
-  SelectItemText,
-  SelectItemIndicator
-} from 'reka-ui'
+import { SelectRoot, SelectTrigger } from 'reka-ui'
 import { computed, ref } from 'vue'
 
 import { useI18n, useSelectionLayout, useRetainedPopup } from '@open-pencil/vue'
 
 import VariableNumberField from '@/components/properties/VariableNumberField.vue'
-import { useSelectUI } from '@/components/ui/select/select'
+import AppSelectContent from '@/components/ui/select/AppSelectContent.vue'
+import AppSelectItem from '@/components/ui/select/AppSelectItem.vue'
 import { panelFieldBase } from '@/theme/panel/field'
 
 const { axis = 'primary' } = defineProps<{ axis?: 'primary' | 'counter' }>()
@@ -36,7 +28,6 @@ const auto = computed(
 const allowAuto = computed(
   () => axis === 'primary' && nodes.value.every((node) => node.layoutWrap !== 'WRAP')
 )
-const menu = useSelectUI({ item: 'rounded py-1.5 pr-2 pl-6 text-xs' })
 function setMode(value: string) {
   updateAllWithUndo(
     { primaryAxisAlign: value === 'AUTO' ? 'SPACE_BETWEEN' : 'MIN' },
@@ -87,7 +78,7 @@ function setMode(value: string) {
           <icon-lucide-align-horizontal-space-between v-if="horizontal" class="size-3.5" />
           <icon-lucide-align-vertical-space-between v-else class="size-3.5" />
         </template>
-        <template v-if="allowAuto" #after-variable>
+        <template v-if="allowAuto" #value-actions>
           <SelectTrigger
             data-test-id="layout-gap-menu"
             :aria-label="label"
@@ -100,28 +91,16 @@ function setMode(value: string) {
         </template>
       </VariableNumberField>
     </div>
-    <SelectPortal v-if="allowAuto && portalActive">
-      <SelectContent position="popper" align="start" :side-offset="4" :class="menu.content">
-        <SelectViewport class="p-0.5">
-          <SelectItem
-            v-for="mode in ['FIXED', 'AUTO']"
-            :key="mode"
-            :value="mode"
-            :class="menu.item"
-          >
-            <SelectItemIndicator class="absolute left-1.5 inline-flex items-center justify-center"
-              ><icon-lucide-check class="size-3 text-accent"
-            /></SelectItemIndicator>
-            <SelectItemText>{{
-              mode === 'AUTO'
-                ? panels.auto
-                : typeof merged('itemSpacing') === 'symbol'
-                  ? panels.mixed
-                  : merged('itemSpacing')
-            }}</SelectItemText>
-          </SelectItem>
-        </SelectViewport>
-      </SelectContent>
-    </SelectPortal>
+    <AppSelectContent v-if="allowAuto && portalActive" align="end">
+      <AppSelectItem v-for="mode in ['FIXED', 'AUTO']" :key="mode" :value="mode">
+        {{
+          mode === 'AUTO'
+            ? panels.auto
+            : typeof merged('itemSpacing') === 'symbol'
+              ? panels.mixed
+              : merged('itemSpacing')
+        }}
+      </AppSelectItem>
+    </AppSelectContent>
   </SelectRoot>
 </template>

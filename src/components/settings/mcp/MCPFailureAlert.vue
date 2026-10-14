@@ -2,14 +2,13 @@
 import { useClipboard } from '@vueuse/core'
 import { computed, ref } from 'vue'
 
-import { useAutomationMessages } from '@open-pencil/vue'
+import { useAutomationMessages, useCommonMessages } from '@open-pencil/vue'
 
 import {
-  MCP_INSTALL_TARGET,
+  restartFixesMCPFailure,
   type MCPFailure,
   type MCPFailureCode
 } from '@/app/automation/mcp/failure'
-import { toast } from '@/app/shell/ui'
 import AppButton from '@/components/ui/button/AppButton.vue'
 import AppCollapsible from '@/components/ui/collapsible/AppCollapsible.vue'
 import AppAlert from '@/components/ui/feedback/AppAlert.vue'
@@ -26,7 +25,8 @@ const {
 const emit = defineEmits<{ restart: [] }>()
 
 const automation = useAutomationMessages()
-const { copy } = useClipboard()
+const common = useCommonMessages()
+const { copy, copied } = useClipboard()
 const detailsOpen = ref(false)
 
 /** Translated copy for each reason; the technical detail stays secondary. */
@@ -35,7 +35,11 @@ const copy$ = computed(() => {
   const map: Record<MCPFailureCode, { heading: string; description: string }> = {
     'not-installed': {
       heading: messages.mcpFailureNotInstalled,
-      description: messages.mcpFailureNotInstalledHint({ package: MCP_INSTALL_TARGET })
+      description: messages.mcpFailureNotInstalledHint
+    },
+    outdated: {
+      heading: messages.mcpFailureMalformed,
+      description: messages.mcpFailureMalformedHint
     },
     'permission-denied': {
       heading: messages.mcpFailurePermission,
@@ -79,7 +83,6 @@ async function copyDetails(): Promise<void> {
   // VueUse falls back to a legacy write and never rejects, so awaiting the write
   // is what keeps the confirmation honest.
   await copy(payload)
-  toast.info(automation.value.mcpFailureCopied)
 }
 </script>
 
@@ -105,9 +108,10 @@ async function copyDetails(): Promise<void> {
     </template>
     <template #actions>
       <AppButton size="xs" variant="outline" @click="copyDetails">{{
-        automation.mcpFailureCopy
+        copied ? common.copied : automation.mcpFailureCopy
       }}</AppButton>
       <AppButton
+        v-if="restartFixesMCPFailure(failure)"
         size="xs"
         variant="outline"
         :disabled="externallyManaged"

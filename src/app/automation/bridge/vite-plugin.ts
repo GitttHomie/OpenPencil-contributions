@@ -39,6 +39,7 @@ export function createAutomationEnvironment(
     ...childEnv,
     PORT: String(httpPort),
     OPENPENCIL_MCP_TCP: '1',
+    OPENPENCIL_MCP_SCOPE: configuration.scope ?? 'document',
     OPENPENCIL_MCP_AUTH_TOKEN: configuration.authenticationEnabled ? (authToken ?? '') : '',
     OPENPENCIL_MCP_CORS_ORIGIN: corsOrigin,
     OPENPENCIL_MCP_ROOT: configuration.rootDirectory.trim() || process.cwd(),

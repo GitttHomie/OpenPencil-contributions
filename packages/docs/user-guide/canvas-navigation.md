@@ -39,6 +39,16 @@ Pinch-to-zoom on UI panels (layers, properties) is prevented so it doesn't accid
 | Zoom in | <kbd>⌘</kbd><kbd>+</kbd> | <kbd>Ctrl</kbd> + <kbd>+</kbd> |
 | Zoom out | <kbd>⌘</kbd><kbd>−</kbd> | <kbd>Ctrl</kbd> + <kbd>−</kbd> |
 | Zoom to 100% | <kbd>⌘</kbd><kbd>0</kbd> | <kbd>Ctrl</kbd> + <kbd>0</kbd> |
+| Zoom to fit | <kbd>⇧</kbd><kbd>1</kbd> | <kbd>Shift</kbd> + <kbd>1</kbd> |
+| Zoom to selection | <kbd>⇧</kbd><kbd>2</kbd> | <kbd>Shift</kbd> + <kbd>2</kbd> |
+| Pixel grid | <kbd>⇧</kbd><kbd>'</kbd> | <kbd>Shift</kbd> + <kbd>'</kbd> |
+| Snap to pixel grid | <kbd>⇧</kbd><kbd>⌘</kbd><kbd>'</kbd> | <kbd>Shift</kbd> + <kbd>Ctrl</kbd> + <kbd>'</kbd> |
+| Rulers | <kbd>⇧</kbd><kbd>R</kbd> | <kbd>Shift</kbd> + <kbd>R</kbd> |
+| Multiplayer cursors | <kbd>⌥</kbd><kbd>⌘</kbd><kbd>\\</kbd> | <kbd>Alt</kbd> + <kbd>Ctrl</kbd> + <kbd>\\</kbd> |
+
+## Pixel Grid
+
+Zoomed in far enough that each document pixel covers eight screen pixels (800% on a standard display, 400% on a Retina one), the canvas shows a line at every pixel, as in Figma. Turn it off or on with **View → Pixel Grid**.
 
 ## Ruler Guides
 
@@ -68,6 +78,8 @@ Hold <kbd>Control</kbd> during a layer drag to temporarily bypass alignment guid
 ## Distance Measurements
 
 Select a layer, hold <kbd>Option</kbd> on macOS or <kbd>Alt</kbd> on Windows/Linux, and hover another layer to see temporary distance measurements. Releasing the modifier clears the overlay; it does not add guides or change the document.
+
+Add <kbd>⌘</kbd> on macOS or <kbd>Ctrl</kbd> on Windows/Linux to measure a nested layer directly. While holding both modifiers, use the arrow keys to nudge the selection by 1 px, or add <kbd>Shift</kbd> for 10 px steps. The measurements update as you move. Items in auto-layout retain their normal arrow-key reordering behavior.
 
 ## Command Palette
 

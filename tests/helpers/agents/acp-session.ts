@@ -24,8 +24,9 @@ export function createConnectedAgent(
   supportsImages = false,
   modelOptions: {
     modelId?: string
-    purpose?: 'catalog' | 'verification'
+    purpose?: 'catalog' | 'verification' | 'vision'
     responseText?: string
+    images?: Array<{ data: string; mimeType: string }>
     integration?: ConstructorParameters<typeof ACPChatTransport>[0]['integration']
     sessionValues?: ConstructorParameters<typeof ACPChatTransport>[0]['sessionValues']
     controls?: SessionConfigOption[]
@@ -184,6 +185,7 @@ export function createConnectedAgent(
     {
       agentDef,
       cwd: '/workspace',
+      images: modelOptions.images,
       purpose: modelOptions.purpose ?? (review ? 'review' : 'design'),
       launch: modelOptions.launch,
       integration: modelOptions.integration,

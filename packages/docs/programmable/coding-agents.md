@@ -6,21 +6,17 @@ Coding agents need the desktop app; the browser cannot start programs on your co
 
 ## What you need
 
-1. The [OpenPencil desktop app](https://github.com/open-pencil/open-pencil/releases/latest).
+1. The [OpenPencil desktop app](/download).
 2. The agent's ACP program, installed globally (see each agent below).
-3. OpenPencil's MCP server, installed globally. Use the version that matches your app:
+3. The agent signed in to your account with its own command-line tool.
 
-   ```sh
-   npm install -g @open-pencil/mcp
-   ```
-
-4. The agent signed in to your account with its own command-line tool.
+The desktop app includes the canvas MCP helper and its runtime. It starts the helper directly and stops it when the app exits. Canvas setup needs no Node, npm, Bun, global OpenPencil package, or source checkout. Agent adapters and Pi's Harness companion still have their own installation requirements.
 
 Then open **Settings → AI & agents → Run guided setup**, choose the agent under **Coding agents on this computer**, and check that both the agent and the MCP server show as installed. **Check again** looks again after you install something.
 
 ### Let your agent set itself up
 
-If you already use one of these agents in a terminal, guided setup can do the typing for you: press **Copy setup prompt** on the agent's card and paste the prompt into the agent. It asks the agent to install its ACP program and the MCP server, confirm both are on your `PATH`, and make sure you are signed in.
+If you already use one of these agents in a terminal, guided setup can do the typing for you: press **Copy setup prompt** on the agent's card and paste the prompt into the agent. It asks the agent to install its ACP program, confirm it is on your `PATH`, and make sure you are signed in. The canvas helper comes with OpenPencil and is started from Settings.
 
 ## Claude Code
 
@@ -61,6 +57,18 @@ OpenPencil reads only Pi's `settings.json` for the default model; your credentia
 ## Troubleshooting
 
 - **Shown as not found after installing.** Apps started from the Dock or Start menu do not see every folder your terminal adds to `PATH`. OpenPencil also looks in common global folders for npm, Bun, Volta, mise, and Homebrew; if your package manager installs elsewhere, add that folder to your login shell's `PATH` and restart OpenPencil.
-- **Shown as update needed.** The MCP server or Pi's companion does not match the app version. Press the update button, or run the command guided setup shows with the package manager that installed it, then press **Check again**. A chat that needs it says so and offers **Run guided setup**.
+- **Shown as update needed.** Pi's Harness companion does not match the app version. Press the update button, or run the command guided setup shows with the package manager that installed it, then press **Check again**. A chat that needs it says so and offers **Run guided setup**.
 - **The agent starts but cannot edit the canvas.** The MCP server is missing or not running. Install the matching `@open-pencil/mcp` version and restart OpenPencil.
 - **The agent asks you to sign in.** Sign in with the agent's own command-line tool as described above, then send your message again.
+
+## External tools for a chat
+
+In **Settings → MCP**, add an HTTP connection or import a local command from your IDE's MCP JSON. The desktop app accepts an `mcpServers` object or a map of named servers with `command`, `args`, `env`, `disabled`, and `autoApprove`. Importing saves the configuration without starting the server; environment values go into the credential store. **Test connection** starts a temporary connection and lists tools without executing them.
+
+Use the plug button beside the chat input to enable saved connections for that conversation. OpenPencil supplies those connections to ACP and Pi agents and exposes their tools to API models. API models ask before each external tool call unless its exact name appears in **Auto-approved API tools**; CLI agents retain their own permission policies. This does not edit your IDE or global CLI configuration.
+
+Image results appear in the conversation with **Place image on canvas**, which creates an undoable frame with an image fill. Local commands require the desktop app.
+
+For a render saved on disk, agents should use `import_image` with the original path instead of copying a compressed image preview into `set_image_fill`. Have the producing application save the final file inside the MCP root shown by the import tool. The source bytes are preserved, and the response reports the file path, byte count and stored image hash.
+
+Blender steering favors Eevee with supported ray tracing for stylized assets and verified GPU rendering when Cycles is needed. Final renders use twice the intended layout width and height, while the OpenPencil frame keeps its logical size. Agents check the completed file's dimensions and import the original PNG; lower-resolution previews remain separate from final assets.

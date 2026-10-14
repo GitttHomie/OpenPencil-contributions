@@ -64,6 +64,7 @@ function setup(frameRotation: number, vectorRotation: number) {
     },
     select: () => undefined,
     requestRender: () => undefined,
+    onEditorEvent: () => () => undefined,
     updateNodeWithUndo(id: string, changes: Partial<SceneNode>, label = 'Update') {
       undoLabels.push(label)
       graph.updateNode(id, changes)

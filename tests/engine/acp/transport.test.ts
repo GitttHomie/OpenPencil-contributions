@@ -6,10 +6,13 @@ import { reactive } from 'vue'
 import { ACP_AGENTS } from '@open-pencil/core/constants'
 import { DESIGN_WORKFLOW } from '@open-pencil/core/tools'
 
-import { ACPChatTransport, formatConnectionError, buildCrashChunks } from '@/app/ai/acp/transport'
+import { formatConnectionError } from '@/app/ai/acp/connection-error'
+import { ACPChatTransport, buildCrashChunks } from '@/app/ai/acp/transport'
 import { classifyAIChatError } from '@/app/ai/chat/failure'
 import { MCPStartupError } from '@/app/automation/mcp/failure'
+import { MCPConnectionError } from '@/app/integrations/mcp/failure'
 import { createDeferred } from '@/app/runtime/deferred'
+import { CredentialStoreError } from '@/app/settings/credentials/types'
 
 import { createConnectedAgent } from '#tests/helpers/agents/acp-session'
 
@@ -256,6 +259,36 @@ for (const agentDef of ACP_AGENTS) {
       expect(classifyAIChatError(error).reason).toBe('mcp-unavailable')
       expect(spawned).toBe(false)
       await transport.destroy()
+    })
+
+    test('preserves external credential failures without launching an agent', async () => {
+      let spawned = false
+      const error = new MCPConnectionError(
+        'Blender',
+        new CredentialStoreError('locked', 'Credential access is paused')
+      )
+      const transport = new ACPChatTransport(
+        { agentDef },
+        {
+          async spawn() {
+            spawned = true
+            throw new Error('Agent must not launch')
+          },
+          async mcpServers() {
+            throw error
+          }
+        }
+      )
+      try {
+        await expect(send(transport)).rejects.toBe(error)
+        expect(classifyAIChatError(error)).toMatchObject({
+          reason: 'credential-access',
+          connectionName: 'Blender'
+        })
+        expect(spawned).toBe(false)
+      } finally {
+        await transport.destroy()
+      }
     })
 
     test('finishes each successful prompt and passes canvas MCP configuration without an API key', async () => {

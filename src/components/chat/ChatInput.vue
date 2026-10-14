@@ -21,6 +21,7 @@ import IconButton from '@/components/ui/button/IconButton.vue'
 import { chatComposerTheme } from '@/theme/chat/composer'
 
 import ChatComposer from './ChatComposer.vue'
+import ChatConnections from './ChatConnections.vue'
 
 const { providerID, providerDef, modelID, customModelID } = useAIChat()
 const { editor, selectedIds } = useSelectionState()
@@ -144,6 +145,7 @@ const routingDecision = useRoutingDecision()
       </div>
     </template>
     <template #leading>
+      <ChatConnections :disabled="isStreaming" />
       <IconButton
         :label="ai.addSelectionContext"
         size="sm"

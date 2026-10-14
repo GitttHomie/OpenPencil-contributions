@@ -2,7 +2,7 @@ import RBush from 'rbush'
 
 import type { SceneGraph, SceneNode } from '@open-pencil/scene-graph'
 import { getWorldMatrix } from '@open-pencil/scene-graph/coordinate'
-import { computeDescendantVisualBounds } from '@open-pencil/scene-graph/geometry'
+import { computeDescendantVisualBounds, hasFiniteGeometry } from '@open-pencil/scene-graph/geometry'
 import type { Mat3 } from '@open-pencil/scene-graph/matrix'
 import Matrix from '@open-pencil/scene-graph/matrix'
 
@@ -105,7 +105,7 @@ function countDescendants(graph: SceneGraph, nodeIds: string[]) {
     const entry = stack.pop()
     if (!entry) continue
     const node = graph.getNode(entry.nodeId)
-    if (!node?.visible) continue
+    if (!node?.visible || !hasFiniteGeometry(node)) continue
     if (!entry.expanded) {
       visited++
       stack.push({ nodeId: entry.nodeId, expanded: true })
@@ -127,7 +127,7 @@ function buildChunks(graph: SceneGraph, nodeIds: string[], counts: Map<string, n
     const nodeId = stack.pop()
     if (!nodeId) continue
     const node = graph.getNode(nodeId)
-    if (!node?.visible) continue
+    if (!node?.visible || !hasFiniteGeometry(node)) continue
     const descendantCount = counts.get(nodeId) ?? 1
     const split = shouldSplit(graph, node, descendantCount)
     const kind: RenderChunkKind = split ? 'self' : 'subtree'

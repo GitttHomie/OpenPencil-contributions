@@ -12,18 +12,21 @@ import {
   HARNESS_INSTALL_TARGET,
   HARNESS_PACKAGE
 } from '@/app/ai/harness/companion'
-import { MCP_INSTALL_TARGET, MCP_PACKAGE_NAME } from '@/app/automation/mcp/failure'
+import { MCP_EXECUTABLE } from '@/app/automation/mcp/failure'
+import { detectUserAgent } from '@/app/tauri/command'
 
-import { globalInstallCommand, isOutdatedCompanion } from './companions'
+import {
+  companionPackageManager,
+  globalInstallCommand,
+  isOutdatedCompanion,
+  type PackageManager
+} from './companions'
 import {
   installAgentAdapter,
-  installCanvasBridge,
   installHarnessCompanion,
   lookupAgents,
   type AgentLookup
 } from './native'
-
-const MCP_EXECUTABLE = 'openpencil-mcp-http'
 
 export type DetectedAgent = {
   definition: ACPAgentDef
@@ -46,20 +49,27 @@ export function detectedAgents(lookup: AgentLookup): DetectedAgent[] {
   })
 }
 
+/** What went wrong in the last lookup or installation. */
+export type DiscoveryError =
+  | 'lookup'
+  | 'install'
+  | 'npm'
+  | 'canvas-start'
+  | 'harness-install'
+  /** npm's global folder needs administrator rights, which the app never asks for. */
+  | 'npm-admin'
+
 export function createAgentDiscovery(options: {
   enabled: boolean
   lookup: () => Promise<AgentLookup>
   install: (agent: ACPAgentDef, searchPath: string) => Promise<void>
-  installBridge?: (searchPath: string) => Promise<void>
   restartBridge?: () => Promise<void>
-  installHarness?: (searchPath: string) => Promise<void>
+  installHarness?: (searchPath: string, manager: PackageManager) => Promise<void>
 }) {
   const snapshot = shallowRef<AgentLookup | null>(null)
   const scanning = ref(false)
   const installing = ref<ACPAgentID | 'canvas' | 'harness' | null>(null)
-  const error = ref<
-    'lookup' | 'install' | 'npm' | 'canvas-install' | 'canvas-start' | 'harness-install' | null
-  >(null)
+  const error = ref<DiscoveryError | null>(null)
   let pending: Promise<void> | null = null
   const agents = computed(() => (snapshot.value ? detectedAgents(snapshot.value) : []))
   const availableAgents = computed(() =>
@@ -70,9 +80,33 @@ export function createAgentDiscovery(options: {
   function hasBridge(): boolean {
     return Boolean(snapshot.value?.executables[MCP_EXECUTABLE])
   }
-  /** An installed MCP server whose version does not match the app. */
-  function bridgeOutdated(): boolean {
-    return hasBridge() && isOutdatedCompanion(snapshot.value?.versions[MCP_PACKAGE_NAME])
+  function canInstallWith(manager: PackageManager): boolean {
+    return Boolean(snapshot.value?.executables[manager])
+  }
+  /** npm installs global packages where this user cannot write, so only an administrator can. */
+  function npmNeedsAdmin(): boolean {
+    return snapshot.value?.npmGlobalWritable === false
+  }
+  /**
+   * The package manager that installed a companion updates it, so the new copy replaces the
+   * old one on PATH; another manager would install beside it and leave the old copy first.
+   * A new install uses npm, or Bun when npm would need administrator rights.
+   */
+  function managerFor(executable: string): PackageManager {
+    const path = snapshot.value?.executables[executable]
+    if (path) return companionPackageManager(path)
+    return npmNeedsAdmin() && canInstallWith('bun') ? 'bun' : 'npm'
+  }
+  /** Installing this companion would need administrator rights. */
+  function needsAdmin(executable: string): boolean {
+    return managerFor(executable) === 'npm' && npmNeedsAdmin()
+  }
+  function installCommand(target: string, executable: string): string {
+    // Run by hand in the person's own terminal, which may find a manager the app cannot.
+    return globalInstallCommand(target, managerFor(executable), {
+      admin: needsAdmin(executable),
+      windows: detectUserAgent().includes('Windows')
+    })
   }
   function hasHarness(): boolean {
     return Boolean(snapshot.value?.executables[HARNESS_EXECUTABLE])
@@ -81,17 +115,19 @@ export function createAgentDiscovery(options: {
     return hasHarness() && isOutdatedCompanion(snapshot.value?.versions[HARNESS_PACKAGE])
   }
   const canvasBridgeAvailable = computed(hasBridge)
-  const canvasBridgeOutdated = computed(bridgeOutdated)
   /** The Harness companion that runs Pi. */
   const harnessAvailable = computed(hasHarness)
   const harnessOutdatedVersion = computed(harnessOutdated)
   /** Commands to install or update a companion by hand, for the package manager that has it. */
-  const canvasBridgeCommand = computed(() =>
-    globalInstallCommand(MCP_INSTALL_TARGET, snapshot.value?.executables[MCP_EXECUTABLE])
-  )
-  const harnessCommand = computed(() =>
-    globalInstallCommand(HARNESS_INSTALL_TARGET, snapshot.value?.executables[HARNESS_EXECUTABLE])
-  )
+  const harnessCommand = computed(() => installCommand(HARNESS_INSTALL_TARGET, HARNESS_EXECUTABLE))
+  const harnessNeedsAdmin = computed(() => needsAdmin(HARNESS_EXECUTABLE))
+  /** One click can install or update it, with the package manager that would run. */
+  function installable(executable: string): boolean {
+    return canInstallWith(managerFor(executable)) && !needsAdmin(executable)
+  }
+  const harnessInstallable = computed(() => installable(HARNESS_EXECUTABLE))
+  /** Agent adapters always come from npm. */
+  const adapterNeedsAdmin = computed(npmNeedsAdmin)
 
   function refresh(force = false): Promise<void> {
     if (!options.enabled) return Promise.resolve()
@@ -122,6 +158,10 @@ export function createAgentDiscovery(options: {
       error.value = 'npm'
       return
     }
+    if (npmNeedsAdmin()) {
+      error.value = 'npm-admin'
+      return
+    }
     installing.value = id
     error.value = null
     try {
@@ -141,25 +181,14 @@ export function createAgentDiscovery(options: {
 
   async function setupCanvasBridge(): Promise<void> {
     if (!options.enabled || installing.value || !snapshot.value) return
-    let installed = hasBridge() && !bridgeOutdated()
-    if (!installed && !npmAvailable.value) {
-      error.value = 'npm'
-      return
-    }
     installing.value = 'canvas'
     error.value = null
     try {
-      if (!installed) {
-        if (!options.installBridge) throw new Error('Canvas bridge setup is unavailable.')
-        await options.installBridge(snapshot.value.searchPath)
-        await refresh(true)
-        if (!hasBridge() || bridgeOutdated())
-          throw new Error('A matching MCP server was not found.')
-        installed = true
-      }
-      await options.restartBridge?.()
+      if (!hasBridge()) throw new Error('The bundled canvas helper is missing.')
+      if (!options.restartBridge) throw new Error('Canvas connection startup is unavailable.')
+      await options.restartBridge()
     } catch {
-      error.value = installed ? 'canvas-start' : 'canvas-install'
+      error.value = 'canvas-start'
     } finally {
       installing.value = null
     }
@@ -168,15 +197,20 @@ export function createAgentDiscovery(options: {
   async function setupHarness(): Promise<void> {
     if (!options.enabled || installing.value || !snapshot.value) return
     if (hasHarness() && !harnessOutdated()) return
-    if (!npmAvailable.value) {
-      error.value = 'npm'
+    const manager = managerFor(HARNESS_EXECUTABLE)
+    if (!canInstallWith(manager)) {
+      error.value = manager === 'npm' ? 'npm' : 'harness-install'
+      return
+    }
+    if (needsAdmin(HARNESS_EXECUTABLE)) {
+      error.value = 'npm-admin'
       return
     }
     installing.value = 'harness'
     error.value = null
     try {
       if (!options.installHarness) throw new Error('Harness companion setup is unavailable.')
-      await options.installHarness(snapshot.value.searchPath)
+      await options.installHarness(snapshot.value.searchPath, manager)
       await refresh(true)
       if (!hasHarness() || harnessOutdated()) error.value = 'harness-install'
     } catch {
@@ -195,11 +229,12 @@ export function createAgentDiscovery(options: {
     error,
     npmAvailable,
     canvasBridgeAvailable,
-    canvasBridgeOutdated,
-    canvasBridgeCommand,
     harnessAvailable,
     harnessOutdated: harnessOutdatedVersion,
     harnessCommand,
+    harnessNeedsAdmin,
+    harnessInstallable,
+    adapterNeedsAdmin,
     setupCanvasBridge,
     setupHarness,
     refresh,
@@ -211,7 +246,6 @@ export const agentDiscovery = createAgentDiscovery({
   enabled: IS_TAURI,
   lookup: lookupAgents,
   install: installAgentAdapter,
-  installBridge: installCanvasBridge,
   installHarness: installHarnessCompanion,
   async restartBridge() {
     const { restartMCPRuntime } = await import('@/app/automation/mcp/runtime')

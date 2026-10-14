@@ -16,7 +16,7 @@ beforeAll(async () => {
       Bun.file(`tests/fixtures/fonts/Fredoka-Regular-${name}.ttf`).arrayBuffer()
     )
   )
-  inter = await Bun.file('public/Inter-Regular.ttf').arrayBuffer()
+  inter = await Bun.file('packages/core/assets/Inter-Regular.ttf').arrayBuffer()
 })
 
 function render(provider: TypefaceFontProvider, families: string[]) {
@@ -28,7 +28,7 @@ function render(provider: TypefaceFontProvider, families: string[]) {
   )
   builder.addText("It's a Croak!")
   const paragraph = builder.build()
-  const surface = ck.MakeSurface(640,120)
+  const surface = ck.MakeSurface(640, 120)
   if (!surface) throw new Error('Raster surface unavailable')
   try {
     paragraph.layout(620)
@@ -38,9 +38,9 @@ function render(provider: TypefaceFontProvider, families: string[]) {
     const image = surface.makeImageSnapshot()
     try {
       return {
-        glyphs: paragraph.getShapedLines().flatMap((line) =>
-          line.runs.flatMap((run) => [...run.glyphs])
-        ),
+        glyphs: paragraph
+          .getShapedLines()
+          .flatMap((line) => line.runs.flatMap((run) => [...run.glyphs])),
         pixels: image.encodeToBytes()
       }
     } finally {

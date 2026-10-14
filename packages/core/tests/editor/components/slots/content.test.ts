@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 
+import { expectDefined } from '#core-tests/helpers/assert'
+
 import { createEditor } from '@open-pencil/core/editor'
 import { ownsSlotContent, slotPropertyId, type SceneNode } from '@open-pencil/scene-graph'
 
@@ -96,7 +98,7 @@ describe('editing instance slots', () => {
     editor.clearSlot(slot.id)
     expect(names(editor, slot)).toEqual([])
 
-    const added = editor.addInstanceToSlot(slot.id, item.id)
+    const added = expectDefined(editor.addInstanceToSlot(slot.id, item.id))
     expect(added && editor.graph.getNode(added)?.componentId).toBe(item.id)
     expect(names(editor, slot)).toEqual(['Item'])
 
@@ -125,7 +127,7 @@ describe('editing instance slots', () => {
   test('undoing an added instance restores the selection', () => {
     const { editor, item, slot, free } = setup()
     editor.select([free.id])
-    const added = editor.addInstanceToSlot(slot.id, item.id)
+    const added = expectDefined(editor.addInstanceToSlot(slot.id, item.id))
     expect([...editor.state.selectedIds]).toEqual([added])
     editor.undo.undo()
     expect([...editor.state.selectedIds]).toEqual([free.id])

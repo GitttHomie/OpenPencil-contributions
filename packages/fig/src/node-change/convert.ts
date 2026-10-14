@@ -1,3 +1,5 @@
+import { clamp } from 'es-toolkit'
+
 import { guidToString } from '@open-pencil/kiwi/fig/guid'
 import {
   DEFAULT_FONT_FAMILY,
@@ -6,6 +8,7 @@ import {
   styleToWeight
 } from '@open-pencil/scene-graph'
 import { createDefaultSourceMetadata } from '@open-pencil/scene-graph/node-defaults'
+import { POINT_COUNT_RANGE } from '@open-pencil/scene-graph/polygon'
 import { parseVariantName } from '@open-pencil/scene-graph/variant-name'
 /* eslint-disable max-lines -- kiwi↔scene conversion helpers are tightly coupled */
 
@@ -27,9 +30,16 @@ import {
   NODE_TYPE_PLUGIN_KEY,
   TEXT_DIRECTION_PLUGIN_KEY
 } from './plugin-data'
+import { styleRefId } from './style/refs'
 import { importStyleRuns } from './style/runs'
 import { usesParagraphTextLayout } from './text/layout-source'
-import { convertLetterSpacing, convertLineHeight, mapTextDecoration } from './text/values'
+import { importParagraphStyles } from './text/lines'
+import {
+  convertLetterSpacing,
+  convertLineHeight,
+  isFigmaAutoLineHeight,
+  mapTextDecoration
+} from './text/values'
 import {
   alignGeometryWindingRules,
   resolveGeometryPaths,
@@ -51,7 +61,7 @@ import type {
   StrokeCap,
   StrokeJoin,
   LayoutMode,
-  LayoutSizing,
+  AxisSizingMode,
   LayoutAlign,
   LayoutAlignSelf,
   LayoutCounterAlign,
@@ -154,13 +164,11 @@ function mapStackMode(mode?: string): LayoutMode {
   }
 }
 
-export function mapStackSizing(sizing?: string): LayoutSizing {
+export function mapStackSizing(sizing?: string): AxisSizingMode {
   switch (sizing) {
     case 'RESIZE_TO_FIT':
     case 'RESIZE_TO_FIT_WITH_IMPLICIT_SIZE':
       return 'HUG'
-    case 'FILL':
-      return 'FILL'
     default:
       return 'FIXED'
   }
@@ -295,9 +303,37 @@ function convertCornerProps(
   }
 }
 
+/**
+ * A polygon's sides or a star's points and inner ratio, which Figma writes for both kinds. The
+ * wire format allows far more points than Figma keeps, and any inner scale, so both are held to
+ * Figma's ranges before the outline is built from them.
+ */
+function convertPolygonProps(
+  nc: NodeChange
+): Partial<Pick<SceneNode, 'pointCount' | 'starInnerRadius'>> {
+  const props: Partial<Pick<SceneNode, 'pointCount' | 'starInnerRadius'>> = {}
+  if (nc.count !== undefined)
+    props.pointCount = clamp(nc.count, POINT_COUNT_RANGE.min, POINT_COUNT_RANGE.max)
+  if (nc.starInnerScale !== undefined && Number.isFinite(nc.starInnerScale))
+    props.starInnerRadius = clamp(nc.starInnerScale, 0, 1)
+  return props
+}
+
+/**
+ * A text's line height. Figma writes auto as 100 percent, and OpenPencil once wrote none for
+ * it; a text in auto lines up each line at its own font's height. Figma saves each line at the
+ * larger of its line height and its tallest font's height, so a first line shorter than the
+ * text's height in pixels was laid out at another one, which a style the text uses set.
+ */
 function importedTextLineHeight(nc: NodeChange): number | null {
+  if (!nc.lineHeight || isFigmaAutoLineHeight(nc.lineHeight)) return null
   const derivedLineHeight = nc.derivedTextData?.baselines?.[0]?.lineHeight
-  if (derivedLineHeight !== undefined && Number.isFinite(derivedLineHeight))
+  if (
+    nc.lineHeight.units === 'PIXELS' &&
+    derivedLineHeight !== undefined &&
+    Number.isFinite(derivedLineHeight) &&
+    derivedLineHeight < nc.lineHeight.value
+  )
     return derivedLineHeight
   return convertLineHeight(nc.lineHeight, nc.fontSize)
 }
@@ -321,6 +357,11 @@ type TextProps = Pick<
   | 'lineHeight'
   | 'letterSpacing'
   | 'maxLines'
+  | 'textParagraphs'
+  | 'listSpacing'
+  | 'paragraphSpacing'
+  | 'paragraphIndent'
+  | 'hangingList'
   | 'styleRuns'
   | 'fontVariations'
   | 'fontFeatures'
@@ -351,6 +392,21 @@ function convertTextDecorationProps(
   }
 }
 
+function convertParagraphProps(
+  nc: NodeChange
+): Pick<
+  SceneNode,
+  'textParagraphs' | 'listSpacing' | 'paragraphSpacing' | 'paragraphIndent' | 'hangingList'
+> {
+  return {
+    textParagraphs: importParagraphStyles(nc.textData?.lines, nc.textData?.styleOverrideTable),
+    listSpacing: nc.listSpacing ?? 0,
+    paragraphSpacing: nc.paragraphSpacing ?? 0,
+    paragraphIndent: nc.paragraphIndent ?? 0,
+    hangingList: nc.hangingList ?? false
+  }
+}
+
 function convertTextProps(nc: NodeChange, blobs: Uint8Array[]): TextProps {
   return {
     text: nc.textData?.characters ?? '',
@@ -370,6 +426,7 @@ function convertTextProps(nc: NodeChange, blobs: Uint8Array[]): TextProps {
     leadingTrim: (nc.leadingTrim ?? 'NONE') as SceneNode['leadingTrim'],
     letterSpacing: convertLetterSpacing(nc.letterSpacing, nc.fontSize),
     maxLines: (nc.maxLines ?? null) as number | null,
+    ...convertParagraphProps(nc),
     styleRuns: importStyleRuns(nc),
     fontVariations: convertFontVariations(nc),
     fontFeatures: convertFontFeatures(nc),
@@ -443,6 +500,12 @@ function minimumSizeDimension(size: NodeChange['minSize'], axis: 'x' | 'y'): num
 function maximumSizeDimension(size: NodeChange['maxSize'], axis: 'x' | 'y'): number | null {
   const value = size?.value?.[axis]
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null
+}
+
+function targetAspectRatio(nc: NodeChange): SceneNode['targetAspectRatio'] {
+  const value = nc.targetAspectRatio?.value
+  if (!value || !Number.isFinite(value.x) || !Number.isFinite(value.y)) return null
+  return { x: value.x, y: value.y }
 }
 
 function convertLayoutProps(
@@ -519,21 +582,6 @@ function getVectorStrokeJoin(nc: NodeChange, vectorNetwork: VectorNetwork | null
   return (nc.strokeJoin ??
     vectorNetwork?.vertices.find((v) => v.strokeJoin)?.strokeJoin ??
     'MITER') as StrokeJoin
-}
-
-function styleRefId(value: unknown): string | null {
-  if (!value || typeof value !== 'object' || !('guid' in value)) return null
-  const guid = value.guid
-  if (!guid || typeof guid !== 'object') return null
-  // Kiwi's all-ones GUID denotes an explicitly cleared style reference.
-  if (
-    'sessionID' in guid &&
-    'localID' in guid &&
-    guid.sessionID === 0xffffffff &&
-    guid.localID === 0xffffffff
-  )
-    return null
-  return guidToString(guid as GUID)
 }
 
 function sharedStyleType(value: string | undefined): SharedStyleType | null {
@@ -669,6 +717,7 @@ export function nodeChangeToProps(
     gridStyleId: styleRefId(nc.styleIdForGrid),
     sharedStyleType: sharedStyleType(nc.styleType),
     ...convertCornerProps(nc),
+    ...convertPolygonProps(nc),
     ...convertTextProps(nc, blobs),
     horizontalConstraint: mapConstraint(nc.horizontalConstraint as string),
     verticalConstraint: mapConstraint(nc.verticalConstraint as string),
@@ -678,6 +727,7 @@ export function nodeChangeToProps(
     maxWidth: maximumSizeDimension(nc.maxSize, 'x'),
     minHeight: minimumSizeDimension(nc.minSize, 'y'),
     maxHeight: maximumSizeDimension(nc.maxSize, 'y'),
+    targetAspectRatio: targetAspectRatio(nc),
     isMask: nc.mask ?? false,
     maskType: (nc.maskType ?? 'ALPHA') as 'ALPHA' | 'VECTOR' | 'LUMINANCE',
     maskIsOutline: nc.maskIsOutline ?? false,
@@ -912,6 +962,7 @@ type ComponentMetadataProps = Pick<
   | 'publishedVersion'
   | 'isPublishable'
   | 'isSymbolPublishable'
+  | 'isExposedInstance'
   | 'symbolDescription'
   | 'symbolLinks'
   | 'variantPropSpecs'
@@ -947,6 +998,7 @@ function extractComponentMetadata(nc: NodeChange): ComponentMetadataProps {
     publishedVersion: stringOrNull(nc.publishedVersion),
     isPublishable: booleanOrFalse(nc.isPublishable),
     isSymbolPublishable: booleanOrFalse(nc.isSymbolPublishable),
+    isExposedInstance: booleanOrFalse(nc.propsAreBubbled),
     symbolDescription: stringOrEmpty(nc.symbolDescription),
     symbolLinks: symbolLinks
       .filter((link): link is SymbolLink => typeof link.uri === 'string')
@@ -1116,7 +1168,6 @@ export const FIGMA_RAW_NODE_FIELD_KEYS = [
   'borderLeftWeight',
   'minSize',
   'maxSize',
-  'targetAspectRatio',
   'gridRows',
   'gridColumns',
   'gridRowAnchor',

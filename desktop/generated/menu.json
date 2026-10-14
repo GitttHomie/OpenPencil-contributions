@@ -21,6 +21,10 @@
         "label": "Open Storage Workspace…"
       },
       {
+        "id": "open-tour",
+        "label": "Open the Tour"
+      },
+      {
         "type": "separator"
       },
       {
@@ -32,6 +36,10 @@
         "id": "save-as",
         "label": "Save As…",
         "accelerator": "CmdOrCtrl+Shift+S"
+      },
+      {
+        "id": "save-to-storage",
+        "label": "Save to Storage…"
       },
       {
         "type": "separator"
@@ -71,6 +79,14 @@
         "id": "close",
         "label": "Close Tab",
         "accelerator": "CmdOrCtrl+W"
+      },
+      {
+        "type": "separator"
+      },
+      {
+        "id": "settings",
+        "label": "Settings…",
+        "accelerator": "CmdOrCtrl+,"
       }
     ]
   },
@@ -145,15 +161,18 @@
     "items": [
       {
         "id": "view.zoom100",
-        "label": "Zoom to 100%"
+        "label": "Zoom to 100%",
+        "accelerator": "CmdOrCtrl+0"
       },
       {
         "id": "view.zoomFit",
-        "label": "Zoom to Fit"
+        "label": "Zoom to Fit",
+        "accelerator": "Shift+1"
       },
       {
         "id": "view.zoomSelection",
-        "label": "Zoom to Selection"
+        "label": "Zoom to Selection",
+        "accelerator": "Shift+2"
       },
       {
         "id": "zoom-in",
@@ -208,6 +227,12 @@
         "checkbox": true
       },
       {
+        "id": "view-comments",
+        "label": "Comments",
+        "accelerator": "Shift+C",
+        "checkbox": true
+      },
+      {
         "type": "separator"
       },
       {
@@ -251,15 +276,8 @@
           {
             "id": "snap-pixel-grid",
             "label": "Snap to Pixel Grid",
+            "accelerator": "CmdOrCtrl+Shift+'",
             "checkbox": true
-          },
-          {
-            "type": "separator"
-          },
-          {
-            "id": "settings",
-            "label": "Settings…",
-            "accelerator": "CmdOrCtrl+,"
           }
         ]
       },
@@ -270,11 +288,6 @@
         "id": "toggle-ui",
         "label": "Toggle UI",
         "accelerator": "CmdOrCtrl+\\"
-      },
-      {
-        "id": "toggle-preview",
-        "label": "Preview",
-        "accelerator": "CmdOrCtrl+Alt+Enter"
       },
       {
         "type": "separator"
@@ -303,6 +316,13 @@
         "id": "selection.ungroup",
         "label": "Ungroup Selection",
         "accelerator": "CmdOrCtrl+Shift+G"
+      },
+      {
+        "type": "separator"
+      },
+      {
+        "id": "insert-icon",
+        "label": "Insert Icon…"
       },
       {
         "type": "separator"
@@ -400,6 +420,10 @@
         "id": "selection.detachInstance",
         "label": "Detach Instance",
         "accelerator": "CmdOrCtrl+Alt+B"
+      },
+      {
+        "id": "selection.detachIcon",
+        "label": "Detach Icon"
       },
       {
         "type": "separator"

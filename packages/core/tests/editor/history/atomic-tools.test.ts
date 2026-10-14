@@ -14,7 +14,7 @@ function setup() {
     graph,
     runLayoutForNode: () => undefined,
     requestRender: () => undefined,
-    pushUndoEntry: undo.push.bind(undo)
+    pushUndoStep: undo.pushStep.bind(undo)
   }
   const rectangle = figma.createRectangle()
   const tool = (name: string): ToolDef => {
@@ -26,6 +26,32 @@ function setup() {
 }
 
 describe('atomic agent tools', () => {
+  test('binding a nested instance child restores both its binding and owner overrides on undo', () => {
+    const { graph, figma, editor, undo, tool } = setup()
+    const component = figma.createComponent()
+    const child = figma.createRectangle()
+    component.appendChild(child)
+    const instance = component.createInstance()
+    const nested = instance.children[0]
+    const collection = graph.createCollection('Spacing')
+    const variable = graph.createVariable('Width', 'FLOAT', collection.id, 80)
+    const owner = graph.getNode(instance.id)
+    if (!owner) throw new Error('Missing instance')
+    const before = structuredClone(owner.instanceOverrides)
+    executeAtomicTool(editor, figma, tool('bind_variable'), {
+      node_id: nested.id,
+      field: 'width',
+      variable_id: variable.id
+    })
+    expect(graph.getNode(nested.id)?.boundVariables.width).toBe(variable.id)
+    expect(owner.instanceOverrides).not.toEqual(before)
+    undo.undo()
+    expect(graph.getNode(nested.id)?.boundVariables.width).toBeUndefined()
+    expect(owner.instanceOverrides).toEqual(before)
+    undo.redo()
+    expect(graph.getNode(nested.id)?.boundVariables.width).toBe(variable.id)
+  })
+
   test('component edits and undo propagate through the editor synchronizer', async () => {
     const editor = createEditor()
     const figma = new FigmaAPI(editor.graph)
@@ -105,6 +131,8 @@ describe('atomic agent tools', () => {
         const key = kind === 'node' ? 'booleanOperation' : 'key'
         const value = kind === 'node' ? 'UNION' : 'variable-key'
         const set = (state: typeof before) => {
+          // Direct graph writes follow the same observation contract as production mutations.
+          if (kind === 'node') graph.willChangeNode(graph.getNode(rectangle.id))
           if (state === 'absent') Reflect.deleteProperty(target, key)
           else Reflect.set(target, key, state === 'undefined' ? undefined : value)
         }

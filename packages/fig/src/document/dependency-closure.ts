@@ -58,7 +58,9 @@ function collectAncestors(
 export function collectSceneDependencies(
   changes: readonly NodeChange[],
   pageIds: ReadonlySet<string> | undefined,
-  index: SourceIndex
+  index: SourceIndex,
+  /** The whole record for one of `changes`, when they are headers that leave fields out. */
+  whole: (record: NodeChange) => NodeChange = (record) => record
 ): SceneDependencyClosure {
   const resolveReference = createResourceResolver(changes)
   const { sources, children } = index
@@ -79,6 +81,8 @@ export function collectSceneDependencies(
         (pageIds ? pageIds.has(idOf(node) ?? '') : node.internalOnly !== true)
     )
     .flatMap((node) => idOf(node) ?? [])
+  // Style definitions form the document's catalog, including styles not yet applied to a layer.
+  pending.push(...changes.filter((node) => node.styleType).flatMap((node) => idOf(node) ?? []))
   while (pending.length) {
     const id = pending.pop()
     if (!id || contentIds.has(id)) continue
@@ -90,15 +94,16 @@ export function collectSceneDependencies(
       continue
     }
     contentIds.add(id)
-    const components = componentDependencies(node, resolveReference, (key) =>
+    const record = whole(node)
+    const components = componentDependencies(record, resolveReference, (key) =>
       externalPreferredKeys.add(key)
     )
     for (const component of components) componentReferences.add(component)
-    const slotContent = slotContentDependencies(node)
+    const slotContent = slotContentDependencies(record)
     for (const content of slotContent) slotContentReferences.add(content)
     pending.push(
       ...(children.get(id) ?? []).flatMap((child) => idOf(child) ?? []),
-      ...styleDependencies(node, resolveReference, availableIds),
+      ...styleDependencies(record, resolveReference, availableIds),
       ...components,
       ...slotContent
     )

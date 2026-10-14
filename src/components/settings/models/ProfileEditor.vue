@@ -25,6 +25,7 @@ import ProviderSettingsKeyField from '@/components/settings/provider/ProviderSet
 import AppButton from '@/components/ui/button/AppButton.vue'
 import AppCollapsible from '@/components/ui/collapsible/AppCollapsible.vue'
 import { AppConfirmationDialog } from '@/components/ui/dialog'
+import AppAlert from '@/components/ui/feedback/AppAlert.vue'
 import AppInput from '@/components/ui/input/AppInput.vue'
 import AppCombobox from '@/components/ui/select/AppCombobox.vue'
 import AppSelect from '@/components/ui/select/AppSelect.vue'
@@ -56,6 +57,7 @@ const {
   toolsEnabled,
   visionEnabled,
   connectionTestStatus,
+  imageTestStatus,
   connectionTestReason,
   saveError,
   saveResult,
@@ -95,13 +97,13 @@ async function save() {
   }
   if ((await profile.save()) === 'saved') emit('done')
 }
-async function testConnection() {
+async function testConnection(imageTest = false) {
   if (busy.value) return
   if (!(await feedback.validate('test')) || (isACP.value && !sessionOptionsValid.value)) {
     await focusInvalidField(formElement.value)
     return
   }
-  await runConnectionTest()
+  await runConnectionTest(imageTest)
 }
 async function remove() {
   if (await profile.remove()) {
@@ -271,8 +273,34 @@ async function remove() {
             :status="connectionTestStatus"
             :reason="connectionTestReason"
             :disabled="busy"
-            @test="testConnection"
+            @test="testConnection()"
           />
+
+          <div v-if="!isHarness" class="flex flex-col gap-2">
+            <div class="flex items-center justify-between gap-3">
+              <span class="text-[11px] text-muted">{{ ai.modelCapabilityVision }}</span>
+              <span class="text-[11px] text-surface">{{
+                draft.imageSupport === 'verified'
+                  ? ai.imageSupportVerified
+                  : draft.imageSupport === 'unsupported'
+                    ? ai.imageSupportUnsupported
+                    : draft.imageSupport === 'advertised' || draft.capabilities.includes('vision')
+                      ? ai.imageSupportAdvertised
+                      : ai.imageSupportUnknown
+              }}</span>
+            </div>
+            <p class="text-[11px] text-muted">{{ ai.imageSupportTestHint }}</p>
+            <AppButton
+              variant="outline"
+              size="sm"
+              :loading="imageTestStatus === 'testing'"
+              :disabled="busy || connectionTestStatus === 'testing'"
+              @click="testConnection(true)"
+            >
+              {{ ai.testImageSupport }}
+            </AppButton>
+            <AppAlert v-if="imageTestStatus === 'error'" :heading="ai.imageSupportTestFailed" />
+          </div>
 
           <AppCollapsible
             v-if="!isACP"

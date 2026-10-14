@@ -12,6 +12,20 @@ export async function createCanvasActivityProbe(page: Page) {
     return {
       start: activity.start,
       finish: activity.finish,
+      highlightOtherPage() {
+        const other = store.graph.addPage('Agent work')
+        const node = store.graph.createNode('FRAME', other.id, {
+          x: 200,
+          y: 150,
+          width: 160,
+          height: 100
+        })
+        store.aiMarkActive([node.id])
+        store.aiFlashDone([node.id])
+        store.flashNodes([node.id])
+        store.requestRender()
+      },
+      clearHighlights: () => store.aiClearAll(),
       snapshot() {
         return {
           cursors: store.state.presenceCursors,
@@ -44,8 +58,12 @@ export async function createCanvasActivityProbe(page: Page) {
     finish: () => handle.evaluate((probe) => probe.finish()),
     snapshot: () => handle.evaluate((probe) => probe.snapshot()),
     render: () => handle.evaluate((probe) => probe.render()),
+    highlightOtherPage: () => handle.evaluate((probe) => probe.highlightOtherPage()),
     async dispose() {
-      await handle.evaluate((probe) => probe.finish())
+      await handle.evaluate((probe) => {
+        probe.finish()
+        probe.clearHighlights()
+      })
       await handle.dispose()
     }
   }

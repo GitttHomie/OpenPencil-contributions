@@ -1,7 +1,19 @@
 export { CODEGEN_PROMPT } from './prompts'
-export { DESIGN_WORKFLOW } from './design-guidance'
+export { DESIGN_WORKFLOW, DESIGN_COMPOSITION_GUIDANCE } from './design-guidance'
+export {
+  importImage,
+  imageFileInput,
+  registerImageFileReader,
+  imageFileMimeType,
+  MAX_IMAGE_FILE_BYTES,
+  type ImageFileReader
+} from './image-file'
 
-export { getComponentCatalog, registerComponentCatalog } from './component-catalog'
+export {
+  getComponentCatalog,
+  registerComponentCatalog,
+  registerComponentPageLoader
+} from './component-catalog'
 export type {
   ComponentCatalog,
   ComponentCatalogInsertInput,

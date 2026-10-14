@@ -116,20 +116,11 @@ test('CJK text waits for fallback fonts and repaints after they load', async ({ 
       return originalRender(...args)
     }
 
-    const text = store.graph.createNode('TEXT', store.state.currentPageId, {
-      name: 'CJK Regression',
-      x: 80,
-      y: 80,
-      width: 300,
-      height: 60,
-      text: '你好世界App',
-      textLanguage: 'zh-Hans',
-      fontSize: 32,
-      fontFamily: 'Inter',
-      fills: [{ type: 'SOLID', color: { r: 0, g: 0, b: 0, a: 1 }, visible: true, opacity: 1 }]
-    })
-
     try {
+      let settled = () => undefined
+      const fallbackSettled = new Promise<void>((resolve) => {
+        settled = resolve
+      })
       await renderer.loadFonts(() => {
         fallbackRenderCount += 1
         renderer.renderFromEditorState(
@@ -141,13 +132,24 @@ test('CJK text waits for fallback fonts and repaints after they load', async ({ 
           false,
           'full'
         )
+        settled()
+      })
+      // Install the observer before creating text, as the app does on startup.
+      const text = store.graph.createNode('TEXT', store.state.currentPageId, {
+        name: 'CJK Regression',
+        x: 80,
+        y: 80,
+        width: 300,
+        height: 60,
+        text: '你好世界App',
+        textLanguage: 'zh-Hans',
+        fontSize: 32,
+        fontFamily: 'Inter',
+        fills: [{ type: 'SOLID', color: { r: 0, g: 0, b: 0, a: 1 }, visible: true, opacity: 1 }]
       })
       const loadedBeforeFallback = renderer.isNodeFontLoaded(text)
       releaseFallback()
-      await fallbackGate
-      await new Promise<void>((resolve) => {
-        setTimeout(resolve, 0)
-      })
+      await fallbackSettled
       await new Promise(requestAnimationFrame)
       return {
         loadedBeforeFallback,

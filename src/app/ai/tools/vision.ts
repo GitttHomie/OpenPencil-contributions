@@ -4,15 +4,14 @@ import * as v from 'valibot'
 
 import { computeContentBounds } from '@open-pencil/core/io'
 
-import { reasoningCallSettings } from '@/app/ai/chat/reasoning'
 import { createAIModelRuntime } from '@/app/ai/models'
 import { runPageId } from '@/app/ai/tools/run'
-import type { VisionModelDependencies } from '@/app/ai/vision-runtime'
+import { inspectImages } from '@/app/ai/vision/inspect'
+import type { VisionModelDependencies } from '@/app/ai/vision/runtime'
 import type { EditorStore } from '@/app/editor/active-store'
 
 const DEFAULT_VISION_MAX_EDGE = 1280
 const MAX_VISION_MAX_EDGE = 4096
-const MAX_VISION_OUTPUT_TOKENS = 1200
 
 export type VisualInspectionRequest = {
   ids?: string[]
@@ -47,7 +46,7 @@ export async function inspectRenderedDesign(
   }
 ): Promise<VisualInspectionResult | { error: string }> {
   const runtime = await dependencies.createRuntime('vision')
-  if (runtime?.kind !== 'direct') {
+  if (!runtime || runtime.kind === 'harness') {
     return { error: 'Configure a vision-capable model in Settings to inspect rendered designs.' }
   }
 
@@ -69,31 +68,16 @@ export async function inspectRenderedDesign(
   const image = await store.renderExportImage(nodeIds, scale, 'PNG', pageId)
   if (!image) return { error: 'Could not render the design for visual inspection.' }
 
-  const result = await dependencies.inspect({
-    model: runtime.model,
-    maxOutputTokens: Math.min(runtime.role.profile.maxOutputTokens, MAX_VISION_OUTPUT_TOKENS),
-    ...reasoningCallSettings(
-      runtime.role.connection.providerID,
-      runtime.role.profile.thinkingLevel
-    ),
-    messages: [
-      {
-        role: 'user',
-        content: [
-          {
-            type: 'text',
-            text:
-              request.question?.trim() ||
-              'Review this rendered design. Concisely identify visual hierarchy, alignment, spacing, clipping, contrast, and rendering problems. Return actionable findings only.'
-          },
-          { type: 'file', mediaType: 'image/png', data: image }
-        ]
-      }
-    ]
-  })
+  const analysis = await inspectImages(
+    runtime,
+    request.question?.trim() ||
+      'Review this rendered design. Concisely identify visual hierarchy, alignment, spacing, clipping, contrast, and rendering problems. Return actionable findings only.',
+    [{ data: image, mediaType: 'image/png' }],
+    dependencies
+  )
 
   return {
-    analysis: result.text,
+    analysis,
     inspectedNodeIds: nodeIds,
     image: {
       width: Math.ceil(width * scale),

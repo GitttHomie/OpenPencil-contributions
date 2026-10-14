@@ -5,19 +5,23 @@ export async function measureHitTesting(page: Page, run: () => Promise<void>) {
     const graph = window.openPencil?.getStore?.().graph
     if (!graph) throw new Error('OpenPencil graph not initialized')
     const original = graph.hitTest
+    const originalDeep = graph.hitTestDeep
     let calls = 0
     let totalMs = 0
-    graph.hitTest = (...args) => {
+    function measure(run: () => ReturnType<typeof graph.hitTest>) {
       const start = performance.now()
-      const result = original.apply(graph, args)
+      const result = run()
       totalMs += performance.now() - start
       calls++
       return result
     }
+    graph.hitTest = (...args) => measure(() => original.apply(graph, args))
+    graph.hitTestDeep = (...args) => measure(() => originalDeep.apply(graph, args))
     return {
       read: () => ({ calls, totalMs }),
       dispose: () => {
         graph.hitTest = original
+        graph.hitTestDeep = originalDeep
       }
     }
   })

@@ -11,8 +11,11 @@ export interface LayerNode {
   slot?: boolean
   /** Whether this layer belongs to a component, instance, or component set. */
   component?: boolean
+  icon?: boolean
   visible: boolean
   locked: boolean
+  /** The variable modes set on the layer itself, which Figma tags its row with. */
+  modeIds?: string[]
   children?: LayerNode[]
 }
 

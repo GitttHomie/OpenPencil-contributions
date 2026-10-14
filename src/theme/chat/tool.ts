@@ -2,14 +2,17 @@ import { tv } from 'tailwind-variants'
 
 export const chatToolTheme = tv({
   slots: {
-    root: 'rounded-lg border border-border bg-canvas',
+    // An undone call's text dims to the muted color, which still reads at 4.5:1.
+    root: 'rounded-lg border border-border bg-canvas data-[undone=true]:**:text-muted',
     trigger:
       'flex w-full min-w-0 cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-left hover:bg-hover disabled:cursor-default disabled:hover:bg-transparent',
     status:
-      'flex size-4 shrink-0 items-center justify-center rounded-full data-[state=done]:bg-green-500/20 data-[state=done]:text-green-400 data-[state=error]:bg-red-500/20 data-[state=error]:text-red-400 data-[state=pending]:bg-accent/20 data-[state=pending]:text-accent',
+      'flex size-4 shrink-0 items-center justify-center rounded-full data-[state=done]:bg-success/20 data-[state=done]:text-success data-[state=error]:bg-error/20 data-[state=error]:text-error data-[state=pending]:bg-accent/20 data-[state=pending]:text-accent',
     statusIcon: 'size-3',
     name: 'shrink-0 text-[11px] font-medium text-surface',
     summary: 'min-w-0 flex-1 truncate font-mono text-[10px] text-muted',
+    undone: 'inline-flex shrink-0 items-center gap-1 text-[10px] text-muted',
+    undoneIcon: 'size-3',
     chevron:
       'ml-auto size-3 shrink-0 text-muted transition-transform motion-reduce:transition-none [[data-state=open]>&]:rotate-180',
     body: 'space-y-2 border-t border-border px-2 py-2 text-[10px]',
@@ -35,7 +38,7 @@ export const chatToolTheme = tv({
       'flex w-full min-w-0 cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] text-muted hover:bg-hover hover:text-surface',
     groupIcon: 'size-3.5 shrink-0 text-accent',
     groupNames: 'min-w-0 flex-1 truncate',
-    groupFailed: 'bg-red-500/20 text-red-400',
+    groupFailed: 'bg-error/20 text-error',
     groupItems: 'space-y-1.5 px-1.5 pb-1.5'
   }
 })

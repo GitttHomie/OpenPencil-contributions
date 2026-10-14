@@ -1,0 +1,3 @@
+- In scripts, a text node's `textCase`, `textStyleId`, and `fillStyleId` read `figma.mixed` while its characters differ, as in Figma, instead of the text's own value, and setting one restyles every character.
+- Scene Graph derives vector bounds from their paths when creating or editing a vector network. Updating a vector's width or height scales its geometry; use an enclosing frame for an independent SVG viewBox or layout size. Auto-layout stretches vector geometry without enlarging stroke weights.
+- Stock photos apply to frames, components, and instances; shape targets are rejected. Replacing a photo preserves the target’s content and overlay fills.

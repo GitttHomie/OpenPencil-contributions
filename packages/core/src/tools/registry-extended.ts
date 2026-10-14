@@ -9,7 +9,8 @@ import {
   lint,
   lintFix
 } from './analyze'
-import { designToComponentMap, designToTokens } from './codegen'
+import { designToComponentMap, designToTokens, importDesignTokens } from './codegen'
+import { addComment, getComments, replyToComment, resolveComment } from './comments'
 import {
   bindComponentProperty,
   createComponentProperty,
@@ -40,6 +41,7 @@ import {
   searchIconsTool,
   setBehaviour
 } from './create'
+import { importImage } from './image-file'
 import {
   setBlend,
   setConstraints,
@@ -124,6 +126,7 @@ import {
  * codegen, advanced structure, path manipulation, etc.
  */
 export const EXTENDED_TOOLS: ToolDef[] = [
+  importImage,
   // Read (advanced)
   getPageTree,
   getCurrentPage,
@@ -136,6 +139,10 @@ export const EXTENDED_TOOLS: ToolDef[] = [
   insertLibraryComponent,
   switchPage,
   pageBounds,
+  getComments,
+  addComment,
+  replyToComment,
+  resolveComment,
   getFontStatus,
   listFonts,
   listAvailableFonts,
@@ -233,5 +240,6 @@ export const EXTENDED_TOOLS: ToolDef[] = [
   diffApply,
   // Codegen
   designToTokens,
+  importDesignTokens,
   designToComponentMap
 ]

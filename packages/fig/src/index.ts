@@ -1,7 +1,14 @@
 export { materializeFigFragment, type FragmentMaterializationOptions } from './document/fragment'
 export {
+  prepareFigComponentCleanup,
+  type FigCleanupSummary,
+  type FigCleanupOptions,
+  type FigCleanupChoice
+} from './document/cleanup'
+export {
   materializeDocument,
   materializeFigArchive,
+  figCheckpointRecords,
   type FigSessionCheckpoint,
   type FigSessionResume,
   createFigDocumentSession,
@@ -15,6 +22,20 @@ export {
   type FigParseResult,
   type WriteFigArchiveInput
 } from './archive'
+export {
+  figArchiveComponentUsePages,
+  figArchiveRecordInfo,
+  figComponentUsePages,
+  patchFigArchive,
+  patchFigRecords,
+  type FigArchiveRecordInfo,
+  type FigPatchedArchiveInput,
+  entryPathKey,
+  type FigEntryListPatch,
+  type FigEntryPatch,
+  type FigRecordFieldPatch,
+  type FigRecordPatch
+} from './record-patch'
 export {
   extractFigThumbnailFromReader,
   type FigRangeReader,

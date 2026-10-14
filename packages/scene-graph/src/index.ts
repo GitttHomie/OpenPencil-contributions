@@ -8,21 +8,28 @@ export {
 /* eslint-disable max-lines -- SceneGraph exposes a stable facade over domain modules */
 export * from './mutation-impact'
 export * from './variables/bindings'
+export { reconcileNumericVariableBindings as reconcileVariableBindings } from './variables/bindings'
 export type { VariableModeFallback } from './variables'
 export { modesDefaultFirst } from './variables'
 export * from './variables/token'
+export * from './variables/value'
+export * from './variables/formula'
+export * from './variables/formula/schema'
 export { rescaleNodeTree, scaleNodeChanges } from './scaling'
 import { TRANSFORM_FIELDS, SIZE_FIELDS } from './fields/geometry'
 export { TRANSFORM_FIELDS, SIZE_FIELDS } from './fields/geometry'
 export { TEXT_METRIC_FIELDS, TEXT_SHAPING_FIELDS, TEXT_LAYOUT_FIELDS } from './fields/text'
 export * from './transfer'
 export * from './instance-overrides'
-export { canCreateInstance } from './instances/cycles'
+export { WHITE } from './constants'
+export * from './asset-keys'
 export * from './images'
 export * from './components/properties'
 export { isInComponent } from './components/ancestry'
+export * from './components/variants'
 export * from './slots/frames'
 export { instanceMainComponent, instancePropertyAssignment } from './instances/main-component'
+export { canCreateInstance, createsComponentCycle, cycleSafeParent } from './instances/cycles'
 export {
   nestedPropertyId,
   remapExposedPropertyId,
@@ -33,8 +40,19 @@ export * from './slots/content'
 export * from './slots/authoring'
 export * from './slots/limits'
 export * from './behaviours/kinds'
+export * from './icons/schema'
+export * from './icons/model'
+export * from './icons/glyph'
+export * from './shaders/schema'
+export * from './shaders/model'
+export * from './shaders/still'
+export * from './behaviours/layers'
 export * from './behaviours/model'
 export * from './behaviours/spec'
+export * from './comments/document'
+export * from './comments/list'
+export * from './comments/merge'
+export * from './comments/threads'
 export * from './copy'
 export {
   createDefaultNode,
@@ -46,6 +64,8 @@ export {
   copyInstanceComponentProps,
   findInstanceAncestor,
   hasInstanceOverride,
+  INSTANCE_FOLLOWED_FIELDS,
+  INSTANCE_OVERRIDE_FIELDS,
   INSTANCE_SYNC_FIELDS,
   INSTANCE_SYNC_PROPS,
   INSTANCE_SYNC_TEXT_PROPS,
@@ -63,16 +83,17 @@ export * from './snap'
 export * from './export-format'
 export * from './export-scale'
 export * from './coordinate'
+export * from './layout'
+export * from './text'
 export * from './group-bounds'
 export * from './constants'
 export * from './geometry'
 export * from './guides'
-export * from './layout-guides'
 export * from './font-style'
 export * from './shared-styles'
 export { default as TransformMatrix } from './matrix'
 export type { Mat3 } from './matrix'
-export { UndoManager, type UndoEntry, type UndoManagerOptions } from './undo'
+export { DEFAULT_HISTORY_LIMIT, UndoManager, type UndoEntry, type UndoManagerOptions } from './undo'
 
 import { removeStaleBindings } from './bindings'
 export { CommittedGraphEventError } from './buffered-events'
@@ -80,16 +101,20 @@ import { BufferedSceneEmitter } from './buffered-events'
 import { cloneNodeProps } from './copy'
 import { bindNodeEvents } from './events'
 import * as HitTest from './hit-test'
+import { remapInstanceOverrideState } from './instance-overrides'
 import * as Instances from './instances'
 import Matrix, { type Mat3 } from './matrix'
 import { CONTAINER_TYPES, createDefaultNode, normalizeStrokePaints } from './node-defaults'
 import { updateNodePreview, type NodePreviewObserver } from './preview'
+import { randomIndex } from './random'
 import { styleDetachmentChanges } from './shared-styles'
 import { markSourceFieldsEdited } from './source-metadata'
-import { GLYPH_AFFECTING_KEYS, invalidateTextCaches, TEXT_PICTURE_KEYS } from './text-picture'
+import { GLYPH_AFFECTING_KEYS, invalidateTextCaches, TEXT_PICTURE_KEYS } from './text/picture'
 import * as Variables from './variables'
 import type { VariableModeFallback } from './variables'
-import { normalizeVectorNetwork } from './vector-network'
+import { normalizeVectorNetwork } from './vector'
+import { fittedVectorChanges, vectorGeometryChanges } from './vector/geometry'
+export { fittedVectorChanges, vectorGeometryChanges } from './vector/geometry'
 
 export type { GUID, Color, Size, Vector } from './primitives'
 export * from './types'
@@ -106,13 +131,15 @@ import type {
   DocumentColorSpace,
   EnabledLibraryBinding,
   NodeType,
+  NodeChangeObserver,
   SceneGraphEventHandlers,
   SceneNode,
   SourceMetadata,
   Variable,
   VariableCollection,
   VariableType,
-  VariableValue
+  VariableValue,
+  VariableLiteral
 } from './types'
 
 export {
@@ -122,24 +149,35 @@ export {
   transformVectorNetwork,
   validateVectorNetwork,
   vectorNetworksEqual
-} from './vector-network'
+} from './vector'
 
-const MAX_ID_SESSION = 0xffffffff
+/** Figma reads both parts of a GUID as signed 32-bit integers and drops records beyond them. */
+const MAX_ID_SESSION = 0x7fffffff
 
-let idSession = 0
+/** Sessions 0 and 1 hold FIG's document and internal-resource records and counter GUIDs. */
+const FIRST_RANDOM_SESSION = 2
+
+/** A random session, as Yjs picks each document's `clientID`, so processes never share IDs. */
+function randomIdSession(): number {
+  return FIRST_RANDOM_SESSION + randomIndex(MAX_ID_SESSION - FIRST_RANDOM_SESSION + 1)
+}
+
+let idSession = randomIdSession()
 let nextLocalID = 1
 
 /**
  * Sets the session part of the IDs this process mints, as in Figma's `sessionID:localID` GUIDs.
- * Headless tools keep session 0, so a file's layers get the same IDs on every run. The editor
- * picks a random session at startup, as Yjs picks each document's `clientID`, so peers editing
- * one shared room never mint the same ID. Call it before creating any graph.
+ * Every process starts in a random session, so layers that the editor, the CLI, or MCP add to
+ * copies of one file never share IDs. Tests and fixtures that need the same IDs on every run
+ * set a fixed session or give the graph its own generator. Returns the previous session.
  */
-export function setIdSession(sessionId: number): void {
+export function setIdSession(sessionId: number): number {
   if (!Number.isInteger(sessionId) || sessionId < 0 || sessionId > MAX_ID_SESSION) {
-    throw new RangeError('sessionId must be an unsigned 32-bit integer')
+    throw new RangeError('sessionId must be a non-negative 31-bit integer')
   }
+  const previous = idSession
   idSession = sessionId
+  return previous
 }
 
 export function generateId(): string {
@@ -175,9 +213,12 @@ export class SceneGraph {
   private absPosCache = new Map<string, Vector>()
   private previewMutationDepth = 0
   private previewObservers: NodePreviewObserver[] = []
+  private readonly changeObservers = new Set<NodeChangeObserver>()
   private sourceMetadataPreservationDepth = 0
   private importedStateApplicationDepth = 0
+  private importedIdGenerator: (() => string) | undefined
   private layoutMutationDepth = 0
+  private derivedLayoutDepth = 0
   positionPreviewVersion = 0
   instanceIndex = new Map<string, Set<string>>()
 
@@ -209,6 +250,23 @@ export class SceneGraph {
   }
   onNodeEvents(handlers: SceneGraphEventHandlers): () => void {
     return bindNodeEvents(this.emitter, handlers)
+  }
+
+  /**
+   * Tells `observer` about each node an edit adds and, before it changes, each node it is about
+   * to change, so a recorder can keep the node as it was. Unlike node events these are never
+   * buffered. Graph methods report the nodes they change; code that writes into a node directly
+   * reports it with `willChangeNode` first.
+   */
+  observeNodeChanges(observer: NodeChangeObserver): () => void {
+    this.changeObservers.add(observer)
+    return () => this.changeObservers.delete(observer)
+  }
+
+  /** Tells `observeNodeChanges` observers that `node` is about to change. */
+  willChangeNode(node: SceneNode | undefined): void {
+    if (!node) return
+    for (const observer of this.changeObservers) observer.before(node)
   }
 
   countDescendants(nodeId: string): number {
@@ -306,7 +364,7 @@ export class SceneGraph {
     variableId: string,
     modeId?: string,
     visited?: Set<string>
-  ): VariableValue | undefined {
+  ): VariableLiteral | undefined {
     return Variables.resolveVariable(this, variableId, modeId, visited)
   }
 
@@ -334,8 +392,20 @@ export class SceneGraph {
     return Variables.resolveNumberVariableForNode(this, nodeId, variableId, fallback)
   }
 
-  resolveStringVariableForNode(nodeId: string, variableId: string): string | undefined {
-    return Variables.resolveStringVariableForNode(this, nodeId, variableId)
+  resolveVariableForNode(
+    nodeId: string,
+    variableId: string,
+    fallback?: VariableModeFallback
+  ): VariableLiteral | undefined {
+    return Variables.resolveVariableForNode(this, nodeId, variableId, fallback)
+  }
+
+  resolveStringVariableForNode(
+    nodeId: string,
+    variableId: string,
+    fallback?: VariableModeFallback
+  ): string | undefined {
+    return Variables.resolveStringVariableForNode(this, nodeId, variableId, fallback)
   }
 
   getVariablesForCollection(collectionId: string): Variable[] {
@@ -384,6 +454,14 @@ export class SceneGraph {
     return undefined
   }
 
+  /**
+   * The page a node is on: the node itself for a page, its nearest page ancestor otherwise, and
+   * null for the document root or a node on no page.
+   */
+  pageOf(id: string): string | null {
+    return this.closest(id, (node) => node.type === 'CANVAS')?.id ?? null
+  }
+
   clearAbsPosCache(): void {
     this.absPosCache.clear()
   }
@@ -414,7 +492,7 @@ export class SceneGraph {
   private generateEntityId(issued?: Set<string>): string {
     let limit = Infinity
     for (let attempt = 0; attempt < limit; attempt++) {
-      const id = this.idGenerator()
+      const id = (this.importedIdGenerator ?? this.idGenerator)()
       if (this.isEntityIdTaken(id) || issued?.has(id)) {
         if (limit === Infinity) limit = this.entityIdCount() + (issued?.size ?? 0) + 1
         continue
@@ -441,7 +519,9 @@ export class SceneGraph {
   }
   private registerNode(node: SceneNode, parentId: string | null): SceneNode {
     node.parentId = parentId
+    if (node.source.format !== 'fig') Object.assign(node, fittedVectorChanges(node))
     this.nodes.set(node.id, node)
+    for (const observer of this.changeObservers) observer.created(node)
     if (node.type === 'INSTANCE' && node.componentId) {
       let set = this.instanceIndex.get(node.componentId)
       if (!set) {
@@ -460,7 +540,9 @@ export class SceneGraph {
 
   createNode(type: NodeType, parentId: string, overrides: Partial<SceneNode> = {}): SceneNode {
     const node = createDefaultNode(() => this.generateEntityId(), type, overrides)
-    this.nodes.get(parentId)?.childIds.push(node.id)
+    const parent = this.nodes.get(parentId)
+    this.willChangeNode(parent)
+    parent?.childIds.push(node.id)
     return this.registerNode(node, parentId)
   }
   createNodeWithId(
@@ -472,7 +554,10 @@ export class SceneGraph {
     const node = createDefaultNode(() => id, type, overrides)
     node.id = id
     const parent = parentId ? this.nodes.get(parentId) : undefined
-    if (parent && !parent.childIds.includes(id)) parent.childIds.push(id)
+    if (parent && !parent.childIds.includes(id)) {
+      this.willChangeNode(parent)
+      parent.childIds.push(id)
+    }
     return this.registerNode(node, parentId)
   }
 
@@ -510,7 +595,8 @@ export class SceneGraph {
     'minWidth',
     'maxWidth',
     'minHeight',
-    'maxHeight'
+    'maxHeight',
+    'targetAspectRatio'
   ])
 
   runPreviewUpdates(fn: () => void, beforeUpdate?: NodePreviewObserver): void {
@@ -523,10 +609,10 @@ export class SceneGraph {
       this.previewMutationDepth--
     }
   }
-  preserveSourceMetadataDuring(fn: () => void): void {
+  preserveSourceMetadataDuring<T>(fn: () => T): T {
     this.sourceMetadataPreservationDepth++
     try {
-      fn()
+      return fn()
     } finally {
       this.sourceMetadataPreservationDepth--
     }
@@ -535,17 +621,37 @@ export class SceneGraph {
     return this.sourceMetadataPreservationDepth > 0
   }
 
-  applyImportedStateDuring(fn: () => void): void {
+  applyImportedStateDuring<T>(fn: () => T, idGenerator?: () => string): T {
+    const previousGenerator = this.importedIdGenerator
+    this.importedIdGenerator = idGenerator ?? previousGenerator
     this.importedStateApplicationDepth++
     try {
-      this.preserveSourceMetadataDuring(fn)
+      return this.preserveSourceMetadataDuring(fn)
     } finally {
       this.importedStateApplicationDepth--
+      this.importedIdGenerator = previousGenerator
     }
   }
 
   get isApplyingImportedState(): boolean {
     return this.importedStateApplicationDepth > 0
+  }
+
+  /**
+   * Lays out what the document already holds: a page as it loads, or again once its fonts
+   * arrive. What this writes derives from the document; an edit's own layout is not this.
+   */
+  applyDerivedLayoutDuring(fn: () => void): void {
+    this.derivedLayoutDepth++
+    try {
+      fn()
+    } finally {
+      this.derivedLayoutDepth--
+    }
+  }
+
+  get isApplyingDerivedLayout(): boolean {
+    return this.derivedLayoutDepth > 0
   }
 
   withLayoutMutations(fn: () => void): void {
@@ -579,6 +685,7 @@ export class SceneGraph {
     const node = this.nodes.get(id)
     if (!node) return
     changes = stripUndefinedProps(styleDetachmentChanges(node, stripUndefinedProps(changes)))
+    if (!this.isPreservingSourceMetadata) changes = vectorGeometryChanges(node, changes)
     this.applyNodeChanges(node, changes)
   }
 
@@ -598,6 +705,7 @@ export class SceneGraph {
     absent: readonly (keyof SceneNode)[] = []
   ): void {
     const { id } = node
+    this.willChangeNode(node)
     // Include removed keys in cache invalidation and update notifications.
     if (absent.length) {
       changes = { ...changes }
@@ -648,6 +756,9 @@ export class SceneGraph {
     if (node.parentId === newParentId) return
 
     const oldParentId = node.parentId
+    this.willChangeNode(node)
+    this.willChangeNode(oldParent)
+    this.willChangeNode(newParent)
     this.absPosCache.clear()
 
     const oldParentWorld = this.parentWorldMatrix(oldParent)
@@ -684,6 +795,9 @@ export class SceneGraph {
     const oldParent = previousParentId ? this.nodes.get(previousParentId) : undefined
     const newParent = this.nodes.get(parentId)
     if (!newParent || this.isDescendant(parentId, nodeId)) return
+    this.willChangeNode(node)
+    this.willChangeNode(oldParent)
+    this.willChangeNode(newParent)
 
     // Remove from old parent
     if (oldParent) {
@@ -713,6 +827,9 @@ export class SceneGraph {
     if (!node || !newParent || childId === parentId || this.isDescendant(parentId, childId)) return
     const previousParentId = node.parentId
     const oldParent = previousParentId ? this.getNode(previousParentId) : undefined
+    this.willChangeNode(node)
+    this.willChangeNode(oldParent)
+    this.willChangeNode(newParent)
     if (oldParent) {
       oldParent.childIds = oldParent.childIds.filter((id) => id !== childId)
     }
@@ -726,9 +843,11 @@ export class SceneGraph {
   deleteNode(id: string): void {
     const node = this.nodes.get(id)
     if (!node || id === this.rootId) return
+    this.willChangeNode(node)
 
     if (node.parentId) {
       const parent = this.nodes.get(node.parentId)
+      this.willChangeNode(parent)
       if (parent) {
         parent.childIds = parent.childIds.filter((cid) => cid !== id)
       }
@@ -749,8 +868,9 @@ export class SceneGraph {
     return HitTest.hitTest(this, px, py, scopeId)
   }
 
-  hitTestDeep(px: number, py: number, scopeId?: string): SceneNode | null {
-    return HitTest.hitTestDeep(this, px, py, scopeId)
+  /** `pad`, in canvas units, grows each shape's box, as Figma takes clicks just outside one. */
+  hitTestDeep(px: number, py: number, scopeId?: string, pad = 0): SceneNode | null {
+    return HitTest.hitTestDeep(this, px, py, scopeId, pad)
   }
 
   hitTestFrame(
@@ -762,6 +882,38 @@ export class SceneGraph {
     return HitTest.hitTestFrame(this, px, py, excludeIds, scopeId)
   }
 
+  hitTestSelectable(
+    px: number,
+    py: number,
+    scopeId: string,
+    selectedIds: ReadonlySet<string>,
+    pad = 0
+  ): SceneNode | null {
+    return HitTest.hitTestSelectable(this, px, py, scopeId, selectedIds, pad)
+  }
+
+  hitTestOpenContainer(px: number, py: number, scopeId: string): SceneNode | null {
+    return HitTest.hitTestOpenContainer(this, px, py, scopeId)
+  }
+
+  isOpenContainer(nodeId: string): boolean {
+    return HitTest.isOpenContainer(this, nodeId)
+  }
+
+  isPointInNode(nodeId: string, px: number, py: number): boolean {
+    return HitTest.isPointInNode(this, nodeId, px, py)
+  }
+
+  hitTestDropTarget(
+    px: number,
+    py: number,
+    excludeIds: ReadonlySet<string>,
+    scopeId?: string,
+    options?: HitTest.DropTargetOptions
+  ): SceneNode | null {
+    return HitTest.hitTestDropTarget(this, px, py, excludeIds, scopeId, options)
+  }
+
   cloneTree(
     sourceId: string,
     parentId: string,
@@ -770,15 +922,37 @@ export class SceneGraph {
     const src = this.nodes.get(sourceId)
     if (!src) return null
 
-    const props = cloneNodeProps(src, null)
-    // Null out Figma source identifiers so the clone is treated as local.
-    // `as SourceMetadata` required: cloneNodeProps returns Partial<SceneNode>,
-    // so props.source is SourceMetadata | undefined, but we know it's always set.
-    props.source = { ...(props.source as SourceMetadata), id: null, orderKey: null }
-    const clone = this.createNode(src.type, parentId, { ...props, ...overrides })
-
-    for (const childId of src.childIds) {
-      this.cloneTree(childId, clone.id)
+    const copies = new Map<string, SceneNode>()
+    const copy = (
+      source: SceneNode,
+      parent: string,
+      fields: Partial<SceneNode> = {}
+    ): SceneNode => {
+      const props = cloneNodeProps(source, null)
+      // A duplicate owns new records while retaining opaque format metadata.
+      props.source = { ...(props.source as SourceMetadata), id: null, orderKey: null }
+      const node = this.createNode(source.type, parent, { ...props, ...fields })
+      copies.set(source.id, node)
+      for (const childId of source.childIds) {
+        const child = this.nodes.get(childId)
+        if (child) copy(child, node.id)
+      }
+      return node
+    }
+    const clone = copy(src, parentId, overrides)
+    const remap = (id: string) => copies.get(id)?.id ?? id
+    // Descendants need their final IDs before their owners' override maps can name them.
+    for (const node of copies.values()) {
+      const changes: Partial<SceneNode> = {}
+      if (node.componentId && copies.has(node.componentId))
+        changes.componentId = remap(node.componentId)
+      if (node.instanceOverrides.self.size || node.instanceOverrides.descendants.size) {
+        changes.instanceOverrides = remapInstanceOverrideState(node.instanceOverrides, {
+          node: remap,
+          variable: (id) => id
+        })
+      }
+      if (Object.keys(changes).length) this.updateNode(node.id, changes)
     }
 
     return clone
@@ -800,12 +974,24 @@ export class SceneGraph {
     Instances.populateInstanceChildren(this, instanceId, componentId, mode)
   }
 
-  swapInstanceComponent(instanceId: string, componentId: string): void {
-    Instances.swapInstanceComponent(this, instanceId, componentId)
+  swapInstanceComponent(
+    instanceId: string,
+    componentId: string,
+    options?: Instances.SwapInstanceOptions
+  ): void {
+    Instances.swapInstanceComponent(this, instanceId, componentId, options)
   }
 
   syncInstances(componentId: string): void {
     Instances.syncInstances(this, componentId)
+  }
+
+  syncInstancesTogether(componentIds: Iterable<string>): void {
+    Instances.syncInstancesTogether(this, componentIds)
+  }
+
+  syncInstance(instanceId: string): void {
+    Instances.syncInstance(this, instanceId)
   }
 
   detachInstance(instanceId: string): void {
@@ -837,3 +1023,14 @@ export class SceneGraph {
 
 export * from './plugin-data/field'
 export * from './plugin-data/fields'
+
+export {
+  exposableInstances,
+  exposedInstances,
+  instanceExposureIssue,
+  type InstanceExposureIssue
+} from './components/exposure'
+export * from './icons/schema'
+export * from './icons/model'
+export * from './icons/glyph'
+export * from './behaviours/layers'

@@ -1,15 +1,26 @@
 import { FigmaAPI } from '@open-pencil/core/figma-api'
 import { createCanvasKitRasterCodec } from '@open-pencil/core/io/formats/raster'
+import { registerComponentPageLoader, registerImageFileReader } from '@open-pencil/core/tools'
 
 import type { EditorStore } from '@/app/editor/active-store'
-import { listFamilies, listFonts } from '@/app/editor/fonts'
+import { listFamilies, listFonts, loadFont } from '@/app/editor/fonts'
+import { IS_TAURI } from '@/constants'
+
+import { readLocalImageFile } from './image-file'
 
 export function makeFigmaFromStore(
   store: EditorStore,
   pageId = store.state.currentPageId
 ): FigmaAPI {
   const api = new FigmaAPI(store.graph)
+  registerComponentPageLoader(api, async (id) => {
+    if (store.graph !== api.graph) throw new Error('The target document is no longer open')
+    await store.loadPageNodes(id)
+    if (store.graph !== api.graph) throw new Error('The target document is no longer open')
+  })
+  if (IS_TAURI) registerImageFileReader(api, readLocalImageFile)
   api.setRenderer(store.renderer ?? null)
+  api.icons = store.iconProvider
   api.theme = store.state.theme ?? 'light'
   api.currentPage = api.wrapNode(pageId)
   // The user's selection belongs to the page on screen.
@@ -29,6 +40,9 @@ export function makeFigmaFromStore(
   api.exportImage = (nodeIds, opts) =>
     store.renderExportImage(nodeIds, opts.scale ?? 1, opts.format ?? 'PNG', opts.pageId ?? pageId)
   if (store.renderer) api.rasterCodec = createCanvasKitRasterCodec(store.renderer.ck)
+  api.loadFontAsync = async ({ family, style }) => {
+    await loadFont(family, style).catch(() => null)
+  }
   api.listAvailableFontsAsync = async () => {
     const [systemFonts, familyOptions] = await Promise.all([listFonts(), listFamilies()])
     const fonts = systemFonts.flatMap(({ family, styles }) =>

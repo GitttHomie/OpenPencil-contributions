@@ -4,6 +4,7 @@ import { computed } from 'vue'
 import { useI18n } from '@open-pencil/vue'
 
 import type { ChatRunPhase, ChatRunState } from '@/app/ai/chat/run-state'
+import type { DesignCheckStatus } from '@/app/ai/design-checks/state'
 import AppSpinner from '@/components/ui/feedback/AppSpinner.vue'
 
 const {
@@ -11,13 +12,15 @@ const {
   working,
   waiting,
   failed = false,
-  limited = false
+  limited = false,
+  checkStatus
 } = defineProps<{
   run: ChatRunState | null
   working: boolean
   waiting: boolean
   failed?: boolean
   limited?: boolean
+  checkStatus?: DesignCheckStatus | null
 }>()
 const { ai } = useI18n()
 const phase = computed<ChatRunPhase | 'waiting' | null>(() => {
@@ -29,7 +32,7 @@ const phase = computed<ChatRunPhase | 'waiting' | null>(() => {
 const label = computed(() => {
   switch (phase.value) {
     case 'working':
-      return ai.value.runWorking
+      return checkStatus === 'checking' ? ai.value.designCheckChecking : ai.value.runWorking
     case 'waiting':
       return ai.value.runWaiting
     case 'finished':
@@ -68,6 +71,20 @@ const label = computed(() => {
       class="size-4 shrink-0 text-muted"
     />
     <icon-lucide-circle-alert v-else class="size-4 shrink-0 text-muted" />
-    <span>{{ label }}</span>
+    <span
+      >{{ label
+      }}<template v-if="!working && checkStatus">
+        ·
+        {{
+          checkStatus === 'reviewed'
+            ? ai.designCheckReviewed
+            : checkStatus === 'structure-only'
+              ? ai.designCheckStructureOnly
+              : checkStatus === 'stale'
+                ? ai.designCheckStale
+                : ai.designCheckFailed
+        }}</template
+      ></span
+    >
   </div>
 </template>

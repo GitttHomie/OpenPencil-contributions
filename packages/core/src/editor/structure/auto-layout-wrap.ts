@@ -26,7 +26,7 @@ export function wrapInAutoLayout(
   const originals = new Map(
     selectedNodes.map((node) => [node.id, captureMoveState(ctx.graph, node)])
   )
-  const firstIndex = Math.min(...selectedNodes.map((node) => parent.childIds.indexOf(node.id)))
+  const firstIndex = Math.max(...selectedNodes.map((node) => parent.childIds.indexOf(node.id))) + 1
   const bounds = getAxisAlignedBoundsInParent(selectedNodes, parentId, ctx.graph)
   const direction: LayoutMode =
     selectedNodes.length <= 1 || bounds.height > bounds.width ? 'VERTICAL' : 'HORIZONTAL'

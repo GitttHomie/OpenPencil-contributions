@@ -18,7 +18,13 @@ function scene() {
   const card = graph.createNode('FRAME', backdrop.id, { fills: [solid(WHITE, 0.05)] })
   const text = graph.createNode('TEXT', card.id, { text: 'Readable', fills: [solid(WHITE)] })
   const linter = createLinter({ config: { rules: { 'color-contrast': 'error' } } })
-  return { graph, backdrop, card, text, lint: (ids?: string[]) => linter.lintGraph(graph, ids).messages }
+  return {
+    graph,
+    backdrop,
+    card,
+    text,
+    lint: (ids?: string[]) => linter.lintGraph(graph, ids).messages
+  }
 }
 
 describe('composited text contrast', () => {

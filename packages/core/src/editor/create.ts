@@ -2,12 +2,13 @@ import type { CanvasKit } from 'canvaskit-wasm'
 import { createNanoEvents } from 'nanoevents'
 import type { Emitter } from 'nanoevents'
 
-import { SceneGraph } from '@open-pencil/scene-graph'
+import { SceneGraph, type SceneNode } from '@open-pencil/scene-graph'
 import { UndoManager } from '@open-pencil/scene-graph/undo'
 
 import type { SkiaRenderer } from '#core/canvas/renderer'
 import { prefetchFigmaSchema } from '#core/clipboard'
 import { IS_BROWSER } from '#core/constants'
+import { iconify } from '#core/icons'
 import { releaseFigPopulationWorker } from '#core/kiwi/fig/population/client'
 import { releaseOriginalFigArchive } from '#core/kiwi/fig/session/original-archive'
 import { installTextMeasurer } from '#core/layout'
@@ -20,25 +21,33 @@ import { fontResolver } from '#core/text/resolver/index'
 import { createAlignmentActions } from './alignment'
 import { createClipboardBridge } from './bridges/clipboard'
 import { createComponentBridge } from './bridges/components'
+import { createLintFixBridge } from './bridges/lint'
 import { createStructureBridge } from './bridges/structure'
 import { createUndoBridge } from './bridges/undo'
 import { createClipboardActions } from './clipboard'
 import { createColorSpaceActions } from './color-space'
 import { createComponentSyncScheduler } from './component-sync'
 import { createComponentActions } from './components'
+import { createDesignTokenActions } from './design-tokens'
 import { createGraphEventSubscription } from './graph-events'
 import { createGraphReadActions } from './graph-reads'
 import { createGuideActions } from './guides'
+import { createIconActions } from './icons'
 import { createDesignIssueActions } from './issues'
 import { createNodeActions } from './nodes'
 import { createPageActions } from './pages'
 import { createPlayActions } from './play/actions'
 import { createSelectionActions } from './selection'
+import { createShaderActions } from './shaders/actions'
+import { createShaderFrames } from './shaders/frames'
 import { createShapeActions } from './shapes'
+import { createTextStyleActions } from './shared-styles/text'
 import { createDefaultEditorState } from './state'
 import { createStructureActions } from './structure'
 import { createTextActions } from './text'
 import { refreshTextLayoutForFont } from './text/font-layout'
+import { createPendingTextLayout } from './text/pending-layout'
+import { createTextSelectionStyle } from './text/selection-style'
 import type {
   EditorContext,
   EditorEventName,
@@ -46,6 +55,7 @@ import type {
   EditorOptions,
   EditorState
 } from './types'
+import { createFontVariableActions } from './typography/variables'
 import { createUndoActions } from './undo'
 import { createVariableActions } from './variables'
 import { createVectorizeActions } from './vectorize'
@@ -73,6 +83,7 @@ export function createEditor(options?: EditorOptions) {
   const events: Emitter<EditorEvents> = createNanoEvents()
   const stopFontResolutionEvents = fontResolver.subscribe((event, snapshot) => {
     if (event === 'settled' && _renderer) refreshTextLayoutForFont(ctx, snapshot)
+    if (event === 'settled') pendingTextLayout.relayoutReady(_renderer)
     events.emit('font:resolution-changed', event, snapshot)
   })
 
@@ -104,6 +115,15 @@ export function createEditor(options?: EditorOptions) {
       renderVersion: state.renderVersion,
       sceneVersion: state.sceneVersion
     })
+  }
+
+  /**
+   * The caret or selection of the edited text moved: the canvas repaints its overlay and the
+   * views that follow the selection update, without the document counting as changed.
+   */
+  function textSelectionChanged() {
+    state.textSelectionVersion++
+    requestRepaint()
   }
 
   function requestRefresh() {
@@ -187,8 +207,17 @@ export function createEditor(options?: EditorOptions) {
   }
 
   const graphReads = createGraphReadActions(() => _graph)
-  const { runLayoutForNode, runMutationWithLayout } = createLayoutRunner(() => _graph)
-  const { scheduleComponentSync } = createComponentSyncScheduler(() => _graph, requestRender)
+  const layout = createLayoutRunner(() => _graph)
+  const { runLayoutForNode } = layout
+  const { scheduleComponentSync, runWithComponentSync, cancelComponentSync } =
+    createComponentSyncScheduler(() => _graph, requestRender)
+  const runMutationWithLayout: EditorContext['runMutationWithLayout'] = (...args) =>
+    runWithComponentSync(() => layout.runMutationWithLayout(...args))
+  const pendingTextLayout = createPendingTextLayout({
+    getGraph: () => _graph,
+    runLayoutForNode,
+    requestRender
+  })
 
   const { subscribeToGraph, unsubscribeFromGraph } = createGraphEventSubscription({
     getGraph: () => _graph,
@@ -208,6 +237,7 @@ export function createEditor(options?: EditorOptions) {
       return _graph
     },
     set graph(g) {
+      cancelComponentSync()
       _graph = g
     },
     undo,
@@ -215,8 +245,10 @@ export function createEditor(options?: EditorOptions) {
     loadFont: _loadFont,
     resolveFigmaClipboardImages: options?.resolveFigmaClipboardImages ?? null,
     getViewportSize: _getViewportSize,
+    icons: options?.icons ?? iconify,
     getCk: () => _ck,
     getRenderer: () => _renderer,
+    getRenderers: () => _renderers,
     getTextEditor: () => _textEditor,
     requestRender,
     requestRefresh,
@@ -235,7 +267,8 @@ export function createEditor(options?: EditorOptions) {
   // Assemble domain modules
   const viewport = createViewportActions(ctx)
   const selection = createSelectionActions(ctx)
-  const pages = createPageActions(ctx)
+  const shaderFrames = createShaderFrames(ctx, options)
+  const pages = createPageActions(ctx, shaderFrames)
   const guides = createGuideActions(ctx)
   const designIssues = createDesignIssueActions(ctx)
   const shapes = createShapeActions(ctx)
@@ -247,13 +280,30 @@ export function createEditor(options?: EditorOptions) {
   const undoActions = createUndoActions(ctx)
   const text = createTextActions(ctx)
   const variables = createVariableActions(ctx)
+  const fontVariables = createFontVariableActions(ctx, variables, nodes)
+  const designTokens = createDesignTokenActions(ctx, variables, nodes)
+  const textStyles = createTextStyleActions(ctx, nodes, pages.preparePageNodes)
   const vectorize = createVectorizeActions(ctx)
+  const icons = createIconActions(ctx)
+  const shaders = createShaderActions(ctx, nodes)
   const alignment = createAlignmentActions(ctx)
   const preview = createPlayActions(ctx)
   const clipboardBridge = createClipboardBridge(clipboard, selection)
   const componentBridge = createComponentBridge(components, selection, structure, pages)
   const structureBridge = createStructureBridge(structure, selection)
-  const undoBridge = createUndoBridge(undoActions, selection)
+  const undoBridge = createUndoBridge(undoActions, selection, nodes.flushNudge)
+  const lintFixBridge = createLintFixBridge(ctx, nodes, structure, clipboard)
+  const textSelectionStyle = createTextSelectionStyle(ctx, text.runTextEditStep)
+
+  // The edited text follows changes made outside the editor, such as a panel field being
+  // dragged, so its caret and selection move with the text instead of after the change.
+  const invalidateEditedText = (id: string) => {
+    if (id !== state.editingTextId) return
+    const node = _graph.getNode(id)
+    if (node) _textEditor?.invalidateParagraph(node)
+  }
+  onEditorEvent('node:updated', invalidateEditedText)
+  onEditorEvent('node:previewUpdated', invalidateEditedText)
 
   function setCanvasKit(ck: CanvasKit, renderer: SkiaRenderer) {
     _ck = ck
@@ -263,7 +313,9 @@ export function createEditor(options?: EditorOptions) {
     uninstallTextMeasurer?.()
     uninstallTextMeasurer =
       typeof renderer.measureTextNode === 'function'
-        ? installTextMeasurer((node, maxWidth) => renderer.measureTextNode(node, maxWidth))
+        ? installTextMeasurer((node, maxWidth) =>
+            pendingTextLayout.measure(renderer, node, maxWidth)
+          )
         : null
   }
 
@@ -290,7 +342,9 @@ export function createEditor(options?: EditorOptions) {
   function replaceGraph(newGraph: SceneGraph) {
     nodes.cancelNodePreviews()
     undo.discardBatches()
+    cancelComponentSync()
     _graph = newGraph
+    pendingTextLayout.clear()
     subscribeToGraph()
     const previousPageId = state.currentPageId
     state.currentPageId = _graph.getPages()[0]?.id ?? _graph.rootId
@@ -311,6 +365,7 @@ export function createEditor(options?: EditorOptions) {
   }
 
   function dispose() {
+    cancelComponentSync()
     releaseTextMeasurer()
     nodes.cancelNodePreviews()
     interactiveEdits.clear()
@@ -350,6 +405,7 @@ export function createEditor(options?: EditorOptions) {
     cancelInteractiveEdit,
     requestRender,
     requestRefresh,
+    textSelectionChanged,
     requestRepaint,
     onEditorEvent,
     setCanvasKit,
@@ -376,8 +432,15 @@ export function createEditor(options?: EditorOptions) {
     // Structure (group, reorder, reparent, z-order)
     ...structure,
 
-    // Nodes (update, layout)
+    // Nodes (update, layout); while text is edited, character styles go to its selection
     ...nodes,
+    updateNode: (id: string, changes: Partial<SceneNode>) =>
+      textSelectionStyle.updateNode(id, changes, nodes.updateNode),
+    updateNodeWithUndo: (id: string, changes: Partial<SceneNode>, label = 'Update') =>
+      textSelectionStyle.updateNodeWithUndo(id, changes, (target, next) =>
+        nodes.updateNodeWithUndo(target, next, label)
+      ),
+    getTextSelectionStyle: textSelectionStyle.selectionStyle,
 
     // Alignment (align, flip, rotate)
     ...alignment,
@@ -387,9 +450,15 @@ export function createEditor(options?: EditorOptions) {
 
     // Bitmap-to-vector replacement
     ...vectorize,
+    ...icons,
+    ...shaders,
+    ...shaderFrames,
 
     // Variables
     ...variables,
+    ...designTokens,
+    ...textStyles,
+    ...fontVariables,
 
     // Text editing
     ...text,
@@ -399,6 +468,16 @@ export function createEditor(options?: EditorOptions) {
 
     // Undo — bridge functions that need cross-module refs
     ...undoBridge,
+    commitNodeUpdate: (id: string, previous: Partial<SceneNode>, label = 'Update') =>
+      textSelectionStyle.commitNodeUpdate(
+        id,
+        previous,
+        (target, values) => undoBridge.commitNodeUpdate(target, values, label),
+        (target, next) => nodes.updateNodeWithUndo(target, next, label)
+      ),
+    // While text is edited, what was typed undoes first and the editor keeps the result.
+    undoAction: () => text.runTextEditStep(undoBridge.undoAction),
+    redoAction: () => text.runTextEditStep(undoBridge.redoAction),
 
     setDocumentColorSpace: colorSpace.setDocumentColorSpace,
 
@@ -409,7 +488,8 @@ export function createEditor(options?: EditorOptions) {
     ...componentBridge,
 
     // Structure — bridge functions that need selectedNodes
-    ...structureBridge
+    ...structureBridge,
+    ...lintFixBridge
   }
 }
 

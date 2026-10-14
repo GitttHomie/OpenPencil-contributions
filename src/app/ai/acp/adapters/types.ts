@@ -4,6 +4,7 @@ import type { ACPAgentID } from '@open-pencil/core/constants'
 import type { useAIMessages } from '@open-pencil/vue'
 
 import type { CanvasPermissionScope } from '../canvas/permissions'
+import type { resolveIntegration } from '../configuration/resolve'
 
 type AIMessages = ReturnType<typeof useAIMessages>['value']
 type AITextKey = {
@@ -31,8 +32,11 @@ export type ACPAgentAdapter = {
   instructions?: string
   toolPresentation?: Readonly<Record<string, ACPToolPresentation>>
   createTurn?: () => ACPAdapterTurn
+  prepareLaunch?: (
+    options: ReturnType<typeof resolveIntegration>
+  ) => ReturnType<typeof resolveIntegration>
   createSession(options: {
-    purpose: 'design' | 'review' | 'catalog' | 'verification'
+    purpose: 'design' | 'review' | 'vision' | 'catalog' | 'verification'
     mcpServers: readonly McpServer[]
   }): ACPAdapterSession
 }

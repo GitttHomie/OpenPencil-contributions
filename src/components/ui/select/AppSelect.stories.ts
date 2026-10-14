@@ -43,3 +43,33 @@ export const SingleOption: Story = {
       </div>`
   })
 }
+
+export const Grouped: Story = {
+  render: () => ({
+    components: { AppSelect },
+    setup() {
+      const value = ref('MULTIPLY')
+      const groups = [
+        { options: [{ value: 'NORMAL', label: 'Normal' }] },
+        {
+          options: [
+            { value: 'DARKEN', label: 'Darken' },
+            { value: 'MULTIPLY', label: 'Multiply' }
+          ]
+        },
+        {
+          label: 'Lighten',
+          options: [
+            { value: 'LIGHTEN', label: 'Lighten' },
+            { value: 'SCREEN', label: 'Screen' }
+          ]
+        }
+      ]
+      return { value, groups }
+    },
+    template: `
+      <div class="w-40 p-16">
+        <AppSelect v-model="value" :groups="groups" label="Blend mode" />
+      </div>`
+  })
+}

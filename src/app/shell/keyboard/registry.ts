@@ -5,9 +5,11 @@ import { onScopeDispose } from 'vue'
 import { editorCommandMetadata } from '@open-pencil/vue'
 import type { EditorCommandId } from '@open-pencil/vue'
 
+import { useComments } from '@/app/comments/use'
 import { requestRenameSelection } from '@/app/editor/selection/rename-dialog'
 import { TOOL_SHORTCUTS } from '@/app/editor/session'
 import { openSettingsDialog } from '@/app/settings/dialog'
+import { setSnappingPreference } from '@/app/settings/preferences/apply'
 import { isButtonActivation, isEditing } from '@/app/shell/keyboard/focus'
 import { bindSpaceHandTool } from '@/app/shell/keyboard/space-tool'
 import type {
@@ -15,6 +17,7 @@ import type {
   KeyboardShortcutRunOptions
 } from '@/app/shell/keyboard/types'
 import { appMenuTinykeysShortcut } from '@/app/shell/menu/shortcut'
+import { PREVIEW_ENABLED } from '@/constants'
 
 type ShortcutAction = (options: KeyboardShortcutRunOptions) => void
 
@@ -24,6 +27,8 @@ type ShortcutDefinition = {
   run: ShortcutAction
   shouldPreventDefault?: (event: KeyboardEvent) => boolean
   global?: boolean
+  /** Document saves remain available while an editor input owns the focus. */
+  allowWhileEditing?: boolean
   /** Whether the shortcut also works while a canvas previews. */
   preview?: boolean
 }
@@ -64,27 +69,46 @@ function opacityBindings(): ShortcutDefinition[] {
 
 const EDITOR_SHORTCUT_OVERLAY_SELECTOR =
   '[data-picker-content], [role="dialog"], [role="listbox"], [role="menu"]'
+const PICKER_SELECTOR = '[data-picker-content]'
+const OPEN_LAYER_SELECTOR = '[data-dismissable-layer]:not([data-state="closed"])'
 
-function originatedInOverlay(event: KeyboardEvent) {
+function originatedInOverlay(event: KeyboardEvent, allowPickers = false) {
   return event
     .composedPath()
-    .some((target) => target instanceof Element && target.matches(EDITOR_SHORTCUT_OVERLAY_SELECTOR))
+    .some(
+      (target) =>
+        target instanceof Element &&
+        target.matches(EDITOR_SHORTCUT_OVERLAY_SELECTOR) &&
+        !(allowPickers && target.closest(PICKER_SELECTOR))
+    )
 }
 
 /** A popover, menu, or dialog that is open; one fading out after closing no longer counts. */
-function hasOpenDismissableLayer() {
-  return document.querySelector('[data-dismissable-layer]:not([data-state="closed"])') !== null
+function hasOpenDismissableLayer(allowPickers = false) {
+  return [...document.querySelectorAll(OPEN_LAYER_SELECTOR)].some(
+    (layer) => !(allowPickers && layer.closest(PICKER_SELECTOR))
+  )
 }
 
-function shouldIgnoreShortcut(event: KeyboardEvent, options: KeyboardShortcutOptions) {
+/**
+ * Other shortcuts wait for open popovers to close, but undo and redo work while a fill, stroke,
+ * or colour picker is open, as in Figma; a text field in it keeps its own undo.
+ */
+function shouldIgnoreShortcut(
+  event: KeyboardEvent,
+  options: KeyboardShortcutOptions,
+  history = false,
+  allowWhileEditing = false
+) {
   return (
     isButtonActivation(event) ||
-    hasOpenDismissableLayer() ||
-    originatedInOverlay(event) ||
-    isEditing(event) ||
-    options.inputFocused.value ||
-    !!options.store.state.editingTextId ||
-    !!options.store.state.numberFieldFocused
+    hasOpenDismissableLayer(history) ||
+    originatedInOverlay(event, history) ||
+    (!allowWhileEditing &&
+      (isEditing(event) ||
+        options.inputFocused.value ||
+        !!options.store.state.editingTextId ||
+        !!options.store.state.numberFieldFocused))
   )
 }
 
@@ -134,7 +158,8 @@ export function registerKeyboardShortcuts(options: KeyboardShortcutOptions) {
     {
       id: 'save-as',
       keys: appMenuTinykeysShortcut('save-as') ?? '$mod+Shift+KeyS',
-      run: ({ store }) => void store.saveFigFileAs()
+      run: ({ store }) => void store.saveFigFileAs(),
+      allowWhileEditing: true
     },
     ...commandShortcuts('selection.ungroup', 'edit.redo'),
     {
@@ -144,8 +169,38 @@ export function registerKeyboardShortcuts(options: KeyboardShortcutOptions) {
       preview: true
     },
     {
+      id: 'toggle-rulers',
+      keys: 'Shift+KeyR',
+      run: ({ store }) => {
+        store.state.showRulers = !store.state.showRulers
+        store.requestRepaint()
+      }
+    },
+    {
+      id: 'toggle-multiplayer-cursors',
+      keys: '$mod+Alt+Backslash',
+      run: ({ store }) => {
+        store.state.showRemoteCursors = !store.state.showRemoteCursors
+        store.requestRepaint()
+      }
+    },
+    // Figma's keys, matched by key position since Shift turns ' into ".
+    {
+      id: 'toggle-pixel-grid',
+      keys: 'Shift+Quote',
+      run: ({ store }) => {
+        store.setPixelGridVisible(!store.state.showPixelGrid)
+      }
+    },
+    {
+      id: 'toggle-pixel-grid-snap',
+      keys: '$mod+Shift+Quote',
+      run: ({ store }) =>
+        setSnappingPreference('pixelGrid', !store.state.snappingPreferences.pixelGrid)
+    },
+    {
       id: 'toggle-ui',
-      keys: appMenuTinykeysShortcut('toggle-ui') ?? '$mod+Backslash',
+      keys: [appMenuTinykeysShortcut('toggle-ui') ?? '$mod+Backslash', '$mod+Shift+Backslash'],
       run: ({ actions }) => actions.toggleUI()
     },
     { id: 'toggle-ai', keys: '$mod+KeyJ', run: ({ actions }) => actions.toggleAI() },
@@ -153,6 +208,11 @@ export function registerKeyboardShortcuts(options: KeyboardShortcutOptions) {
       id: 'view-pixel-grid',
       keys: appMenuTinykeysShortcut('view-pixel-grid') ?? '$mod+Shift+KeyP',
       run: ({ store }) => store.setPixelGridVisible(!store.state.showPixelGrid)
+    },
+    {
+      id: 'toggle-comments',
+      keys: appMenuTinykeysShortcut('view-comments') ?? 'Shift+KeyC',
+      run: () => useComments().toggleOnCanvas()
     },
     {
       id: 'open-settings',
@@ -205,7 +265,8 @@ export function registerKeyboardShortcuts(options: KeyboardShortcutOptions) {
     {
       id: 'save',
       keys: appMenuTinykeysShortcut('save') ?? '$mod+KeyS',
-      run: ({ store }) => void store.saveFigFile()
+      run: ({ store }) => void store.saveFigFile(),
+      allowWhileEditing: true
     },
     {
       id: 'open-file',
@@ -227,7 +288,7 @@ export function registerKeyboardShortcuts(options: KeyboardShortcutOptions) {
     { id: 'delete-backspace', keys: 'Backspace', run: ({ actions }) => actions.smartDelete(false) },
     { id: 'delete', keys: 'Delete', run: ({ actions }) => actions.smartDelete(false) },
     { id: 'delete-alt', keys: 'Alt+Delete', run: ({ actions }) => actions.smartDelete(true) },
-    { id: 'enter', keys: 'Enter', run: ({ actions }) => actions.confirmOrEnterText() },
+    { id: 'enter', keys: 'Enter', run: ({ actions }) => actions.confirmOrEditSelection() },
     {
       id: 'escape',
       keys: 'Escape',
@@ -243,9 +304,20 @@ export function registerKeyboardShortcuts(options: KeyboardShortcutOptions) {
   const previewKeys = new Set(
     shortcuts.filter((shortcut) => shortcut.preview).flatMap((shortcut) => [shortcut.keys].flat())
   )
+  const historyKeys = new Set(
+    shortcuts
+      .filter((shortcut) => shortcut.id === 'edit.undo' || shortcut.id === 'edit.redo')
+      .flatMap((shortcut) => [shortcut.keys].flat())
+  )
+  const editingKeys = new Set(
+    shortcuts
+      .filter((shortcut) => shortcut.allowWhileEditing)
+      .flatMap((shortcut) => [shortcut.keys].flat())
+  )
   bindToolShortcuts(bindings, runOptions(new KeyboardEvent('keydown')))
 
   for (const shortcut of shortcuts) {
+    if (shortcut.id === 'toggle-preview' && !PREVIEW_ENABLED) continue
     bindShortcut(shortcut.global ? globalBindings : bindings, shortcut.keys, (event) => {
       shortcut.run(runOptions(event))
       if (shortcut.shouldPreventDefault?.(event) ?? true) event.preventDefault()
@@ -258,7 +330,8 @@ export function registerKeyboardShortcuts(options: KeyboardShortcutOptions) {
       Object.entries(bindings).map(([keys, handler]) => [
         keys,
         (event: KeyboardEvent) => {
-          if (shouldIgnoreShortcut(event, options)) return
+          if (shouldIgnoreShortcut(event, options, historyKeys.has(keys), editingKeys.has(keys)))
+            return
           if (options.store.state.play && !previewKeys.has(keys)) return
           handler(event)
         }

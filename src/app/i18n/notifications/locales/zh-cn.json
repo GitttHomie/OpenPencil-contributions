@@ -27,5 +27,11 @@
   "deepLinkCancelled": "已取消链接：需要以“{file}”结尾的文件。",
   "deepLinkNodeNotFound": "在“{file}”中未找到图层“{node}”。",
   "openQueuedFilesFailed": "无法打开传递给 OpenPencil 的文件：{error}",
-  "tokensLeftOut": "未写入样式表：{names}"
+  "tokensLeftOut": "未写入样式表：{names}",
+  "layoutContainerFixedWidth": "已将“{name}”改为固定宽度，以便“{layer}”填满可用空间。",
+  "layoutContainerFixedHeight": "已将“{name}”改为固定高度，以便“{layer}”填满可用空间。",
+  "layoutLayerFixedWidth": "已将“{name}”内的 1 个图层改为固定宽度，以便容器适应内容。",
+  "layoutLayerFixedHeight": "已将“{name}”内的 1 个图层改为固定高度，以便容器适应内容。",
+  "layoutLayersFixedWidth": "已将“{name}”内的 {count} 个图层改为固定宽度，以便容器适应内容。",
+  "layoutLayersFixedHeight": "已将“{name}”内的 {count} 个图层改为固定高度，以便容器适应内容。"
 }

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { TreeRoot } from 'reka-ui'
-import { computed, nextTick, onScopeDispose, ref } from 'vue'
+import { computed, nextTick, onScopeDispose, reactive, ref } from 'vue'
 
 import type { SceneNode } from '@open-pencil/scene-graph'
 
@@ -84,7 +84,8 @@ const PATCHABLE_NODE_KEYS = new Set<keyof SceneNode>([
   'type',
   'layoutMode',
   'visible',
-  'locked'
+  'locked',
+  'variableModes'
 ])
 
 function patchTreeNode(id: string, changes: Partial<SceneNode>) {
@@ -97,7 +98,9 @@ function patchTreeNode(id: string, changes: Partial<SceneNode>) {
   }
   const target = nodesById.get(id)
   const source = editor.graph.getNode(id)
-  if (target && source) patchLayerNode(target, source)
+  // The index holds the plain rows; writing through their reactive proxy updates every view of
+  // them, including values a row derives and caches, such as its variable mode tags.
+  if (target && source) patchLayerNode(reactive(target), source)
 }
 
 const rowRefs = new Map<string, HTMLElement>()
@@ -190,7 +193,9 @@ function select(id: string, selection: boolean | LayerSelectionMode) {
   if (!mode.range) selectionAnchorId = id
   applyingSelection = true
   try {
-    editor.select([...next])
+    // Adding a layer goes through the editor, which drops its selected ancestors and descendants.
+    if (mode.additive && !mode.range) editor.select([id], true)
+    else editor.select([...next])
   } finally {
     applyingSelection = false
   }

@@ -89,5 +89,7 @@
   "ruleNoMixedStyles": "Mieszane style tekstu",
   "ruleNoMixedStylesHelp": "Kilka stylów w jednej warstwie tekstu łatwo zepsuć podczas edycji.",
   "ruleNoDetachedInstances": "Wygląda jak komponent",
-  "ruleNoDetachedInstancesHelp": "Ta ramka wygląda jak element wielokrotnego użytku. Użyj instancji komponentu."
+  "ruleNoDetachedInstancesHelp": "Ta ramka wygląda jak element wielokrotnego użytku. Użyj instancji komponentu.",
+  "fixConvertToFrame": "Przekształć w ramkę",
+  "fixDeleteLayer": "Usuń warstwę"
 }

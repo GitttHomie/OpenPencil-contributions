@@ -64,7 +64,10 @@ describe('derived instance layout regressions', () => {
     expect(firstBadge?.height).toBeCloseTo(28.6901, 3)
     expect(firstBadgeContent).toMatchObject({ x: 0, y: 0 })
     expect(placeholderFrame?.x).toBeCloseTo(277.352, 3)
-    expect(placeholderFrame?.y).toBeCloseTo(0.0915584564, 3)
+    // Keep the file's derived height instead of replacing it with the component's
+    // 39.19714331626892 px height and introducing a 0.091558 px centering shift.
+    expect(placeholderFrame?.height).toBeCloseTo(39.3802604675293, 3)
+    expect(placeholderFrame?.y).toBe(0)
     expect(placeholderText?.x).toBeCloseTo(14.2535, 3)
     expect(placeholderText?.y).toBeCloseTo(10.6901, 3)
   })

@@ -91,6 +91,29 @@ async function compareToFinal(
 }
 
 describe('shared render/preview placement', () => {
+  it('does not lay out unrelated frames or pages when inserting into a nested frame', async () => {
+    const setup = await fixture(true)
+    const otherPage = setup.graph.addPage('Unrelated')
+    const sentinels = [setup.figma.currentPageId, otherPage.id].map((pageId) => {
+      const frame = setup.graph.createNode('FRAME', pageId, {
+        layoutMode: 'VERTICAL',
+        primaryAxisSizing: 'HUG',
+        height: 321
+      })
+      setup.graph.createNode('FRAME', frame.id, { height: 10 })
+      return frame
+    })
+    const before = sentinels.map((node) => structuredClone(node))
+
+    await getTool('render').execute(setup.figma, {
+      jsx: '<Frame name="Added" w={140} h={80}/>',
+      parent_id: setup.rowId
+    })
+
+    expect(sentinels).toEqual(before)
+    expect(getNodeOrThrow(setup.graph, setup.boardId).width).toBeGreaterThan(140)
+  })
+
   it('lays out an appended Fill child against real siblings and padding', async () => {
     const setup = await fixture()
     const staged = await compareToFinal(setup, '<Rect name="New" w="fill" h="fill"/>', {

@@ -16,14 +16,17 @@ import { useRestartApprovals } from '@/app/shell/updater/approvals'
 import { scheduleStartupUpdateCheck } from '@/app/shell/updater/check'
 import { kickSyncEngine } from '@/app/storage/sync'
 import { prepareForReload } from '@/app/tabs'
+import FigCleanupDialog from '@/components/document/FigCleanupDialog.vue'
 import UnsavedChangesDialog from '@/components/document/UnsavedChangesDialog.vue'
 import PublishLibraryDialog from '@/components/libraries/PublishLibraryDialog.vue'
 import LibraryUpdateReviewDialog from '@/components/libraries/review/LibraryUpdateReviewDialog.vue'
 import RecoveryDialog from '@/components/recovery/RecoveryDialog.vue'
 import AISetupDialog from '@/components/settings/ai-setup/AISetupDialog.vue'
 import SettingsDialog from '@/components/settings/SettingsDialog.vue'
+import UsageStatsPrompt from '@/components/sharing/UsageStatsPrompt.vue'
 import AppShell from '@/components/shell/AppShell.vue'
 import Toaster from '@/components/shell/Toaster.vue'
+import VoiceCallAudio from '@/components/voice-call/VoiceCallAudio.vue'
 
 const { updates, locale } = useI18n()
 
@@ -60,9 +63,12 @@ onMounted(() => {
       <AISetupDialog />
       <RecoveryDialog />
       <UnsavedChangesDialog />
+      <FigCleanupDialog />
       <PublishLibraryDialog />
       <LibraryUpdateReviewDialog />
+      <UsageStatsPrompt />
       <Toaster />
+      <VoiceCallAudio />
     </TooltipProvider>
   </MotionConfig>
 </template>

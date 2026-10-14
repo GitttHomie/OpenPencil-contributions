@@ -16,6 +16,8 @@ publishes `data-fill-type`, `data-fill-category`, and `data-transparent` for sty
 When nested in `BindableValueRoot<Color>`, a bound solid fill previews the provider's resolved color
 and forwards the binding state attributes. Reading or focusing a swatch never detaches the binding.
 Consumers can place a checkerboard below the slot's `background` value for transparent paints.
+Set `:inherit-binding="false"` for independent previews such as variable-picker candidates, so the
+surrounding field's current binding does not replace each candidate's color.
 
 ```vue twoslash
 <script setup lang="ts">

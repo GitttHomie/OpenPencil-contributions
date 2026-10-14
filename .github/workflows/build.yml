@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing stable release tag to rebuild without moving it (vX.Y.Z).
+        description: Existing release tag to rebuild without moving it (vX.Y.Z or vX.Y.Z-beta.N).
         required: true
         type: string
   push:
@@ -68,6 +68,9 @@ jobs:
       - name: Install pinned workflow tooling
         run: bun install --cwd .pipeline --frozen-lockfile
       - name: Build shared desktop frontend and package outputs
+        env:
+          # Official releases only: lets the app send its daily ping and, with consent, usage stats.
+          VITE_OPENPENCIL_FEEDBACK: "on"
         run: |
           bun run generate:icons --target desktop
           bun run generate:tauri-menu
@@ -156,6 +159,8 @@ jobs:
         run: |
           node --version
           node node_modules/@tauri-apps/cli/tauri.js --version
+      - name: Compile the bundled canvas helper for this desktop target
+        run: bun run build:mcp-sidecar "${{ matrix.target }}"
       - name: Build and sign native bundles (no release uploads)
         id: tauri
         timeout-minutes: 30
@@ -172,6 +177,12 @@ jobs:
           tauriScript: node node_modules/@tauri-apps/cli/tauri.js
           args: --target ${{ matrix.target }} --config "${{ github.workspace }}/release-build-config.json" --verbose
           retryAttempts: 0
+      - name: Verify the packaged macOS canvas helper without external runtimes
+        if: matrix.target == 'aarch64-apple-darwin'
+        env:
+          OPENPENCIL_TEST_MCP_BUNDLE: ${{ github.workspace }}/desktop/target/aarch64-apple-darwin/release/bundle/macos/OpenPencil.app/Contents/MacOS/openpencil-mcp-http
+          OPENPENCIL_TEST_MCP_DENY_ROOT: ${{ github.workspace }}
+        run: bun test ./packages/mcp/tests/desktop/bundle.test.ts
       - name: Collect only reported bundles and signatures
         env:
           TAURI_ARTIFACT_PATHS: ${{ steps.tauri.outputs.artifactPaths }}

@@ -44,7 +44,7 @@ export function textContrastColors(
 ): { foreground: Color; background: Color } | null {
   if (!node.visible || node.opacity === 0 || !normalBlend(node.blendMode)) return null
   // A single base color cannot describe text with independently painted style ranges.
-  if (node.styleRunCount > 0) return null
+  if (node.hasStyledTextPaint ?? node.styleRunCount > 0) return null
   let foreground = fade(paints(node), node.opacity ?? 1)
   let background: Color | null = TRANSPARENT
   if (!foreground || foreground.a === 0) return null

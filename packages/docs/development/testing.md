@@ -14,7 +14,7 @@ Place a test with the source that owns its contract. Choose the runtime separate
 | Figma compatibility acceptance          | `tests/figma/**/*.spec.ts`                                     |
 | Private tool contracts                  | `tools/<owner>/tests/`                                         |
 
-For example, `packages/core/src/canvas/text/prepared.ts` maps to `packages/core/tests/canvas/text/prepared.test.ts`; `src/app/demo/viewport.ts` maps to `tests/app/demo/viewport.test.ts`. A substantial module may have a matching test directory rather than one large test file. Application E2E, external-system acceptance and large contract suites are intentional exceptions to file-for-file mirroring.
+For example, `packages/core/src/canvas/text/shape.ts` maps to `packages/core/tests/canvas/text/shape.test.ts`; `src/app/demo/viewport.ts` maps to `tests/app/demo/viewport.test.ts`. A substantial module may have a matching test directory rather than one large test file. Application E2E, external-system acceptance and large contract suites are intentional exceptions to file-for-file mirroring.
 
 Core tests using SceneGraph still belong to Core. Central integration is for contracts without a single owning implementation, such as interoperability between published packages. Name that contract explicitly; do not use integration as a miscellaneous bucket.
 
@@ -27,6 +27,40 @@ Discovery already covers the destinations: `tools/dev/unit-tests/src/shards.ts` 
 `test:unit:quick` runs files in Bun worker processes (`--parallel`), which is the fastest local loop. CI shards still run each group in one process; `test:unit:isolated` (`--isolate`, also run nightly) gives every file a fresh global object and is the check to run when a suite passes alone but fails in a shard. Shards share one Bun process, so module-level state (a `fake-indexeddb/auto` import, an IndexedDB connection left open by `createEditorStore()`, a patched global) leaks into later files in the same shard. A package-local run (`bun test tests` inside the package) is a fresh process and will not reproduce that leak. Close what a test opens and restore what it patches.
 
 Run `bun --filter @open-pencil/core build` before unit tests. Files under `tests/` and under `packages/core/tests` resolve `@open-pencil/core` and its subpaths to `packages/core/src` through the root and Core tsconfig path mappings, but other package sources (`packages/dom-css/src`, `packages/mcp/src`, …) use their own tsconfig, where `@open-pencil/core/<subpath>` falls back to the package `exports` and therefore to `dist`. One process can hold both copies; only `packages/vue` maps Core to `src`. Aligning the other package tsconfigs is a packaging change (it affects `tsdown` declaration output), not a test change.
+
+## Repeatable component scenarios
+
+Run `bun run test:components` after changing components, instance synchronization, properties, variants, or layout. It combines the component editing suites, Scene Graph instance contracts, shared auto-layout contracts, agent property application, and property save/reopen checks. Build workspace packages first after changing cross-package code. Run `bun run test:components:browser` for the actual inspector, canvas, assets, clipboard and file workflows; browser tests also compare the component layout snapshots.
+
+The sequential scenarios in `packages/core/tests/editor/components/scenarios/` run against both a new document and a saved/reopened document. They follow connected edit sequences covering intermediate state, undo/redo, final save/reopen, and retained component links. Their deterministic text measurer tests layout state; browser snapshots separately test real fonts and painted bounds.
+
+| Scenario                                    | Assertions                                                                                                                                                                                                                |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Add and delete component layers             | Instances gain and lose exactly the matching layers; Hug and surrounding gaps update.                                                                                                                                     |
+| Repeated nested components                  | Two occurrences of one component and one of a different component remain distinct.                                                                                                                                        |
+| Edit or remove nested content               | Changes reach all corresponding occurrences, preserve the others, and undo without duplication.                                                                                                                           |
+| Reparent and reorder                        | Hierarchy and order propagate through nested frames.                                                                                                                                                                      |
+| Visibility defaults and overrides           | Hidden layers release space; explicit instance choices stay local.                                                                                                                                                        |
+| Long and short text                         | Wrapping, Hug sizes, sibling positions and custom text remain correct.                                                                                                                                                    |
+| Grow and shrink surrounding frames          | Fill instances and their nested frames or text follow alternating widths and heights, including undo/redo and save/reopen; component definitions and explicit minimum sizes remain intact.                                |
+| Resize ordinary frames after reopening      | Plain and auto-layout frames follow Fill on either axis, reposition siblings without overlaps, and retain fixed contents through repeated resizing and saves (`packages/core/tests/layout/auto-layout/resizing.test.ts`). |
+| Remove and restore component padding        | Definition and instances reposition their contents and update their outer Hug size; inner Hug height remains content-driven, including saved geometry, undo/redo and another save/reopen.                                 |
+| One property on several layers              | An existing instance value reaches newly linked layers; one undo restores every target.                                                                                                                                   |
+| Rename, unlink and delete properties        | Definitions, bindings and layers retain their intended identities.                                                                                                                                                        |
+| Typography and appearance                   | Defaults propagate, local overrides remain independent, and survive saving.                                                                                                                                               |
+| Clipping and corner overrides               | Both boolean values, zero radii, independent corners and smoothing survive component edits and repeated saves.                                                                                                            |
+| Nested variant switches                     | Both direct and exposed controls change intrinsic size and surrounding layout.                                                                                                                                            |
+| Nested instance swaps                       | Only the chosen occurrence changes, while names and component links remain intact.                                                                                                                                        |
+| Whole-instance exposure from imported files | Controls work alongside selective exposure, including removing exposure and undoing it.                                                                                                                                   |
+| 100 instances                               | Structural and visibility edits propagate consistently without duplicate layers.                                                                                                                                          |
+
+The companion component suites cover sparse variant combinations and conflicts, per-variant defaults, property order, slots, cycle rejection, excluded layers, fixed-size overrides and Fill redistribution. Keep additions in the owning suite; add a sequential scenario when a bug depends on several edits or reopening, rather than duplicating every isolated test here. Preview browser tests remain gated by the experimental preview flag.
+
+### Saved layout audit
+
+`packages/core/tests/layout/auto-layout/saved-state/` crosses ordinary frames, main components and instances with fresh, saved/reopened, and retained imported geometry. The matrix covers padding, gaps, alignment, visibility, fixed contents, text growth and shrinkage, live property previews, undo/redo and repeated saves. Additional sequences cover horizontal layouts, alternating container widths, minimum sizes, exclusion from flow, definition reordering, explicit instance overrides, and headless scripting geometry reads.
+
+Boundary checks preserve untouched imported offsets and appearance-only edits, restore canceled previews exactly, avoid undo entries for gestures that return to their starting value, and ensure batched edits invalidate one connected tree without changing unrelated trees. These deterministic geometry tests do not prove all Figma import behavior or font rendering; canvas snapshots and real-file checks provide separate evidence.
 
 ## Test purpose
 
@@ -111,3 +145,21 @@ Use the configured base URL and same-origin paths, never hard-coded ports in spe
 Storybook uses its own viewport, device scale and reduced-motion context. Its specs are excluded from app projects. Figma acceptance requires the desktop app's configured CDP connection.
 
 Native tests use an explicit test-only binary, separate application identity and test-owned credentials/profile. Never run acceptance against production secrets or clear user recovery data. Skip unsupported platforms rather than claim coverage. Ordinary WebDriver text input, trusted clipboard events, real IME and persistence across restarts are separate contracts.
+
+### Bundled desktop canvas helper
+
+`bun run build:mcp-sidecar` compiles this checkout's MCP server and imported dependencies into a standalone executable with an embedded Bun runtime. Tauri build hooks package it beside the application executable; generated binaries and dependency notices live in ignored `desktop/binaries/`. No runtime or package download occurs when the installed app starts canvas automation.
+
+After packaging a macOS app, verify its actual helper:
+
+```sh
+OPENPENCIL_TEST_MCP_BUNDLE="$PWD/scratch/builds/current/OpenPencil.app/Contents/MacOS/openpencil-mcp-http" \
+OPENPENCIL_TEST_MCP_DENY_ROOT="$PWD" \
+bun test ./packages/mcp/tests/desktop/bundle.test.ts
+```
+
+The test runner uses development dependencies, but the helper runs from a temporary directory with an empty executable search path and a separate home and discovery file. On macOS, its sandbox denies checkout reads and outbound networking except localhost. It verifies authenticated MCP, JSX preprocessing, app disconnect shutdown, and discovery cleanup. The macOS ARM release job runs this test against the packaged helper.
+
+`bun run build:native-test && bunx wdio run wdio.conf.ts --spec tests/e2e/native/mcp.spec.ts` builds the test-only desktop app and verifies that MCP creates, inspects, and undoes a frame in the real WebView. It also verifies missing-sidecar diagnostics and recovery. This is distinct from clean-machine acceptance.
+
+For clean-Mac acceptance, install only the complete `.app` on a fresh account or VM without Node, npm, Bun, an OpenPencil global helper, or a source checkout. Open a document and check **Settings → MCP** becomes **Running**. Connect an AI client to the app's authenticated MCP endpoint, ask it to create and inspect a frame, and verify the change appears on canvas and can be undone. Quit the app and confirm the helper exits; reopen and repeat. Record the macOS version and app build. A runtime-isolation test on a development Mac does not substitute for this installation test.

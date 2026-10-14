@@ -65,6 +65,7 @@ function selectOption(value: AcceptableValue) {
 
 <template>
   <ComboboxRoot
+    ref="root"
     v-model:open="open"
     :model-value="selectedOption"
     by="family"

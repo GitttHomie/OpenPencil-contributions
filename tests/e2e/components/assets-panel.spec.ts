@@ -329,10 +329,23 @@ test('demo exposes component set assets', async ({ page }) => {
   await page.getByRole('button', { name: 'List view' }).click()
   const assetsPanel = page.getByTestId('assets-panel')
 
-  await expect(assetsPanel).toContainText('Button')
-  await expect(assetsPanel).toContainText('2 variants · Variant')
-  await expect(assetsPanel).toContainText('Avatar')
-  await expect(assetsPanel).not.toContainText('Button/Primary')
+  const sets = await page.evaluate(() => {
+    const graph = window.openPencil?.getStore?.()?.graph
+    if (!graph) throw new Error('Editor unavailable')
+    return [...graph.getAllNodes()]
+      .filter((node) => node.type === 'COMPONENT_SET')
+      .map((node) => ({
+        name: node.name,
+        variants: graph.getChildren(node.id).filter((child) => child.type === 'COMPONENT').length
+      }))
+  })
+  expect(sets.length).toBeGreaterThan(0)
+  for (const set of sets) {
+    const item = assetsPanel.getByTestId('asset-item').filter({
+      has: page.getByText(set.name, { exact: true })
+    })
+    await expect(item).toContainText(`${set.variants} variants`)
+  }
 
   canvas.assertNoErrors()
 })

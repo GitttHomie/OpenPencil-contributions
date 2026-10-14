@@ -63,6 +63,7 @@ function collectVisibleLabels<
 }
 
 export class LabelCache {
+  private componentSets: CachedNodeLabel[] = []
   private sections: CachedSection[] = []
   private components: CachedComponent[] = []
   private nodeLabels: CachedNodeLabel[] = []
@@ -93,6 +94,7 @@ export class LabelCache {
     this.cachedSceneVersion = -1
     this.cachedPositionPreviewVersion = -1
     this.cachedPageId = null
+    this.componentSets = []
     this.sections = []
     this.components = []
     this.nodeLabels = []
@@ -130,6 +132,14 @@ export class LabelCache {
     )
   }
 
+  getComponentSets(
+    graph: SceneGraph,
+    viewport: Viewport,
+    preview?: RenderOverlays['rotationPreview']
+  ) {
+    return collectVisibleLabels(graph, viewport, this.componentSets, () => ({}), preview)
+  }
+
   getAllSections(): readonly CachedSection[] {
     return this.sections
   }
@@ -147,6 +157,7 @@ export class LabelCache {
   }
 
   private rebuild(graph: SceneGraph, pageId: string | null): void {
+    this.componentSets = []
     this.sections = []
     this.components = []
     this.nodeLabels = []
@@ -165,6 +176,10 @@ export class LabelCache {
     for (const childId of parent.childIds) {
       const child = graph.getNode(childId)
       if (!child || !child.visible) continue
+      if (child.type === 'COMPONENT_SET') {
+        const origin = graph.getAbsolutePosition(childId)
+        this.componentSets.push({ nodeId: childId, absX: origin.x, absY: origin.y })
+      }
       if (hasFrameTitle(child, parent)) {
         const origin = graph.getAbsolutePosition(childId)
         this.nodeLabels.push({ nodeId: childId, absX: origin.x, absY: origin.y })

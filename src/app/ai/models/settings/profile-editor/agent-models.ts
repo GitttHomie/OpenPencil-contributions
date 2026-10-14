@@ -38,7 +38,16 @@ export function useProfileAgentModels(draft: AIModelProfileDraft) {
         draft.acpIntegration,
         draft.acpOptions
       )
-      if (version === generation) catalog.value = result
+      if (version === generation) {
+        catalog.value = result
+        if (
+          result.imageInput !== undefined &&
+          (!result.imageInput || draft.imageSupport !== 'verified')
+        ) {
+          draft.imageSupport = result.imageInput ? 'advertised' : 'unsupported'
+          draft.capabilities = result.imageInput ? ['tools', 'vision'] : ['tools']
+        }
+      }
     } catch {
       if (version === generation) failed.value = true
     } finally {
@@ -62,6 +71,8 @@ export function useProfileAgentModels(draft: AIModelProfileDraft) {
     ) {
       draft.name = next ? `${providerName} · ${next}` : providerName
     }
+    draft.imageSupport = undefined
+    draft.capabilities = ['tools']
     draft.modelID = id
     draft.customModelID = ''
     draft.acpThinking = undefined
@@ -82,6 +93,8 @@ export function useProfileAgentModels(draft: AIModelProfileDraft) {
   watch(
     () => [draft.acpLaunch, draft.acpIntegration],
     () => {
+      draft.imageSupport = undefined
+      draft.capabilities = ['tools']
       generation++
       operation?.abort()
       catalog.value = null

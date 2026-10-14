@@ -12,7 +12,7 @@ import { useSceneComputed } from '#vue/internal/scene-computed/use'
 export function usePageList(includeInternal: () => boolean = () => false) {
   const editor = useEditor()
 
-  const pages = useSceneComputed(() => editor.graph.getPages(includeInternal()))
+  const pages = useSceneComputed(() => editor.getNavigablePages(includeInternal()))
   const currentPageId = computed(() => editor.state.currentPageId)
 
   return {

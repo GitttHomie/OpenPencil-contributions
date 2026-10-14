@@ -20,13 +20,14 @@ export function componentAuthoringContext(graph: SceneGraph, nodeId: string) {
   if (!node) return null
   let component: SceneNode | undefined = node
   if (node.type !== 'COMPONENT' && node.type !== 'COMPONENT_SET') {
-    component = node.parentId ? graph.getNode(node.parentId) : undefined
-    while (component && component.type !== 'COMPONENT') {
-      if (component.type === 'INSTANCE') return null
-      component = component.parentId ? graph.getNode(component.parentId) : undefined
-    }
+    component = node.parentId
+      ? graph.closest(
+          node.parentId,
+          (item) => item.type === 'COMPONENT' || item.type === 'INSTANCE'
+        )
+      : undefined
   }
-  if (!component) return null
+  if (!component || component.type === 'INSTANCE') return null
   const parent = component.parentId ? graph.getNode(component.parentId) : undefined
   const owner = parent?.type === 'COMPONENT_SET' ? parent : component
   const owners = owner.id === component.id ? [owner] : [owner, component]

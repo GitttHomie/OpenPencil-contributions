@@ -36,10 +36,7 @@ export function toolResultData(output: unknown): unknown {
     typeof item.text !== 'string'
   )
     return result
-  try {
-    const parsed: unknown = JSON.parse(item.text)
-    return parsed
-  } catch {
-    return result
-  }
+  const parsed = v.safeParse(v.pipe(v.string(), v.parseJson(), v.unknown()), item.text)
+  return parsed.success ? parsed.output : result
 }
+import * as v from 'valibot'

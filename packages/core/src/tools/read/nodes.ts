@@ -1,6 +1,7 @@
 import * as v from 'valibot'
 
 import type { FigmaNodeProxy } from '#core/figma-api/index'
+import { withBatch } from '#core/tools/batch/define'
 import { toolNumber, nodeIdInput } from '#core/tools/input'
 import { defineTool, nodeSummary, nodeToResult } from '#core/tools/schema'
 
@@ -10,6 +11,7 @@ interface TreeEntry {
   name: string
   w: number
   h: number
+  text?: string
   children?: TreeEntry[]
 }
 
@@ -37,6 +39,7 @@ function nodeToTreeEntry(
     w: node.width,
     h: node.height
   }
+  if (node.type === 'TEXT') entry.text = node.characters
   if (children.length > 0) entry.children = children
   return entry
 }
@@ -44,9 +47,9 @@ function nodeToTreeEntry(
 export const getPageTree = defineTool({
   name: 'get_page_tree',
   description:
-    'Get the node tree of the current page. Returns lightweight hierarchy: id, type, name, size. Use depth, root_id, or node_types to keep large pages small. Use get_node for full properties of a specific node.',
+    'Get the node tree of the current page. Returns lightweight hierarchy: id, type, name, size, and text for TEXT nodes. Use depth, root_id, or node_types to keep large pages small. Use get_node for full properties of a specific node.',
   execution: { kind: 'sync', mutation: 'none' },
-  input: v.object({
+  input: v.strictObject({
     depth: v.optional(
       toolNumber(
         v.pipe(
@@ -91,34 +94,37 @@ export const getPageTree = defineTool({
   }
 })
 
-export const getNode = defineTool({
-  name: 'get_node',
-  description:
-    'Get detailed properties of a node by ID. Use depth to limit child recursion (0 = node only, 1 = direct children, etc). Default: unlimited.',
-  execution: { kind: 'sync', mutation: 'none' },
-  input: v.object({
-    id: nodeIdInput,
-    depth: v.optional(
-      toolNumber(
-        v.pipe(
-          v.number(),
-          v.description('Max depth of children to include (0 = no children). Default: unlimited')
+export const getNode = withBatch(
+  defineTool({
+    name: 'get_node',
+    description:
+      'Get detailed properties of a node by ID. Use depth to limit child recursion (0 = node only, 1 = direct children, etc). Default: unlimited.',
+    execution: { kind: 'sync', mutation: 'none' },
+    input: v.strictObject({
+      id: nodeIdInput,
+      depth: v.optional(
+        toolNumber(
+          v.pipe(
+            v.number(),
+            v.description('Max depth of children to include (0 = no children). Default: unlimited')
+          )
         )
       )
-    )
+    }),
+    execute: (figma, { id, depth }) => {
+      const node = figma.getNodeById(id)
+      if (!node) return { error: `Node "${id}" not found` }
+      return nodeToResult(node, depth)
+    }
   }),
-  execute: (figma, { id, depth }) => {
-    const node = figma.getNodeById(id)
-    if (!node) return { error: `Node "${id}" not found` }
-    return nodeToResult(node, depth)
-  }
-})
+  { target: 'id', readDefaults: { depth: 0 } }
+)
 
 export const findNodes = defineTool({
   name: 'find_nodes',
   description: 'Find nodes by name pattern and/or type.',
   execution: { kind: 'sync', mutation: 'none' },
-  input: v.object({
+  input: v.strictObject({
     name: v.optional(
       v.pipe(v.string(), v.description('Name substring to match (case-insensitive)'))
     ),

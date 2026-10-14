@@ -32,21 +32,21 @@ Each collection can have multiple modes (e.g., Light and Dark). Modes appear as 
 
 The default mode is **Always on** and goes in `:root`. Every other mode has **Applies when**, which says when the mode takes over in the exported stylesheet; the CSS it writes is shown underneath:
 
-| Applies when | CSS |
-| --- | --- |
-| **Switched manually** | the collection's switch attribute set to the mode, such as `[data-theme="dark"]` for a Theme collection's Dark mode |
-| **System is in dark mode** / **System is in light mode** | `@media (prefers-color-scheme: dark)` / `light` |
-| **High contrast is on** | `@media (prefers-contrast: more)` |
-| **Reduced motion is on** | `@media (prefers-reduced-motion: reduce)` |
-| **Screen is narrower than** / **Screen is wider than** a width | `@media (max-width: 640px)` / `min-width` |
-| **Container is narrower than** / **Container is wider than** a width | `@container (max-width: 640px)` / `min-width` |
-| **Custom CSS** | any selector, or a `@media`, `@supports`, or `@container` query |
+| Applies when                                                         | CSS                                                                                                                 |
+| -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| **Switched manually**                                                | the collection's switch attribute set to the mode, such as `[data-theme="dark"]` for a Theme collection's Dark mode |
+| **System is in dark mode** / **System is in light mode**             | `@media (prefers-color-scheme: dark)` / `light`                                                                     |
+| **High contrast is on**                                              | `@media (prefers-contrast: more)`                                                                                   |
+| **Reduced motion is on**                                             | `@media (prefers-reduced-motion: reduce)`                                                                           |
+| **Screen is narrower than** / **Screen is wider than** a width       | `@media (max-width: 640px)` / `min-width`                                                                           |
+| **Container is narrower than** / **Container is wider than** a width | `@container (max-width: 640px)` / `min-width`                                                                       |
+| **Custom CSS**                                                       | any selector, or a `@media`, `@supports`, or `@container` query                                                     |
 
 On the canvas, a layer shows a mode when you set the layer to it, whatever the condition. In exported code, a manually switched mode is turned on by adding its attribute to an element, so layers set to it export with that attribute. Layers set to a mode with any other condition, custom selectors included, export with literal values instead of tokens, because the stylesheet, not the layer, decides when that mode applies.
 
 ## Managing Variables
 
-Variables are grouped by the folders in their names (`Brand/Primary` appears as *Primary* under *Brand*), with their CSS name and one value per mode.
+Variables are grouped by the folders in their names (`Brand/Primary` appears as _Primary_ under _Brand_), with their CSS name and one value per mode.
 
 - **Create variable** — click **Create variable** (or **+**) and pick a type; the new variable opens for editing
 - **Select** — click a row, or move with the arrow keys and press Enter. Shift-click selects a range, and Cmd-click (Ctrl-click on Windows and Linux) adds or removes one
@@ -71,6 +71,15 @@ Selecting a variable edits:
 
 The bottom of the dialog shows the active collection as CSS custom properties. The copy button copies the whole document's variables as CSS or as a Tailwind v4 theme, so aliases to other collections resolve.
 
+## Importing and Exporting Design Tokens
+
+Variables and styles move between OpenPencil, Figma, and code as [W3C design tokens](https://www.designtokens.org/):
+
+- **Export:** in the stylesheet's copy menu, choose **Export as design tokens**. The zip holds one file per collection mode, which Figma imports as a mode; text and effect styles as typography and shadow tokens; and a resolver that combines them for tools such as Style Dictionary
+- **Import:** click **Import design tokens** in the toolbar and pick token files or a zip. Files from Figma, a resolver with the files it names, and Tokens Studio themes all work
+- **Choose where it goes:** before anything changes, the dialog shows each collection and mode it found and where it goes: a new collection or mode, an existing one, or nowhere. Variables and styles with the same name are updated and the rest is added; nothing is deleted. It counts what will be added, updated, and skipped, and lists why each skipped token was left out
+- The import is one step: **Undo** takes it all back
+
 ## Binding Variables to Fills
 
 In the Fill section of the properties panel, use the variable picker to bind a color variable to a node's fill.
@@ -80,7 +89,39 @@ In the Fill section of the properties panel, use the variable picker to bind a c
 
 When the variable's value changes (or when switching modes), all bound fills update automatically.
 
+## Numeric and Boolean formulas
+
+Select a number or Boolean variable and edit its **Value** field. The same field accepts a literal,
+a reference such as `{spacing/base}`, or a formula such as `{spacing/base} * 2`. References appear
+as removable pills with their name and resolved value; operators and numbers remain editable
+around them. The picker shows resolved values for the edited mode and inserts a reference at the
+cursor. Copying a formula retains its reference syntax. Press Enter or leave the field to save; Escape restores the saved text,
+and invalid drafts leave the document unchanged. Replace the source with a literal to disconnect it.
+
+- Numbers support `+`, `-`, `*`, `/`, unary signs and parentheses: `{spacing/base} * 2`.
+- Booleans support `AND`, `OR`, `NOT`, `XOR`, `NAND`, `NOR`, parentheses, and `true`/`false`:
+  `{state/enabled} AND NOT {state/busy}`. `NOT` binds first, then `AND`/`NAND`, then `XOR`,
+  then `OR`/`NOR`; operators at the same precedence associate left to right.
+- References retain their IDs when variables are renamed. Use `{Collection::variable/name}` when
+  names are ambiguous. Dependencies follow the receiving layer's modes in each collection.
+- Formulas use stored units, including pixels for lengths; literal numbers use the selected display
+  unit. Unit conversion functions and numeric comparisons are not supported.
+- Number values also accept CSS expressions such as `clamp(1rem, 4vw, 2rem)` in the same field.
+  These affect CSS export and keep the current canvas value as their fallback, shown below the input.
+  Replacing CSS with a literal, reference or formula clears the CSS override in the same undo step.
+
+Formulas update bound layout and visibility, support undo, and remain editable after `.fig` saves,
+clipboard transfer, and collaboration. Missing dependencies or invalid results stay unresolved;
+the last valid canvas property is retained. Formula authoring currently supports numbers and
+Booleans; CSS and DTCG export report formulas as unsupported instead of silently flattening them.
+
 ## Tips
+
+Numeric property fields show both the bound variable's name and its current value. Use the variable
+picker beside **Appearance → Corner smoothing** to bind smoothing, including across a selection.
+Smoothing variables store a fraction from 0 to 1: `0.6` displays as **60%**. Creating a variable from
+the percentage field converts the displayed value automatically. Smoothing does not increase when
+the object is scaled.
 
 - Use collections to group related tokens (e.g., "Primitives" for raw colors, "Semantic" for role-based aliases, "Spacing" for layout values).
 - Modes are useful for theme switching — define Light and Dark mode values in the same collection.

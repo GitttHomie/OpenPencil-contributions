@@ -20,13 +20,14 @@ type VerificationTarget = Pick<
 >
 export type AgentModelVerifier = (
   target: VerificationTarget,
-  signal: AbortSignal
+  signal: AbortSignal,
+  imageProbe?: { data: string; expected: string }
 ) => Promise<ProviderConnectionTestResult>
 
 export const agentModelVerifierKey: InjectionKey<AgentModelVerifier> = Symbol('agentModelVerifier')
 const VERIFICATION_TIMEOUT_MS = 30_000
 
-export const verifyAgentModel: AgentModelVerifier = async (target, signal) => {
+export const verifyAgentModel: AgentModelVerifier = async (target, signal, imageProbe) => {
   const definition = ACP_AGENTS.find((agent) => `acp:${agent.id}` === target.providerID)
   if (!definition) return { ok: false, reason: 'unknown' }
   const [{ ACPChatTransport }, { homeDir }] = await Promise.all([
@@ -56,7 +57,7 @@ export const verifyAgentModel: AgentModelVerifier = async (target, signal) => {
       )
     })
     signal.throwIfAborted()
-    await Promise.race([transport.verifyModel(), interrupted])
+    await Promise.race([transport.verifyModel(imageProbe), interrupted])
     return { ok: true }
   } catch (error) {
     return { ok: false, reason: classifyConnectionError(error) }

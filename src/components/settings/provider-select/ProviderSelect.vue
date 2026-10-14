@@ -5,7 +5,8 @@ import { ACP_AGENTS, AI_PROVIDERS, type AIProviderID } from '@open-pencil/core/c
 import { useI18n } from '@open-pencil/vue'
 
 import { useLocalAgents } from '@/app/ai/agents/use'
-import AppGroupedSelect from '@/components/ui/select/AppGroupedSelect.vue'
+import AppSelect from '@/components/ui/select/AppSelect.vue'
+import type { AppSelectGroup } from '@/components/ui/select/select'
 
 const { desktop } = useLocalAgents()
 const { ai } = useI18n()
@@ -40,12 +41,12 @@ const displayName = computed(() => {
 })
 
 const groups = computed(() => {
-  const result: Array<{ label?: string; items: Array<{ value: string; label: string }> }> = []
+  const result: AppSelectGroup<string>[] = []
 
   if (acpAgents.value.length) {
     result.push({
       label: ai.value.localAgentsTitle,
-      items: acpAgents.value.map((agent) => ({
+      options: acpAgents.value.map((agent) => ({
         value: `acp:${agent.id}`,
         label: agent.name
       }))
@@ -54,7 +55,7 @@ const groups = computed(() => {
 
   result.push({
     label: acpAgents.value.length ? ai.value.provider : undefined,
-    items: [...AI_PROVIDERS]
+    options: [...AI_PROVIDERS]
       .sort((left, right) => left.name.localeCompare(right.name))
       .map((provider) => ({
         value: provider.id,
@@ -67,5 +68,5 @@ const groups = computed(() => {
 </script>
 
 <template>
-  <AppGroupedSelect v-model="providerID" :groups="groups" :display-value="displayName" :ui="ui" />
+  <AppSelect v-model="providerID" :groups="groups" :placeholder="displayName" :ui="ui" />
 </template>

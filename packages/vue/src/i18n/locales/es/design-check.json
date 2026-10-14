@@ -89,5 +89,7 @@
   "ruleNoMixedStyles": "Estilos de texto mezclados",
   "ruleNoMixedStylesHelp": "Varios estilos en una capa de texto se rompen fácilmente al editar.",
   "ruleNoDetachedInstances": "Parece un componente",
-  "ruleNoDetachedInstancesHelp": "Este marco parece un elemento reutilizable. Usa una instancia de componente."
+  "ruleNoDetachedInstancesHelp": "Este marco parece un elemento reutilizable. Usa una instancia de componente.",
+  "fixConvertToFrame": "Convertir en marco",
+  "fixDeleteLayer": "Eliminar capa"
 }

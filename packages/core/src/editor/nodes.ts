@@ -2,21 +2,23 @@ import { pick } from 'es-toolkit/object'
 
 import {
   styleDetachmentChanges,
+  retainEditedTextStyle,
   findInstanceAncestor,
   cloneInstanceOverrideState,
   recordInstanceOverride,
+  vectorGeometryChanges,
   type SceneNode
 } from '@open-pencil/scene-graph'
 
+import { manualTextSizingChanges, textAutoResizeChanges } from '#core/layout/text-auto-resize'
 import { reconcileVariableLayouts } from '#core/layout/variables'
-import { applyLintFixes as applyFixes, type LintFixRequest } from '#core/lint/fixes'
 
+import { applyBoundVisibilityEdit, bindsVisibility } from './components/authoring/visibility-edit'
 import { createLayoutModeActions } from './layout-mode'
 import { createNodePreviewActions } from './node-preview'
 import { createNudgeActions } from './nudge'
 import { createNumericPropertyGroupActions } from './numeric-property-groups'
 import { snapGeometryChanges } from './pixel-snapping'
-import { manualTextSizingChanges, textAutoResizeChanges } from './text/auto-resize'
 import { pathTextEditChanges } from './text/path-edit'
 import type { EditorContext } from './types'
 import { createVariableBindingActions } from './variable-bindings'
@@ -31,6 +33,7 @@ export function opacityFromBuffer(buffer: string): number {
 }
 
 export function createNodeActions(ctx: EditorContext) {
+  // Function declarations below are hoisted, so the preview can wrap updateNode here.
   const previewActions = createNodePreviewActions(ctx, updateNode)
   const layoutModeActions = createLayoutModeActions(ctx, previewActions.beginNodePreview)
   const nudgeActions = createNudgeActions(ctx)
@@ -52,14 +55,17 @@ export function createNodeActions(ctx: EditorContext) {
   function updateNode(id: string, changes: Partial<SceneNode>) {
     const node = ctx.graph.getNode(id)
     if (!node) return
-    changes = { ...changes, ...manualTextSizingChanges(node, changes) }
+    changes = retainEditedTextStyle(node, { ...changes, ...manualTextSizingChanges(node, changes) })
     // Path-edit last so its reflowed glyphs win over auto-resize's glyph clear
     // (path text is textAutoResize NONE so they don't collide today).
-    const nextChanges = styleDetachmentChanges(node, {
-      ...changes,
-      ...textAutoResizeChanges(node, changes),
-      ...pathTextEditChanges(node, changes)
-    })
+    const nextChanges = vectorGeometryChanges(
+      node,
+      styleDetachmentChanges(node, {
+        ...changes,
+        ...textAutoResizeChanges(node, changes),
+        ...pathTextEditChanges(node, changes)
+      })
+    )
     ctx.graph.updateNode(id, nextChanges)
     recordInstanceOverride(ctx.graph, id, Object.keys(nextChanges))
     runChangedLayout(id, nextChanges)
@@ -68,13 +74,31 @@ export function createNodeActions(ctx: EditorContext) {
   function updateNodeWithUndo(id: string, changes: Partial<SceneNode>, label = 'Update') {
     const node = ctx.graph.getNode(id)
     if (!node) return
-    changes = { ...changes, ...manualTextSizingChanges(node, changes) }
+    changes = retainEditedTextStyle(node, { ...changes, ...manualTextSizingChanges(node, changes) })
+    // A layer a boolean property shows or hides sets the property too, in the same undo step.
+    // It takes the value even where the layer already shows it, so the two agree.
+    const visible = changes.visible
+    if (visible !== undefined && bindsVisibility(node)) {
+      ctx.undo.runBatch(label, () => {
+        recordNodeUpdate(node, changes, label)
+        applyBoundVisibilityEdit(ctx, id, visible)
+      })
+      return
+    }
+    recordNodeUpdate(node, changes, label)
+  }
+
+  function recordNodeUpdate(node: SceneNode, changes: Partial<SceneNode>, label: string) {
+    const { id } = node
     // Same ordering rationale as updateNode: reflowed path-text glyphs win.
-    const nextChanges = styleDetachmentChanges(node, {
-      ...changes,
-      ...textAutoResizeChanges(node, changes),
-      ...pathTextEditChanges(node, changes)
-    })
+    const nextChanges = vectorGeometryChanges(
+      node,
+      styleDetachmentChanges(node, {
+        ...changes,
+        ...textAutoResizeChanges(node, changes),
+        ...pathTextEditChanges(node, changes)
+      })
+    )
     const owner = findInstanceAncestor(ctx.graph, id)
     const previousOverrides = owner
       ? cloneInstanceOverrideState(owner.instanceOverrides)
@@ -127,24 +151,9 @@ export function createNodeActions(ctx: EditorContext) {
     )
   }
 
-  /** Applies lint fixes that still hold as one undo step; returns how many applied. */
-  function applyLintFixes(requests: readonly LintFixRequest[]): number {
-    return ctx.undo.runBatch('Fix design issues', () =>
-      applyFixes(
-        {
-          graph: ctx.graph,
-          updateNode: (id, changes) => updateNodeWithUndo(id, changes, 'Fix design issue'),
-          bindVariable: variableBindingActions.bindVariable
-        },
-        requests
-      )
-    )
-  }
-
   return {
     snapGeometry,
     updateNode,
-    applyLintFixes,
     ...previewActions,
     updateNodeWithUndo,
     setOpacity,

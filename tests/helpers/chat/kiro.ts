@@ -106,13 +106,15 @@ export async function installKiroPermissionTransport(page: Page) {
                     toolCall: { toolCallId: name, title, status: 'pending' },
                     options: [
                       { optionId: 'accept', kind: 'allow_once', name: 'Allow' },
+                      { optionId: 'always-accept', kind: 'allow_always', name: 'Always allow' },
                       { optionId: 'reject', kind: 'reject_once', name: 'Deny' }
                     ]
                   },
                   scope
                 )
                 const allowed =
-                  response.outcome.outcome === 'selected' && response.outcome.optionId === 'accept'
+                  response.outcome.outcome === 'selected' &&
+                  ['accept', 'always-accept'].includes(response.outcome.optionId)
                 emit({
                   sessionUpdate: 'tool_call_update',
                   toolCallId: name,

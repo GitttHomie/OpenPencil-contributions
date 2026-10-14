@@ -1,5 +1,7 @@
 import type { SceneGraph, SceneNode } from '@open-pencil/scene-graph'
 
+import { getNodeEditCapability } from '#core/editor/capabilities'
+import { prepareSlotEdits } from '#core/editor/components/slots/index'
 import type { EditorContext } from '#core/editor/types'
 
 /**
@@ -22,34 +24,55 @@ export function ungroupNode(graph: SceneGraph, nodeId: string): string[] | null 
 }
 
 export function ungroupSelected(ctx: EditorContext, selectedNode: SceneNode | undefined) {
-  if (selectedNode?.type !== 'GROUP') return
+  if (!selectedNode || !['GROUP', 'FRAME'].includes(selectedNode.type)) return
+  if (selectedNode.locked || !getNodeEditCapability(ctx.graph, selectedNode.id).editable) return
+  const label = selectedNode.type === 'FRAME' ? 'Remove frame' : 'Ungroup'
+  ctx.undo.runBatch(label, () => {
+    if (!selectedNode.parentId || !prepareSlotEdits(ctx, [selectedNode.id, selectedNode.parentId]))
+      return
+    releaseContainer(ctx, selectedNode, label)
+  })
+}
 
-  const node = selectedNode
+function releaseContainer(ctx: EditorContext, node: SceneNode, label: string) {
   const parentId = node.parentId ?? ctx.state.currentPageId
   const parent = ctx.graph.getNode(parentId)
   if (!parent) return
 
   const groupIndex = parent.childIds.indexOf(node.id)
   const prevSelection = new Set(ctx.state.selectedIds)
-  const origPositions = node.childIds.map((id) => {
+  const origPositions = node.childIds.flatMap((id) => {
     const child = ctx.graph.getNode(id)
-    if (!child) return { id, x: 0, y: 0 }
-    return { id, x: child.x, y: child.y }
+    if (!child) return []
+    return [
+      {
+        id,
+        x: child.x,
+        y: child.y,
+        width: child.width,
+        height: child.height,
+        rotation: child.rotation,
+        flipX: child.flipX,
+        flipY: child.flipY
+      }
+    ]
   })
   const groupId = node.id
-  const groupSnapshot = { ...node, childIds: [...node.childIds] }
+  const groupSnapshot = structuredClone(node)
 
   const ungroup = () => {
     const childIds = ungroupNode(ctx.graph, groupId)
     if (childIds) ctx.setSelectedIds(new Set(childIds))
+    ctx.runLayoutForNode(parentId)
+    ctx.requestRender()
   }
   ungroup()
 
   ctx.undo.push({
-    label: 'Ungroup',
+    label,
     forward: ungroup,
     inverse: () => {
-      const g = ctx.graph.createNode('GROUP', parentId, {
+      const g = ctx.graph.createNode(groupSnapshot.type, parentId, {
         ...groupSnapshot,
         childIds: [],
         id: groupId
@@ -57,8 +80,11 @@ export function ungroupSelected(ctx: EditorContext, selectedNode: SceneNode | un
       ctx.graph.insertChildAt(g.id, parentId, groupIndex)
       for (const orig of origPositions) {
         ctx.graph.reparentNode(orig.id, g.id)
-        ctx.graph.updateNode(orig.id, { x: orig.x, y: orig.y })
+        const { id, ...transform } = orig
+        ctx.graph.updateNode(id, transform)
       }
+      ctx.runLayoutForNode(g.id)
+      ctx.requestRender()
       ctx.setSelectedIds(prevSelection)
     }
   })

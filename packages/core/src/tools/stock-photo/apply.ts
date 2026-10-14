@@ -1,3 +1,6 @@
+import { TimeoutError } from 'es-toolkit/error'
+import { withTimeout } from 'es-toolkit/promise'
+
 import type { Fill } from '@open-pencil/scene-graph'
 
 import type { FigmaAPI } from '#core/figma-api/index'
@@ -12,6 +15,8 @@ const STOCK_PHOTO_TARGET_TYPES: ReadonlySet<FigmaNodeProxy['type']> = new Set([
   'COMPONENT',
   'INSTANCE'
 ])
+// Settle before the MCP bridge's deadline, releasing the document edit queue.
+const PHOTO_TIMEOUT_MS = 15_000
 
 export interface PhotoRequest {
   id: string
@@ -35,7 +40,8 @@ export interface PhotoResult {
 export async function applyPhoto(
   figma: FigmaAPI,
   provider: StockPhotoProvider,
-  req: PhotoRequest
+  req: PhotoRequest,
+  timeoutMs = PHOTO_TIMEOUT_MS
 ): Promise<PhotoResult> {
   const node = figma.getNodeById(req.id)
   if (!node) return { id: req.id, error: 'Not found' }
@@ -51,25 +57,44 @@ export async function applyPhoto(
   const orientation = req.orientation ?? 'landscape'
   const targetDim = Math.max(node.width, node.height)
 
-  let results: StockPhotoResult[]
+  const controller = new AbortController()
+  let downloaded: { photo: StockPhotoResult; imageBytes: Uint8Array }
   try {
-    results = await provider.search(req.query, { perPage, orientation, targetDim })
+    // Only preparation runs behind the deadline. A late credential prompt or a
+    // provider ignoring cancellation must never place an image after failure.
+    downloaded = await withTimeout(
+      async () => {
+        const results = await provider.search(req.query, {
+          perPage,
+          orientation,
+          targetDim,
+          signal: controller.signal
+        })
+        controller.signal.throwIfAborted()
+        if (results.length === 0) throw new Error(`No photos for "${req.query}"`)
+        const photo = results[Math.min(req.index ?? 0, results.length - 1)]
+        const response = await fetch(photo.url, { signal: controller.signal })
+        if (!response.ok) throw new Error(`Download ${response.status}`)
+        const imageBytes = new Uint8Array(await response.arrayBuffer())
+        controller.signal.throwIfAborted()
+        return { photo, imageBytes }
+      },
+      timeoutMs,
+      { signal: controller.signal }
+    )
   } catch (err) {
-    return { id: req.id, error: err instanceof Error ? err.message : String(err) }
+    let error = err instanceof Error ? err.message : String(err)
+    if (err instanceof TimeoutError)
+      error =
+        'Photo access timed out before placement. Check stock-photo credentials or network access before retrying; no image was placed.'
+    return {
+      id: req.id,
+      error
+    }
+  } finally {
+    controller.abort()
   }
-
-  if (results.length === 0) return { id: req.id, error: `No photos for "${req.query}"` }
-  const photo = results[Math.min(req.index ?? 0, results.length - 1)]
-
-  let imageBytes: Uint8Array
-  try {
-    const response = await fetch(photo.url)
-    if (!response.ok) return { id: req.id, error: `Download ${response.status}` }
-    imageBytes = new Uint8Array(await response.arrayBuffer())
-  } catch (err) {
-    return { id: req.id, error: `Download: ${err instanceof Error ? err.message : String(err)}` }
-  }
-
+  const { photo, imageBytes } = downloaded
   const image = figma.createImage(imageBytes)
   const imageFill: Fill = {
     type: 'IMAGE',
@@ -79,6 +104,11 @@ export async function applyPhoto(
     visible: true,
     opacity: 1
   }
+  if (typeof node.fills === 'symbol')
+    return {
+      id: req.id,
+      error: 'This text has mixed character fills; choose a frame for the photo.'
+    }
   node.fills = withImageFill(node.fills, imageFill)
 
   return {

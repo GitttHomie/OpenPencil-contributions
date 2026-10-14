@@ -108,3 +108,79 @@ test('direct JSX renders expose the same spacing feedback as MCP tree renders', 
     designFeedback: [{ code: 'unbound-spacing', nodeIds: expect.any(Array) }]
   })
 })
+
+test('nested component sets report overlapping variants and overflowing definitions', () => {
+  const graph = new SceneGraph()
+  const page = graph.getPages()[0]
+  const board = graph.createNode('FRAME', page.id, { width: 1250, height: 300 })
+  const set = graph.createNode('COMPONENT_SET', board.id, { width: 100, height: 100 })
+  const first = graph.createNode('COMPONENT', set.id, { name: 'Default', width: 342, height: 56 })
+  const second = graph.createNode('COMPONENT', set.id, { name: 'Pressed', width: 342, height: 56 })
+  const findings = designFeedback(graph, [board.id])
+  expect(findings).toContainEqual(
+    expect.objectContaining({ code: 'component-overlap', nodeIds: [first.id, second.id, set.id] })
+  )
+  expect(findings).toContainEqual(
+    expect.objectContaining({ code: 'component-overflow', nodeIds: [first.id, set.id] })
+  )
+  graph.updateNode(set.id, { width: 744 })
+  graph.updateNode(second.id, { x: 362 })
+  expect(designFeedback(graph, [board.id])).toEqual([])
+})
+
+test('overlapping definitions in a nested board row are reported', () => {
+  const graph = new SceneGraph()
+  const board = graph.createNode('FRAME', graph.getPages()[0].id, { width: 800, height: 300 })
+  const row = graph.createNode('FRAME', board.id, { width: 800, height: 100 })
+  const first = graph.createNode('COMPONENT_SET', row.id, { width: 342, height: 56 })
+  const second = graph.createNode('COMPONENT', row.id, { x: 124, width: 120, height: 30 })
+  expect(designFeedback(graph, [board.id])).toContainEqual(
+    expect.objectContaining({ code: 'component-overlap', nodeIds: [first.id, second.id, row.id] })
+  )
+})
+
+test('definition checks leave decorative overlaps, badges and hidden variants alone', () => {
+  const graph = new SceneGraph()
+  const board = graph.createNode('FRAME', graph.getPages()[0].id, { width: 300, height: 100 })
+  const component = graph.createNode('COMPONENT', board.id, { width: 100, height: 40 })
+  graph.createNode('FRAME', component.id, { x: 90, y: -10, width: 30, height: 30 })
+  graph.createNode('FRAME', component.id, { width: 100, height: 40 })
+  graph.createNode('COMPONENT', board.id, { name: 'Hidden', visible: false, width: 500 })
+  const hidden = graph.createNode('FRAME', board.id, { visible: false })
+  graph.createNode('COMPONENT', hidden.id, { name: 'Hidden descendant', width: 500 })
+  expect(designFeedback(graph, [board.id])).toEqual([])
+})
+
+test('definition layout feedback is bounded on large broken sets', () => {
+  const graph = new SceneGraph()
+  const set = graph.createNode('COMPONENT_SET', graph.getPages()[0].id)
+  for (let index = 0; index < 100; index++)
+    graph.createNode('COMPONENT', set.id, { name: `Variant ${index}` })
+  expect(
+    designFeedback(graph, [set.id]).filter((finding) => finding.code === 'component-overlap')
+  ).toHaveLength(3)
+})
+
+test('a row enclosing definitions cannot hide overflow from its outer board', async () => {
+  const graph = new SceneGraph()
+  const result = await render.execute(new FigmaAPI(graph), {
+    jsx: `<Frame name="Board" w={1250} h="hug" flex="col" p={24}>
+      <Frame name="Definitions" flex="row" gap={24}>
+        <ComponentSet name="Button">
+          <Component name="State=Default" w={342} h={56} />
+          <Component name="State=Pressed" w={342} h={56} />
+        </ComponentSet>
+        <Component name="Trait" w={120} h={30} />
+        <Component name="Status" w={390} h={44} />
+      </Frame>
+    </Frame>`
+  })
+  expect(result).toMatchObject({
+    designFeedback: expect.arrayContaining([
+      expect.objectContaining({
+        code: 'component-overflow',
+        message: expect.stringContaining('"Definitions"')
+      })
+    ])
+  })
+})

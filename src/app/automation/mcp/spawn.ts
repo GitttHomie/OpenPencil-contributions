@@ -1,7 +1,6 @@
 import { promiseTimeout } from '@vueuse/core'
 import * as v from 'valibot'
 
-import { AUTOMATION_HTTP_PORT } from '@open-pencil/core/constants'
 import { randomHex } from '@open-pencil/core/random'
 import type { DiscoveryInfo } from '@open-pencil/mcp/discovery'
 import {
@@ -12,23 +11,23 @@ import {
 
 import { APP_VERSION } from '@/app/runtime/version'
 import { decodeTauriStderr } from '@/app/shell/ui'
-import { resolvePlatformCommand } from '@/app/tauri/command'
 import { isTauri } from '@/app/tauri/env'
 
 import { DEV_MCP_RESTART_PATH, type DevMCPConfiguration } from './dev-control'
+import { classifySpawnFailure, mcpFailure, MCPStartupError, type MCPFailure } from './failure'
+export { getMCPServerURL } from './endpoint'
+import { IS_NATIVE_TEST, LOCAL_AUTOMATION_HTTP_URL, getLocalMCPPort } from './endpoint'
 import {
-  classifySpawnFailure,
-  mcpFailure,
-  MCP_INSTALL_TARGET,
-  MCPStartupError,
-  type MCPFailure
-} from './failure'
-import { disabledMCPTools, mcpAuthenticationEnabled, mcpRootDirectory } from './preferences'
+  disabledMCPTools,
+  mcpAuthenticationEnabled,
+  mcpRootDirectory,
+  mcpScope
+} from './preferences'
 
 export interface AutomationHealth {
   status: 'ok' | 'no_app'
+  bundled?: boolean
   version?: string
-  installCommand?: string
   authRequired?: boolean
   discoveryPath?: string
   tools?: ToolDescriptor[]
@@ -40,20 +39,13 @@ export interface AutomationServerHandle {
   managed: boolean
 }
 
-const DEV_AUTOMATION_HTTP_URL = import.meta.env.DEV
-  ? __OPENPENCIL_LOCAL_AUTOMATION_HTTP_URL__
-  : `http://127.0.0.1:${AUTOMATION_HTTP_PORT}`
-export function getMCPServerURL(): string {
-  return `${DEV_AUTOMATION_HTTP_URL}/mcp`
-}
-
 const DEV_AUTOMATION_AUTH_TOKEN =
   import.meta.env.DEV && typeof __OPENPENCIL_LOCAL_AUTOMATION_TOKEN__ === 'string'
     ? __OPENPENCIL_LOCAL_AUTOMATION_TOKEN__
     : null
 const noop = () => undefined
 const MAX_STARTUP_STDERR_LENGTH = 8_192
-const MCP_EXECUTABLE = 'openpencil-mcp-http'
+const MCP_SIDECAR = 'binaries/openpencil-mcp-http'
 
 interface MCPLookup {
   available: boolean
@@ -104,7 +96,7 @@ function toError(error: unknown): Error {
 
 function missingMCPError(searched: string[] = []): Error {
   return new MCPStartupError(
-    `MCP automation is not installed. Install ${MCP_INSTALL_TARGET} globally with your package manager, then restart OpenPencil.`,
+    'The bundled canvas helper is missing. Reinstall the complete OpenPencil application.',
     searched.length > 0
       ? mcpFailure('not-installed', searched.join(', '))
       : mcpFailure('not-installed')
@@ -160,6 +152,8 @@ async function computeExpectedDiscoveryPath(): Promise<string> {
   const { homeDir, join } = await import('@tauri-apps/api/path')
   const home = await homeDir()
   if (!home) throw new Error('homeDir() returned an empty string')
+
+  if (IS_NATIVE_TEST) return join(home, '.openpencil-native-test', 'mcp.json')
 
   const isMac = navigator.platform.includes('Mac')
   const isWindows = navigator.platform.includes('Win')
@@ -225,6 +219,7 @@ async function resolveDiscoveryPath(healthDiscoveryPath?: string): Promise<strin
 
 interface AutomationHealthRecord {
   status?: unknown
+  bundled?: unknown
   version?: unknown
   installCommand?: unknown
   authRequired?: unknown
@@ -262,14 +257,14 @@ function parseAutomationHealth(value: unknown): AutomationHealth | null {
   if (!isAutomationHealthRecord(value)) return null
   if (value.status !== 'ok' && value.status !== 'no_app') return null
   const version = optionalString(value.version)
-  const installCommand = optionalString(value.installCommand)
   const authRequired = optionalBoolean(value.authRequired)
+  const bundled = optionalBoolean(value.bundled)
   const discoveryPath = optionalString(value.discoveryPath)
   const tools = parseToolDescriptors(value.tools)
   if (
     version === null ||
-    installCommand === null ||
     authRequired === null ||
+    bundled === null ||
     discoveryPath === null ||
     tools === null
   ) {
@@ -277,8 +272,8 @@ function parseAutomationHealth(value: unknown): AutomationHealth | null {
   }
   const health: AutomationHealth = { status: value.status }
   if (version !== undefined) health.version = version
-  if (installCommand !== undefined) health.installCommand = installCommand
   if (authRequired !== undefined) health.authRequired = authRequired
+  if (bundled !== undefined) health.bundled = bundled
   if (discoveryPath !== undefined) health.discoveryPath = discoveryPath
   if (tools !== undefined) health.tools = tools
   return health
@@ -289,7 +284,7 @@ export async function readAutomationHealth(
 ): Promise<AutomationHealth | null> {
   try {
     const headers = authToken ? { Authorization: `Bearer ${authToken}` } : undefined
-    const res = await fetch(`${DEV_AUTOMATION_HTTP_URL}/health`, {
+    const res = await fetch(`${LOCAL_AUTOMATION_HTTP_URL}/health`, {
       headers,
       signal: AbortSignal.timeout(1000)
     })
@@ -310,7 +305,7 @@ export async function readAutomationHealth(
     runtimeAutomationHealthFailure = null
     return health
   } catch {
-    runtimeAutomationHealthFailure = mcpFailure('unreachable', DEV_AUTOMATION_HTTP_URL)
+    runtimeAutomationHealthFailure = mcpFailure('unreachable', LOCAL_AUTOMATION_HTTP_URL)
     return null
   }
 }
@@ -325,17 +320,23 @@ function parseMajorMinor(version: string): string | null {
 }
 
 function assertCompatibleMCPVersion(health: AutomationHealth): void {
+  if (!import.meta.env.DEV && isTauri() && !health.bundled) {
+    throw new MCPStartupError(
+      'A separate MCP server is already running. Close it and restart OpenPencil to use the bundled canvas helper.',
+      mcpFailure('unknown', 'The local port is occupied by an externally installed MCP server.')
+    )
+  }
   const runningMajorMinor = health.version ? parseMajorMinor(health.version) : null
   const oursMajorMinor = parseMajorMinor(APP_VERSION)
   if (!oursMajorMinor) return
   if (runningMajorMinor === oursMajorMinor) return
   const runningVersion = health.version ? `v${health.version}` : 'an older version'
-  const updateHint = health.installCommand
-    ? `Run: ${health.installCommand}, then restart OpenPencil.`
-    : `Update the global @open-pencil/mcp package to v${APP_VERSION} with your package manager, then restart OpenPencil.`
-  throw new Error(
+  const updateHint =
+    'Close the incompatible MCP server and restart OpenPencil to use its bundled canvas helper.'
+  throw new MCPStartupError(
     `OpenPencil desktop v${APP_VERSION} requires @open-pencil/mcp v${oursMajorMinor}.x ` +
-      `(major.minor compatibility), but the running MCP server is ${runningVersion}. ${updateHint}`
+      `(major.minor compatibility), but the running MCP server is ${runningVersion}. ${updateHint}`,
+    mcpFailure('outdated', health.version)
   )
 }
 
@@ -412,6 +413,7 @@ async function configureDevMCP(): Promise<AutomationServerHandle> {
   const configuration: DevMCPConfiguration = {
     authenticationEnabled: mcpAuthenticationEnabled.value,
     rootDirectory: mcpRootDirectory.value,
+    scope: mcpScope(),
     disabledTools: [...disabledMCPTools.value]
   }
   const response = await fetch(DEV_MCP_RESTART_PATH, {
@@ -433,7 +435,7 @@ async function configureDevMCP(): Promise<AutomationServerHandle> {
   if (!health)
     throw new MCPStartupError(
       'Development MCP server did not become healthy',
-      mcpFailure('timeout', `${DEV_AUTOMATION_HTTP_URL}/health`)
+      mcpFailure('timeout', `${LOCAL_AUTOMATION_HTTP_URL}/health`)
     )
   runtimeAutomationAuthToken = authToken
   return { disconnect: noop, authToken, managed: true }
@@ -462,14 +464,26 @@ async function startMCPIfNeeded(timing: MCPStartupTiming): Promise<AutomationSer
   // The app bundle directory (Tauri executableDir) is read-only and cannot be
   // used as a safe fallback for open_file, save_file, or export tools.
   const mcpRoot = mcpRootDirectory.value.trim() || (await resolveTauriHomeDir())
-  const resolved = resolvePlatformCommand(MCP_EXECUTABLE)
-  const command = Command.create(resolved.command, resolved.args, {
+  const isolation: Record<string, string> = {}
+  if (IS_NATIVE_TEST) {
+    const { dirname, join } = await import('@tauri-apps/api/path')
+    const path = await computeExpectedDiscoveryPath()
+    isolation.OPENPENCIL_MCP_DISCOVERY_PATH = path
+    isolation.OPENPENCIL_MCP_SOCKET = await join(await dirname(path), 'mcp.sock')
+  }
+  const command = Command.sidecar(MCP_SIDECAR, [], {
+    cwd: mcpRoot,
     env: {
-      PORT: String(AUTOMATION_HTTP_PORT),
+      ...isolation,
+      BUN_OPTIONS: '',
+      BUN_BE_BUN: '',
+      NODE_OPTIONS: '',
+      PORT: String(getLocalMCPPort()),
       OPENPENCIL_MCP_AUTH_TOKEN: authToken ?? '',
       OPENPENCIL_MCP_CORS_ORIGIN: window.location.origin,
       OPENPENCIL_MCP_TCP: '1',
       OPENPENCIL_MCP_ROOT: mcpRoot,
+      OPENPENCIL_MCP_SCOPE: mcpScope(),
       OPENPENCIL_MCP_APP_TIMEOUT_MS: String(MCP_APP_ATTACH_TIMEOUT_MS),
       OPENPENCIL_MCP_DISABLED_TOOLS: serializeDisabledTools(disabledMCPTools.value)
     }
@@ -523,9 +537,9 @@ async function startMCPIfNeeded(timing: MCPStartupTiming): Promise<AutomationSer
   if (health) {
     try {
       assertCompatibleMCPVersion(health)
-      const discoveryPath = await resolveDiscoveryPath(health.discoveryPath)
-      const discovered = await readDiscoveryToken(discoveryPath)
-      const token = health.authRequired ? (discovered ?? authToken) : null
+      // This process received our token directly. A discovery file can belong
+      // to an earlier process or another application installation.
+      const token = authToken
       spawnedToken = token
       runtimeAutomationAuthToken = token
       runtimeAutomationStartupError = null

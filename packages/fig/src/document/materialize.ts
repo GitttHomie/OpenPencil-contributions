@@ -1,7 +1,15 @@
 import type { NodeChange } from '@open-pencil/kiwi/fig/codec'
-import { SceneGraph, type SceneNode } from '@open-pencil/scene-graph'
+import {
+  generateId,
+  remapStyleRunReferences,
+  SceneGraph,
+  type SceneNode
+} from '@open-pencil/scene-graph'
 
-import { reconcileLiveComponentEdits } from '../instance-overrides/live-component-edits'
+import {
+  reconcileLiveComponentEdits,
+  syncSourceLayers
+} from '../instance-overrides/live-component-edits'
 import { materializeInstance } from '../instance-overrides/materialize-instance'
 import type {
   InstanceOccurrence,
@@ -14,6 +22,7 @@ import {
   type MaterializedComponentOccurrence
 } from '../instance-overrides/source-children'
 import { nodeChangeToProps } from '../node-change'
+import { figArchiveRecordInfo, type FigArchiveRecordInfo } from '../record-patch'
 import { applyDocumentLayoutBindings } from './bindings/layout'
 import { applyDocumentPaintBindings } from './bindings/paint'
 import type { BindingReferenceDiagnostic } from './bindings/references'
@@ -25,6 +34,7 @@ import {
 } from './component/checkpoint'
 import { linkNestedPropertyExposures } from './component/nested-properties'
 import { linkComponentPropertyValues, resolveVariantPropertyValues } from './component/values'
+import type { ComponentConstruction } from './components'
 import { loadPageTransaction } from './load-transaction'
 import { applyDocumentMetadata } from './metadata'
 import { createArchiveDocumentReader, createDocumentReader } from './read'
@@ -44,18 +54,22 @@ export function materializeDocument(
   changes: readonly NodeChange[],
   blobs: Uint8Array[] = [],
   options: DocumentAssemblyOptions = {}
-) {
+): AssemblyState {
   return materializeReader(createDocumentReader(changes, options.pageIds), blobs, options)
 }
 
 /** Own parsed archive records; do not create a second full source tree. */
-export function materializeFigArchive(bytes: ArrayBuffer, options: DocumentAssemblyOptions = {}) {
+export function materializeFigArchive(
+  bytes: ArrayBuffer,
+  options: DocumentAssemblyOptions = {}
+): AssemblyState {
   const { reader, blobs, images } = createArchiveDocumentReader(bytes, options.pageIds)
   return materializeReader(reader, blobs, { ...options, images: options.images ?? new Map(images) })
 }
 
 export interface AssemblyState {
   graph: SceneGraph
+  nextImportedId: number
   sources: Map<string, string>
   components: Map<string, MaterializedComponentOccurrence>
   componentIds: Map<string, string>
@@ -65,11 +79,41 @@ export interface AssemblyState {
 }
 
 export interface FigSessionCheckpoint {
+  /** Pages with design layers, as opposed to containers holding only document resources. */
+  contentPageIds?: string[]
+  /** Header-only names for discovering components before their pages have been populated. */
+  componentSearch?: Array<{ pageId: string; names: string[] }>
+  /** Continuation of imported runtime handles, including handles consumed then deleted. */
+  nextImportedId?: number
   sources: Array<[string, string]>
   componentIds: Array<[string, string]>
   savedSizeNodeIds: string[]
   loadedPageIds: string[]
   components: Array<[string, ComponentCheckpoint]>
+}
+
+/**
+ * The layer each archive record became, by record GUID: layers, pages, instances, and the
+ * layers inside components down to the instances they nest, whose contents are no records.
+ */
+export function figCheckpointRecords(checkpoint: FigSessionCheckpoint): Map<string, string> {
+  const records = new Map(checkpoint.sources)
+  for (const [componentId, component] of checkpoint.components) {
+    records.set(componentId, component.rootId)
+    const instances: string[][] = []
+    for (const entry of component.nodes) {
+      const sourceId = entry.path.at(-1)
+      if (!sourceId) continue
+      const inInstance = instances.some(
+        (prefix) =>
+          prefix.length < entry.path.length && prefix.every((id, index) => entry.path[index] === id)
+      )
+      if (inInstance) continue
+      records.set(sourceId, entry.nodeId)
+      if (entry.mainComponentId !== null) instances.push(entry.path)
+    }
+  }
+  return records
 }
 
 export interface FigSessionResume {
@@ -89,6 +133,7 @@ function restoreAssemblyState(
   }
   return {
     graph,
+    nextImportedId: checkpoint.nextImportedId ?? inferNextImportedId(graph),
     components,
     sources: new Map(checkpoint.sources),
     componentIds: new Map(checkpoint.componentIds),
@@ -103,15 +148,24 @@ export function createFigDocumentSession(
 ) {
   const archive = createArchiveDocumentReader(bytes, new Set())
   const sessionOptions = { ...options, images: options.images ?? new Map(archive.images) }
-  const state = resume
+  const state: AssemblyState = resume
     ? restoreAssemblyState(resume, archive.reader, sessionOptions)
     : materializeReader(archive.reader, archive.blobs, sessionOptions)
   state.graph.figKiwiVersion = archive.figKiwiVersion
   state.graph.figSchemaDeflated = archive.figSchemaDeflated
   const loaded = new Set<string>(resume?.checkpoint.loadedPageIds)
+  const componentSearch = archive.reader.componentSearch()
+  let recordInfo: FigArchiveRecordInfo | undefined
   return {
+    metaJSON: archive.metaJSON,
+    componentSearch,
     checkpoint(): FigSessionCheckpoint {
       return structuredClone({
+        contentPageIds: archive.reader.pages
+          .filter((page) => page.hasContent)
+          .map((page) => page.id),
+        nextImportedId: state.nextImportedId,
+        componentSearch,
         sources: [...state.sources],
         componentIds: [...state.componentIds],
         savedSizeNodeIds: [...state.savedSizeNodes],
@@ -129,6 +183,15 @@ export function createFigDocumentSession(
         : undefined
     },
     pages: archive.reader.pages,
+    /** Where a patch of this archive starts its new GUIDs and blob indices. */
+    archiveRecordInfo(): FigArchiveRecordInfo {
+      recordInfo ??= figArchiveRecordInfo({
+        records: archive.records,
+        blobCount: archive.blobs.length,
+        imageHashes: archive.images.map(([hash]) => hash)
+      })
+      return recordInfo
+    },
     loadPage(id: string): void {
       if (loaded.has(id)) return
       const reader = archive.reader.selectPages(new Set([id]))
@@ -156,13 +219,24 @@ function createAssemblyState(
   reader: ReturnType<typeof createDocumentReader>,
   options: DocumentAssemblyOptions
 ): AssemblyState {
-  const graph = new SceneGraph()
+  // Imported runtime handles remain reproducible for CLI inspection and patches. Authored
+  // entities use the production allocator even when created in a previously imported graph.
+  let initializing = true
+  let nextImportedId = 1
+  const graph: SceneGraph = new SceneGraph(() =>
+    initializing ? `0:${nextImportedId++}` : generateId()
+  )
+  initializing = false
   applyDocumentMetadata(graph, reader.documentRecord)
   for (const [hash, bytes] of options.images ?? []) graph.images.set(hash, bytes.slice())
-  materializeVariableResources(graph, reader.resources, options.onUnsupportedResource)
+  graph.applyImportedStateDuring(
+    () => materializeVariableResources(graph, reader.resources, options.onUnsupportedResource),
+    () => `0:${nextImportedId++}`
+  )
   for (const page of graph.getPages()) graph.deleteNode(page.id)
   return {
     graph,
+    nextImportedId,
     sources: new Map(),
     components: new Map(),
     componentIds: new Map(),
@@ -170,26 +244,86 @@ function createAssemblyState(
   }
 }
 
+/** Compatibility with checkpoints saved before they carried the import counter. */
+function inferNextImportedId(graph: SceneGraph): number {
+  let next = 3
+  const ids = [
+    ...graph.nodes.keys(),
+    ...graph.variables.keys(),
+    ...graph.variableCollections.keys(),
+    ...[...graph.variableCollections.values()].flatMap((collection) =>
+      collection.modes.map((mode) => mode.modeId)
+    )
+  ]
+  for (const id of ids) {
+    if (!/^0:\d+$/.test(id)) continue
+    next = Math.max(next, Number(id.slice(2)) + 1)
+  }
+  return next
+}
+
+/**
+ * Syncing a resumed load's new instances copies their component's sizes over the sizes Figma
+ * derived for them, such as a field filling its resized instance. Puts the derived sizes back,
+ * except along an axis whose component layer was edited live, which syncing rightly carried over:
+ * the layer an owning instance maps it to, or its own component.
+ */
+function restoreDerivedSizes(
+  graph: SceneGraph,
+  derivedSizes: ReadonlyMap<string, { width: number; height: number }>
+): void {
+  graph.preserveSourceMetadataDuring(() => {
+    for (const [id, size] of derivedSizes) {
+      const node = graph.getNode(id)
+      if (!node) continue
+      const edited = new Set(
+        syncSourceLayers(graph, node).flatMap((layer) => layer.source.editedFields)
+      )
+      const updates: Partial<SceneNode> = {}
+      if (node.width !== size.width && !edited.has('width')) updates.width = size.width
+      if (node.height !== size.height && !edited.has('height')) updates.height = size.height
+      if (Object.keys(updates).length > 0) graph.updateNode(id, updates)
+    }
+  })
+}
+
 function materializeReader(
   reader: ReturnType<typeof createDocumentReader>,
   blobs: Uint8Array[],
   options: DocumentAssemblyOptions,
   previous?: AssemblyState
-) {
+): AssemblyState {
   for (const diagnostic of reader.bindingDiagnostics) {
     if (!options.onUnresolvedBinding)
       throw new Error(`Unresolved binding ${diagnostic.sourceId}: ${diagnostic.field}`)
     options.onUnresolvedBinding(diagnostic)
   }
   const pages = reader.pages.map((page) => reader.readPage(page.id, options))
-  const plan = reader.planComponents(pages, options)
   const state = previous ?? createAssemblyState(reader, options)
+  const plan = reader.planComponents(pages, options, (id) => state.components.has(id))
+  return state.graph.applyImportedStateDuring(
+    () => materializeReaderInto(pages, plan, blobs, state, previous !== undefined),
+    () => `0:${state.nextImportedId++}`
+  )
+}
+
+function materializeReaderInto(
+  pages: InstanceOccurrence[],
+  plan: ComponentConstruction[],
+  blobs: Uint8Array[],
+  state: AssemblyState,
+  resumed: boolean
+): AssemblyState {
   const { graph, sources, components, savedSizeNodes, componentIds } = state
   const existingNodeIds = new Set(graph.nodes.keys())
   const layoutScales = new Map<string, number>()
+  const derivedSizes = new Map<string, { width: number; height: number }>()
   const rememberDerivedSizes = (nodes: ReadonlyMap<InstanceOccurrence, SceneNode>): void => {
     for (const [occurrence, node] of nodes) {
-      if (occurrence.derivedSize) savedSizeNodes.add(node.id)
+      if (occurrence.derivedSize) {
+        savedSizeNodes.add(node.id)
+        derivedSizes.set(node.id, { width: node.width, height: node.height })
+      }
       if (occurrence.layoutScale !== undefined) layoutScales.set(node.id, occurrence.layoutScale)
     }
   }
@@ -244,7 +378,7 @@ function materializeReader(
     if (!parentId) throw new Error(`Missing source container ${occurrence.sourceId}`)
     const ordered: string[] = []
     for (const child of occurrence.children) {
-      if (previous) reconcileOccurrenceStructure(child, graph, components)
+      if (resumed) reconcileOccurrenceStructure(child, graph, components)
       if (child.mainComponentId !== null && !sources.has(child.sourceId)) {
         const materialized = materializeInstance(graph, parentId, child, componentIds, {
           blobs,
@@ -252,7 +386,7 @@ function materializeReader(
         })
         rememberDerivedSizes(materialized.nodes)
         linkInstanceSourceChildren(child, materialized, components)
-        if (previous) {
+        if (resumed) {
           reconcileLiveComponentEdits(graph, materialized)
           if (materialized.root.componentId) resync.add(materialized.root.componentId)
         }
@@ -269,18 +403,16 @@ function materializeReader(
   }
   for (const page of pages) populateInstances(page)
   for (const componentId of resync) graph.syncInstances(componentId)
+  if (resync.size > 0) restoreDerivedSizes(graph, derivedSizes)
+  // Layers and ranges name their styles by the styles' own IDs, which the records' GUIDs are,
+  // so only links to other layers are renamed to the layers this page added.
   for (const node of graph.getAllNodes()) {
-    if (existingNodeIds.has(node.id)) continue
-    for (const field of [
-      'fillStyleId',
-      'strokeStyleId',
-      'textStyleId',
-      'effectStyleId',
-      'gridStyleId'
-    ] as const) {
-      const id = node[field]
-      if (id && sources.has(id)) node[field] = sources.get(id) ?? id
-    }
+    if (existingNodeIds.has(node.id) || node.styleRuns.length === 0) continue
+    node.styleRuns = remapStyleRunReferences(node.styleRuns, {
+      variable: (id) => id,
+      style: (id) => id,
+      node: (id) => sources.get(id) ?? id
+    })
   }
   // These passes apply to the nodes this page added, not to the whole graph.
   const materialized = [...graph.nodes.values()].filter((node) => !existingNodeIds.has(node.id))

@@ -37,6 +37,7 @@ for (const mode of ['HORIZONTAL', 'VERTICAL'] as const) {
         editor.runLayoutForNode(root.id)
         const drag: DragResize = {
           type: 'resize',
+          lockedAspectRatio: null,
           handle: 'se',
           startX: 0,
           startY: 0,

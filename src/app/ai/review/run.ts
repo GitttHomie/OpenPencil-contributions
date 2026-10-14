@@ -4,6 +4,7 @@ import { fromUint8Array } from 'js-base64'
 import { ACP_AGENTS } from '@open-pencil/core/constants'
 import { computeContentBounds } from '@open-pencil/core/io'
 
+import { requestAgentText } from '@/app/ai/acp/text-request'
 import { reasoningCallSettings } from '@/app/ai/chat/reasoning'
 import { createAIModelRuntime, type ACPModelRuntime } from '@/app/ai/models'
 import { boundedImageScale } from '@/app/ai/tools/vision'
@@ -75,29 +76,12 @@ async function reviewWithAgent(
   }
   signal.addEventListener('abort', cancel, { once: true })
   try {
-    signal.throwIfAborted()
-    const stream = await transport.sendMessages({
-      chatId: crypto.randomUUID(),
-      trigger: 'submit-message',
-      messageId: undefined,
-      messages: [
-        { id: crypto.randomUUID(), role: 'user', parts: [{ type: 'text', text: prompt }] }
-      ],
-      abortSignal: signal
-    })
-    const reader = stream.getReader()
-    let text = ''
-    try {
-      for (;;) {
-        const next = await reader.read()
-        if (next.done) break
-        if (next.value.type === 'error') throw new DesignReviewError('failed')
-        if (next.value.type === 'text-delta') text += next.value.delta
-      }
-    } finally {
-      reader.releaseLock()
-    }
-    signal.throwIfAborted()
+    const text = await requestAgentText(
+      transport,
+      prompt,
+      signal,
+      () => new DesignReviewError('failed')
+    )
     return { text, imageIncluded: transport.imageIncluded }
   } finally {
     signal.removeEventListener('abort', cancel)

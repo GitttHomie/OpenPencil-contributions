@@ -1,7 +1,9 @@
 import {
   attachInstruction,
   extractInstruction,
-  type Instruction
+  type Availability,
+  type Instruction,
+  type Operation
 } from '@atlaskit/pragmatic-drag-and-drop-hitbox/list-item'
 import { getReorderDestinationIndex } from '@atlaskit/pragmatic-drag-and-drop-hitbox/util/get-reorder-destination-index'
 import { combine } from '@atlaskit/pragmatic-drag-and-drop/combine'
@@ -13,10 +15,9 @@ import {
 import { onScopeDispose, ref } from 'vue'
 
 export type FlatReorderAxis = 'vertical' | 'horizontal'
-export type FlatReorderInstruction = Extract<
-  Instruction,
-  { operation: 'reorder-before' | 'reorder-after' }
->
+export type FlatReorderInstruction = Instruction
+/** Which drops a target takes from a source: before it, after it, or onto it. */
+export type FlatReorderOperations = Partial<Record<Operation, boolean>>
 
 export interface FlatReorderItem {
   id: string
@@ -25,11 +26,25 @@ export interface FlatReorderItem {
 export interface UseFlatReorderDragOptions<TItem extends FlatReorderItem> {
   items: () => readonly TItem[]
   onMove: (sourceId: string, targetIndex: number) => void
+  /** Dropping onto the middle of an item, for lists where items can merge. */
+  onCombine?: (sourceId: string, targetId: string) => void
+  /** Which drops each target takes; by default before and after, never onto. */
+  operations?: (sourceId: string, targetId: string) => FlatReorderOperations
   axis?: FlatReorderAxis
   getId?: (item: TItem) => string
   handle?: string
   canDrag?: () => boolean
   canMove?: (sourceId: string, targetId: string) => boolean
+}
+
+const REORDER_ONLY: FlatReorderOperations = { 'reorder-before': true, 'reorder-after': true }
+
+function availability(operations: FlatReorderOperations) {
+  const result: { [TKey in Operation]?: Availability } = {}
+  for (const operation of ['reorder-before', 'reorder-after', 'combine'] as const) {
+    result[operation] = operations[operation] ? 'available' : 'not-available'
+  }
+  return result
 }
 
 interface RegisteredItem {
@@ -40,14 +55,13 @@ interface RegisteredItem {
 function isFlatReorderInstruction(
   instruction: Instruction | null
 ): instruction is FlatReorderInstruction {
-  return (
-    !!instruction &&
-    !instruction.blocked &&
-    (instruction.operation === 'reorder-before' || instruction.operation === 'reorder-after')
-  )
+  return !!instruction && !instruction.blocked
 }
 
-function edgeForInstruction(instruction: FlatReorderInstruction, axis: FlatReorderAxis) {
+function edgeForInstruction(
+  instruction: Extract<Instruction, { operation: 'reorder-before' | 'reorder-after' }>,
+  axis: FlatReorderAxis
+) {
   if (axis === 'vertical') {
     return instruction.operation === 'reorder-before' ? 'top' : 'bottom'
   }
@@ -57,6 +71,8 @@ function edgeForInstruction(instruction: FlatReorderInstruction, axis: FlatReord
 export function useFlatReorderDrag<TItem extends FlatReorderItem>({
   items,
   onMove,
+  onCombine,
+  operations = () => REORDER_ONLY,
   axis = 'vertical',
   getId = (item) => item.id,
   handle,
@@ -102,17 +118,16 @@ export function useFlatReorderDrag<TItem extends FlatReorderItem>({
       }),
       dropTargetForElements({
         element,
-        getData: ({ input, element: target }) =>
+        getData: ({ input, element: target, source }) =>
           attachInstruction(
             { id },
             {
               input,
               element: target,
               axis,
-              operations: {
-                'reorder-before': 'available',
-                'reorder-after': 'available'
-              }
+              operations: availability(
+                typeof source.data.id === 'string' ? operations(source.data.id, id) : {}
+              )
             }
           ),
         canDrop: ({ source }) =>
@@ -151,6 +166,12 @@ export function useFlatReorderDrag<TItem extends FlatReorderItem>({
 
       const dropInstruction = extractInstruction(target.data)
       if (!isFlatReorderInstruction(dropInstruction)) return
+      draggingId.value = null
+      clearInstruction()
+      if (dropInstruction.operation === 'combine') {
+        onCombine?.(sourceId, targetId)
+        return
+      }
 
       const currentItems = items()
       const startIndex = currentItems.findIndex((item) => getId(item) === sourceId)
@@ -165,8 +186,6 @@ export function useFlatReorderDrag<TItem extends FlatReorderItem>({
       })
 
       if (targetIndex !== startIndex) onMove(sourceId, targetIndex)
-      draggingId.value = null
-      clearInstruction()
     }
   })
 

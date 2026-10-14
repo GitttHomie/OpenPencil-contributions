@@ -5,6 +5,7 @@ import type { BindingFieldUI } from './ui'
 
 export interface BindingPillProps {
   label: string
+  value?: string | number
   tooltip?: string
   unresolved?: boolean
   disabled?: boolean
@@ -22,6 +23,7 @@ import Tip from '@/components/ui/overlay/Tip.vue'
 
 const {
   label,
+  value,
   tooltip,
   unresolved = false,
   disabled = false,
@@ -52,6 +54,7 @@ defineOptions({ inheritAttrs: false })
       data-slot="pill"
     >
       <span :class="styles.pillLabel">{{ label }}</span>
+      <span v-if="value !== undefined" :class="styles.pillValue">{{ value }}</span>
     </span>
   </Tip>
 </template>

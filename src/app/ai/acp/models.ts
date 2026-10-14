@@ -9,6 +9,7 @@ import { sessionControls, sessionControlSchema } from './configuration/session'
 import { sessionThinkingControl } from './thinking'
 
 export const acpModelCatalogSchema = v.object({
+  imageInput: v.optional(v.boolean()),
   controls: v.optional(v.array(sessionControlSchema)),
   thinking: v.optional(
     v.object({

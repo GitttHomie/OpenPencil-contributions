@@ -9,12 +9,18 @@ import { useOptionalBindableValue } from '#vue/primitives/BindableValue/context'
 import type { FillSwatchProps, FillSwatchSlots } from './types'
 import { fillCategory, fillIsTransparent, fillSwatchBackground } from './useFill'
 
-const { fill, label, as = 'span', asChild = false } = defineProps<FillSwatchProps>()
+const {
+  fill,
+  label,
+  as = 'span',
+  asChild = false,
+  inheritBinding = true
+} = defineProps<FillSwatchProps>()
 defineSlots<FillSwatchSlots>()
 defineOptions({ inheritAttrs: false })
 
 const binding = useOptionalBindableValue<Color>()
-const bindingState = computed(() => binding?.state.value)
+const bindingState = computed(() => (inheritBinding ? binding?.state.value : undefined))
 const boundColor = computed(() =>
   bindingState.value === 'bound' ? binding?.resolvedValue.value : undefined
 )
@@ -25,7 +31,7 @@ const category = computed(() => fillCategory(effectiveFill.value))
 const background = computed(() => fillSwatchBackground(effectiveFill.value))
 const transparent = computed(() => fillIsTransparent(effectiveFill.value))
 const accessibleLabel = computed(() => label ?? `${category.value.toLowerCase()} fill`)
-const stateAttrs = computed(() => binding?.stateAttrs.value)
+const stateAttrs = computed(() => (inheritBinding ? binding?.stateAttrs.value : undefined))
 const slotProps = computed(() => ({
   fill: effectiveFill.value,
   color: effectiveFill.value.color,

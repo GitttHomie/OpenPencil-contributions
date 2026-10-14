@@ -1,5 +1,7 @@
 import { expect, test } from 'bun:test'
 
+import { expectDefined } from '#core-tests/helpers/assert'
+
 import { exportFigFile } from '@open-pencil/core/io'
 import { initCodec } from '@open-pencil/core/kiwi'
 import { parseFigBuffer } from '@open-pencil/fig'
@@ -28,7 +30,7 @@ test('serializes self size claims against the instance main component', async ()
   expect(exported?.size).toEqual({ x: 16, y: 16 })
   expect(symbol.uniformScaleFactor).toBe(0.5)
   expect(symbol.symbolOverrides).toContainEqual({
-    guidPath: { guids: [symbol.symbolID] },
+    guidPath: { guids: [expectDefined(symbol.symbolID)] },
     size: { x: 32, y: 32 },
     stackHorizontalPadding: 20
   })

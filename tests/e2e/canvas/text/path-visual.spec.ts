@@ -1,10 +1,14 @@
 import { expect, test, useEditorSetup } from '#tests/e2e/fixtures'
+import { keepEmbeddedDefinitions } from '#tests/helpers/document/open'
 
 const editor = useEditorSetup('/?test&no-chrome&no-rulers')
 
 test('renders imported text on a path with its selection overlay', async () => {
   test.setTimeout(90_000)
-  await editor.page.evaluate(() => window.openPencil?.openFile?.('/tests/fixtures/circle-text.fig'))
+  await keepEmbeddedDefinitions(
+    editor.page,
+    editor.page.evaluate(() => window.openPencil?.openFile?.('/tests/fixtures/circle-text.fig'))
+  )
   await editor.canvas.waitForRender()
 
   const selected = await editor.page.evaluate(() => {

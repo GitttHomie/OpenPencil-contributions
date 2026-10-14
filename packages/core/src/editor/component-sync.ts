@@ -35,12 +35,7 @@ function componentSyncOrder(graph: SceneGraph, seeds: Set<string>): string[] {
 }
 
 type ComputeLayouts = (graph: SceneGraph, scopeId?: string) => void
-export type ComponentSyncChange = 'structure' | 'creation'
-
-/** Pages are `CANVAS` nodes; layout recomputation is scoped to them. */
-function pageIdOf(graph: SceneGraph, nodeId: string): string | null {
-  return graph.closest(nodeId, (node) => node.type === 'CANVAS')?.id ?? null
-}
+export type ComponentSyncChange = 'structure' | 'creation' | 'visibility'
 
 /**
  * Only the pages that actually changed need layout work: the edited subtrees, the components
@@ -53,7 +48,8 @@ function affectedPageIds(
 ): Set<string> {
   const pageIds = new Set<string>()
   const addPageOf = (nodeId: string) => {
-    const pageId = pageIdOf(graph, nodeId)
+    // Layout recomputation is scoped to pages.
+    const pageId = graph.pageOf(nodeId)
     if (pageId) pageIds.add(pageId)
   }
 
@@ -73,9 +69,22 @@ export function createComponentSyncScheduler(
   let pendingComponentSync: Set<string> | null = null
   let pendingStructureChanges = new Set<string>()
   let pendingCreatedNodes = new Set<string>()
+  const pendingVisibilityChanges = new Set<string>()
   let isFlushingComponentSync = false
+  let batchDepth = 0
+  let generation = 0
 
-  function flushComponentSync() {
+  function cancelComponentSync() {
+    generation++
+    pendingComponentSync = null
+    pendingStructureChanges.clear()
+    pendingCreatedNodes.clear()
+    pendingVisibilityChanges.clear()
+    batchDepth = 0
+  }
+
+  function flushComponentSync(completedMutation = false) {
+    if (batchDepth > 0 && !completedMutation) return
     const ids = pendingComponentSync
     if (!ids) return
     pendingComponentSync = null
@@ -89,28 +98,39 @@ export function createComponentSyncScheduler(
       // New standalone trees retain imported geometry; an existing layout containing
       // newly pasted children still needs to discard its saved dimensions.
       const invalidatedLayouts = invalidateDerivedLayouts(graph, structureChanges, createdNodes)
+      const visibilityChanged = pendingVisibilityChanges.size > 0
+      invalidateDerivedLayouts(graph, pendingVisibilityChanges)
+      pendingVisibilityChanges.clear()
       const componentIds = new Set<string>()
       for (const id of ids) {
         const component = graph.closest(id, isComponent)
         if (component) componentIds.add(component.id)
       }
       const orderedComponents = componentSyncOrder(graph, componentIds)
-      for (const compId of orderedComponents) {
-        graph.syncInstances(compId)
-      }
+      graph.syncInstancesTogether(orderedComponents)
+      // Synchronization reports only fields that actually changed. Release saved geometry
+      // for those occurrences, including nested instances, without touching visibility overrides.
+      const syncedVisibilityChanged = pendingVisibilityChanges.size > 0
+      invalidateDerivedLayouts(graph, pendingVisibilityChanges)
       if (invalidatedLayouts.size > 0) {
         invalidateDerivedLayouts(
           graph,
           orderedComponents.flatMap((id) => graph.getInstances(id).map((instance) => instance.id))
         )
       }
-      if (componentIds.size > 0 || invalidatedLayouts.size > 0) {
+      if (
+        componentIds.size > 0 ||
+        invalidatedLayouts.size > 0 ||
+        visibilityChanged ||
+        syncedVisibilityChanged
+      ) {
         const pageIds = affectedPageIds(graph, ids, orderedComponents)
         if (pageIds.size === 0) computeLayouts(graph)
         else for (const pageId of pageIds) computeLayouts(graph, pageId)
         requestRender()
       }
     } finally {
+      pendingVisibilityChanges.clear()
       isFlushingComponentSync = false
     }
   }
@@ -118,15 +138,38 @@ export function createComponentSyncScheduler(
   function scheduleComponentSync(nodeId: string, change?: ComponentSyncChange) {
     // Import/materialization has already resolved component overrides. These updates
     // are not authored component edits and must not reset instances to their defaults.
-    if (isFlushingComponentSync || getGraph().isApplyingImportedState) return
+    // Layout's own writes are results, not edits: it lays out the instances too, and the edit
+    // that made it run has already scheduled its sync.
+    const graph = getGraph()
+    if (graph.isApplyingImportedState || graph.isApplyingLayout) return
+    if (change === 'visibility') pendingVisibilityChanges.add(nodeId)
+    if (isFlushingComponentSync) return
     if (!pendingComponentSync) {
       pendingComponentSync = new Set()
-      queueMicrotask(flushComponentSync)
+      const scheduledGeneration = generation
+      queueMicrotask(() => {
+        if (scheduledGeneration === generation) flushComponentSync()
+      })
     }
     pendingComponentSync.add(nodeId)
-    if (change) pendingStructureChanges.add(nodeId)
+    if (change === 'structure' || change === 'creation') pendingStructureChanges.add(nodeId)
     if (change === 'creation') pendingCreatedNodes.add(nodeId)
   }
 
-  return { scheduleComponentSync }
+  /** Async tree creation must synchronize complete components, not every awaited child. */
+  async function runWithComponentSync<T>(operation: () => T | Promise<T>): Promise<T> {
+    const startedGeneration = generation
+    batchDepth++
+    try {
+      return await operation()
+    } finally {
+      if (startedGeneration === generation) {
+        batchDepth--
+        // A nested or overlapping operation must return with up-to-date instances too.
+        flushComponentSync(true)
+      }
+    }
+  }
+
+  return { scheduleComponentSync, runWithComponentSync, cancelComponentSync }
 }

@@ -27,5 +27,11 @@
   "deepLinkCancelled": "Enlace cancelado: se esperaba un archivo que terminara en «{file}».",
   "deepLinkNodeNotFound": "No se encontró la capa «{node}» en «{file}».",
   "openQueuedFilesFailed": "No se pudieron abrir los archivos entregados a OpenPencil: {error}",
-  "tokensLeftOut": "No incluido en la hoja de estilos: {names}."
+  "tokensLeftOut": "No incluido en la hoja de estilos: {names}.",
+  "layoutContainerFixedWidth": "«{name}» ahora tiene un ancho fijo para que «{layer}» pueda llenar el espacio disponible.",
+  "layoutContainerFixedHeight": "«{name}» ahora tiene una altura fija para que «{layer}» pueda llenar el espacio disponible.",
+  "layoutLayerFixedWidth": "1 capa dentro de «{name}» ahora tiene un ancho fijo para que «{name}» pueda ajustarse a su contenido.",
+  "layoutLayerFixedHeight": "1 capa dentro de «{name}» ahora tiene una altura fija para que «{name}» pueda ajustarse a su contenido.",
+  "layoutLayersFixedWidth": "{count} capas dentro de «{name}» ahora tienen un ancho fijo para que «{name}» pueda ajustarse a su contenido.",
+  "layoutLayersFixedHeight": "{count} capas dentro de «{name}» ahora tienen una altura fija para que «{name}» pueda ajustarse a su contenido."
 }

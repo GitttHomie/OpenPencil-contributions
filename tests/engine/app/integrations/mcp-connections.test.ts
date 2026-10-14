@@ -102,6 +102,7 @@ describe('MCP connections', () => {
       {
         id: 'mcp-tools',
         name: 'Tools',
+        autoApprove: [],
         enabled: false,
         transport: { type: 'streamable-http', url: 'https://example.com/mcp' },
         authentication: { type: 'bearer', credentialRef: own }
@@ -209,7 +210,7 @@ describe('MCP connections', () => {
     saveMCPConnectionDraft(draft)
 
     await expect(buildACPMCPServers({ authorizationToken: null })).rejects.toThrow(
-      'needs a bearer token'
+      'Could not prepare MCP connection "Missing token".'
     )
   })
 })

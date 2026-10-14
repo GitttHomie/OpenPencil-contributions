@@ -13,10 +13,65 @@ import {
   type Color,
   type Variable
 } from '@open-pencil/core'
+import { materializeDocument, parseFigBuffer } from '@open-pencil/fig'
+import type { NodeChange } from '@open-pencil/kiwi/fig/codec'
 
 setDefaultTimeout(60_000)
 
 describe('variable roundtrip', () => {
+  test('distinct versions of a library collection survive repeated save and reopen', async () => {
+    const records: NodeChange[] = [1, 2].flatMap((index): NodeChange[] => [
+      {
+        guid: { sessionID: 1, localID: index },
+        type: 'VARIABLE_SET',
+        name: `Library ${index}`,
+        key: 'shared-collection',
+        version: `v${index}`,
+        variableSetModes: [{ id: { sessionID: 2, localID: index }, name: 'Default' }]
+      },
+      {
+        guid: { sessionID: 3, localID: index },
+        type: 'VARIABLE',
+        name: `Spacing ${index}`,
+        variableResolvedType: 'FLOAT',
+        variableSetID: { assetRef: { key: 'shared-collection', version: `v${index}` } },
+        variableDataValues: {
+          entries: [
+            {
+              modeID: { sessionID: 2, localID: index },
+              variableData: { dataType: 'FLOAT', value: { floatValue: index * 8 } }
+            }
+          ]
+        }
+      }
+    ])
+    let { graph } = materializeDocument(records)
+    for (let cycle = 0; cycle < 2; cycle++) {
+      const exported = await exportFigFile(graph)
+      const buffer = exported.buffer.slice(
+        exported.byteOffset,
+        exported.byteOffset + exported.byteLength
+      ) as ArrayBuffer
+      const collections = parseFigBuffer(buffer).nodeChanges.filter(
+        (n) => n.type === 'VARIABLE_SET'
+      )
+      expect(collections.map((n) => ({ name: n.name, key: n.key, version: n.version }))).toEqual([
+        { name: 'Library 1', key: 'shared-collection', version: 'v1' },
+        { name: 'Library 2', key: 'shared-collection', version: 'v2' }
+      ])
+      graph = await parseFigFile(buffer)
+      for (const index of [1, 2]) {
+        const collection = [...graph.variableCollections.values()].find(
+          (c) => c.name === `Library ${index}`
+        )
+        expect(collection?.version).toBe(`v${index}`)
+        const variable = [...graph.variables.values()].find((v) => v.name === `Spacing ${index}`)
+        expect(variable?.collectionId).toBe(collection?.id)
+        expect(Object.values(variable?.valuesByMode ?? {})).toEqual([index * 8])
+      }
+    }
+  })
+
   test('variables and collections survive export → re-import', async () => {
     await initCodec()
 
@@ -338,7 +393,8 @@ describe('variable roundtrip', () => {
       codeSyntax: { WEB: 'var(--page-gutter)' },
       expressions: { '4:7': { css: 'clamp(1rem, 4vw, 2rem)', resolved: 16 } }
     })
-    expect(reimported.variableCollections.get('4:70')?.modes).toEqual([
+    // Modes also come back with the places the file saved for them.
+    expect(reimported.variableCollections.get('4:70')?.modes).toMatchObject([
       { modeId: '4:7', name: 'Light', condition: undefined },
       { modeId: '4:8', name: 'Dark', condition: '[data-theme="dark"]' }
     ])
@@ -353,7 +409,9 @@ describe('variable roundtrip', () => {
     const graph = new SceneGraph()
     const collection = graph.createCollection('Space')
     const gutter = graph.createVariable('Gutter', 'FLOAT', collection.id, 20)
-    gutter.expressions = { [collection.defaultModeId]: { css: 'clamp(1rem, 4vw, 2rem)', resolved: 16 } }
+    gutter.expressions = {
+      [collection.defaultModeId]: { css: 'clamp(1rem, 4vw, 2rem)', resolved: 16 }
+    }
 
     const reimported = await parseFigFile((await exportFigFile(graph)).buffer as ArrayBuffer)
 

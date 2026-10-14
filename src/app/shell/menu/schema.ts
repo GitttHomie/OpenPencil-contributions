@@ -1,5 +1,7 @@
 import type { EditorCommandId } from '@open-pencil/vue'
 
+import { PREVIEW_ENABLED } from '@/constants'
+
 export type AppMenuTarget = 'all' | 'browser' | 'native'
 
 export type AppMenuIcon =
@@ -61,6 +63,14 @@ export interface AppMenuGroupSchema {
   items: AppMenuEntry[]
 }
 
+/** Settings…, where each platform expects it: the macOS application menu, otherwise File. */
+const SETTINGS_MENU_ITEM = {
+  id: 'settings',
+  label: 'Settings…',
+  shortcut: 'MOD+,',
+  accelerator: 'CmdOrCtrl+,'
+} satisfies AppMenuActionItem
+
 export const APP_MENU_SCHEMA = [
   {
     label: 'File',
@@ -70,9 +80,11 @@ export const APP_MENU_SCHEMA = [
       { id: 'open', label: 'Open…', shortcut: 'MOD+O' },
       { id: 'open-recent', label: 'Open Recent', target: 'native' },
       { id: 'open-storage-workspace', label: 'Open Storage Workspace…', handler: 'shell' },
+      { id: 'open-tour', label: 'Open the Tour', handler: 'shell' },
       { type: 'separator' },
       { id: 'save', label: 'Save', shortcut: 'MOD+S' },
       { id: 'save-as', label: 'Save As…', shortcut: 'MOD+SHIFT+S' },
+      { id: 'save-to-storage', label: 'Save to Storage…' },
       { type: 'separator' },
       {
         id: 'export-selection',
@@ -104,7 +116,10 @@ export const APP_MENU_SCHEMA = [
       },
       { type: 'separator' },
       { id: 'autosave', label: 'Autosave', checkbox: true },
-      { id: 'close', label: 'Close Tab', shortcut: 'MOD+W' }
+      { id: 'close', label: 'Close Tab', shortcut: 'MOD+W' },
+      // Windows, Linux, and the browser menu; macOS shows it in the application menu instead.
+      { type: 'separator' },
+      { ...SETTINGS_MENU_ITEM, handler: 'shell' }
     ]
   },
   {
@@ -193,6 +208,7 @@ export const APP_MENU_SCHEMA = [
       },
       { id: 'view-multiplayer-cursors', label: 'Multiplayer Cursors', checkbox: true },
       { id: 'view-design-issues', label: 'Design Issues', checkbox: true, handler: 'shell' },
+      { id: 'view-comments', label: 'Comments', checkbox: true, shortcut: 'SHIFT+C' },
       { type: 'separator' },
       {
         id: 'theme',
@@ -225,21 +241,16 @@ export const APP_MENU_SCHEMA = [
             id: 'snap-pixel-grid',
             label: 'Snap to Pixel Grid',
             checkbox: true,
-            handler: 'shell'
-          },
-          { type: 'separator' },
-          {
-            id: 'settings',
-            label: 'Settings…',
-            shortcut: 'MOD+,',
-            accelerator: 'CmdOrCtrl+,',
+            shortcut: "MOD+SHIFT+'",
             handler: 'shell'
           }
         ]
       },
       { type: 'separator' },
       { id: 'toggle-ui', label: 'Toggle UI', shortcut: 'MOD+\\' },
-      { id: 'toggle-preview', label: 'Preview', shortcut: 'MOD+ALT+↩' },
+      ...(PREVIEW_ENABLED
+        ? [{ id: 'toggle-preview', label: 'Preview', shortcut: 'MOD+ALT+↩' }]
+        : []),
       { type: 'separator' },
       { id: 'profiler', label: 'Profiler', checkbox: true, target: 'browser' },
       {
@@ -268,6 +279,12 @@ export const APP_MENU_SCHEMA = [
         id: 'selection.ungroup',
         label: 'Ungroup Selection',
         command: 'selection.ungroup'
+      },
+      { type: 'separator' },
+      {
+        id: 'insert-icon',
+        label: 'Insert Icon…',
+        palette: { keywords: ['iconify', 'symbol', 'glyph', 'lucide'] }
       },
       { type: 'separator' },
       {
@@ -363,6 +380,11 @@ export const APP_MENU_SCHEMA = [
         label: 'Detach Instance',
         command: 'selection.detachInstance'
       },
+      {
+        id: 'selection.detachIcon',
+        label: 'Detach Icon',
+        command: 'selection.detachIcon'
+      },
       { type: 'separator' },
       {
         id: 'selection.moveToPage',
@@ -442,5 +464,6 @@ export const APP_MENU_SCHEMA = [
 export const APP_MENU_APP_ITEMS = [
   { id: 'about', label: 'About OpenPencil' },
   { id: 'check-updates', label: 'Check for Updates…' },
+  SETTINGS_MENU_ITEM,
   { id: 'quit', label: 'Quit OpenPencil', shortcut: 'MOD+Q' }
 ] satisfies AppMenuActionItem[]

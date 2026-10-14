@@ -1,19 +1,35 @@
 import { afterEach, beforeAll, describe, test, expect } from 'bun:test'
 
-import type { CanvasKit, Paragraph, RectWithDirection } from 'canvaskit-wasm'
+import type { CanvasKit, LineMetrics, Paragraph, RectWithDirection } from 'canvaskit-wasm'
 
 import { TextEditor, type SceneNode } from '@open-pencil/core'
 import { initCanvasKit } from '@open-pencil/core/io'
 import { createDefaultNode } from '@open-pencil/scene-graph/node-defaults'
 
+import { buildParagraph } from '#core/canvas/text'
+import { TextLayout } from '#core/canvas/text/layout'
 import { fontManager } from '#core/text/fonts'
 
 import { expectDefined } from '#tests/helpers/assert'
+import { asDouble } from '#tests/helpers/doubles'
 
 const mockCk = {
   RectHeightStyle: { Max: 0 },
   RectWidthStyle: { Tight: 0 }
 } as Pick<CanvasKit, 'RectHeightStyle' | 'RectWidthStyle'> as CanvasKit
+
+/** A layout of one native paragraph double holding `length` characters. */
+function layoutOf(native: Partial<Paragraph>, length: number): TextLayout {
+  const paragraph = asDouble<Paragraph>({
+    layout: () => undefined,
+    didExceedMaxLines: () => false,
+    getLongestLine: () => 0,
+    ...native
+  })
+  const layout = TextLayout.ofParagraph(mockCk, paragraph, length)
+  layout.layout(100)
+  return layout
+}
 
 function createEditor(text = 'Hello World') {
   const editor = new TextEditor(mockCk)
@@ -35,31 +51,24 @@ function createParagraphEditor(textAlignVertical: SceneNode['textAlignVertical']
     left: 3,
     startIndex: 0
   }
-  const paragraph = {
-    delete: () => undefined,
-    getGlyphPositionAtCoordinate: (_x: number, y: number) => {
-      hitTestYs.push(y)
-      return { pos: Math.round(y) }
-    },
-    getHeight: () => 20,
-    getLineMetrics: () => [lineMetrics],
-    getLineMetricsAt: () => lineMetrics,
-    getLineNumberAt: () => 0,
-    getRectsForRange: () => rects
-  } as Pick<
-    Paragraph,
-    | 'delete'
-    | 'getGlyphPositionAtCoordinate'
-    | 'getHeight'
-    | 'getLineMetrics'
-    | 'getLineMetricsAt'
-    | 'getLineNumberAt'
-    | 'getRectsForRange'
-  > as Paragraph
-  const renderer = {
-    buildParagraph: () => paragraph,
+  const renderer = asDouble<Parameters<TextEditor['setRenderer']>[0]>({
+    buildParagraph: (node: SceneNode) =>
+      layoutOf(
+        {
+          delete: () => undefined,
+          getGlyphPositionAtCoordinate: (_x: number, y: number) => {
+            hitTestYs.push(y)
+            return asDouble({ pos: Math.round(y) })
+          },
+          getHeight: () => 20,
+          getLineMetrics: () => [asDouble(lineMetrics)],
+          getLineNumberAt: () => 0,
+          getRectsForRange: () => rects
+        },
+        node.text.length
+      ),
     fontGeneration: 1
-  }
+  })
   const editor = new TextEditor(mockCk)
   editor.setRenderer(renderer as Parameters<TextEditor['setRenderer']>[0])
   const node = createDefaultNode(() => 'aligned-text', 'TEXT', {
@@ -205,17 +214,20 @@ describe('TextEditor', () => {
       delete: () => undefined,
       getHeight: () => 0,
       getLineMetrics: () => []
-    } as Pick<Paragraph, 'delete' | 'getHeight' | 'getLineMetrics'> as Paragraph
+    }
     const space = {
       delete: () => undefined,
       getHeight: () => 17,
-      getLineMetrics: () => [{ height: 17, left: 0 }]
-    } as Pick<Paragraph, 'delete' | 'getHeight' | 'getLineMetrics'> as Paragraph
+      getLineMetrics: () => [asDouble<LineMetrics>({ height: 17, left: 0 })]
+    }
     const editor = new TextEditor(mockCk)
-    editor.setRenderer({
-      buildParagraph: (node: SceneNode) => (node.text === '' ? empty : space),
-      fontGeneration: 1
-    } as Parameters<TextEditor['setRenderer']>[0])
+    editor.setRenderer(
+      asDouble<Parameters<TextEditor['setRenderer']>[0]>({
+        buildParagraph: (node: SceneNode) =>
+          node.text === '' ? layoutOf(empty, 0) : layoutOf(space, 1),
+        fontGeneration: 1
+      })
+    )
     editor.start(
       createDefaultNode(() => 'new-text', 'TEXT', {
         text: '',
@@ -226,6 +238,36 @@ describe('TextEditor', () => {
       })
     )
     expect(editor.getCaretRect()).toEqual({ x: 60, y0: 40, y1: 57 })
+  })
+
+  test('lays the text out again when its node changes outside the editor', () => {
+    const built: number[] = []
+    const editor = new TextEditor(mockCk)
+    editor.setRenderer(
+      asDouble<Parameters<TextEditor['setRenderer']>[0]>({
+        buildParagraph: (node: SceneNode) => {
+          built.push(node.paragraphSpacing)
+          return layoutOf(
+            {
+              delete: () => undefined,
+              getHeight: () => 20,
+              getLineMetrics: () => [],
+              getRectsForRange: () => []
+            },
+            node.text.length
+          )
+        },
+        fontGeneration: 1
+      })
+    )
+    const node = createDefaultNode(() => 'spaced-text', 'TEXT', { text: 'A\nB' })
+    editor.start(node)
+    editor.invalidateParagraph({ ...node, paragraphSpacing: 12 })
+    expect(built).toEqual([0])
+    // A panel field previews a value: the selection drawn next follows it.
+    editor.getSelectionRects()
+    editor.getSelectionRects()
+    expect(built).toEqual([0, 12])
   })
 
   test('offsets the empty-text caret for vertical alignment', () => {
@@ -357,21 +399,17 @@ describe('TextEditor empty lines with Skia paragraphs', () => {
     const editor = new TextEditor(ck)
     const renderer = {
       fontGeneration: 1,
+      ck,
+      fontProvider: fonts,
       buildParagraph(node: SceneNode) {
-        const builder = ck.ParagraphBuilder.MakeFromFontProvider(
-          new ck.ParagraphStyle({ textStyle: { fontFamilies: ['Inter'], fontSize: 20 } }),
-          fonts
-        )
-        builder.addText(node.text)
-        const paragraph = builder.build()
-        paragraph.layout(200)
-        builder.delete()
-        return paragraph
+        return buildParagraph(renderer, node)
       }
     }
     editor.setRenderer(renderer as Parameters<TextEditor['setRenderer']>[0])
     const node = createDefaultNode(() => 'multiline', 'TEXT', {
       text,
+      fontFamily: 'Inter',
+      fontSize: 20,
       width: 200,
       height: 160,
       textAlignVertical

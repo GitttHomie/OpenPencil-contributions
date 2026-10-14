@@ -26,6 +26,7 @@ export function drawNodeHighlightRect(
 ): boolean {
   const node = graph.getNode(nodeId)
   if (!node) return false
+  if (r.pageId !== null && graph.pageOf(nodeId) !== r.pageId) return false
 
   const abs = graph.getAbsolutePosition(nodeId)
   const cx = (abs.x + node.width / 2) * r.zoom + r.panX

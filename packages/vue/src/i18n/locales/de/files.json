@@ -25,5 +25,15 @@
   "newDesign": "Neues Design",
   "noMatchingFiles": "Keine Dateien entsprechen „{query}“.",
   "saveAsPrompt": "Speichern unter:",
-  "browserFileAPINotSupported": "Dein Browser unterstützt die lokale Datei-API nicht. Dateien werden heruntergeladen, statt direkt gespeichert zu werden."
+  "browserFileAPINotSupported": "Dein Browser unterstützt die lokale Datei-API nicht. Dateien werden heruntergeladen, statt direkt gespeichert zu werden.",
+  "cleanupHeading": "Eingebettete Komponenten bereinigen?",
+  "cleanupDescription": "Entferne {count} ungenutzte Definitionen von internen Seiten. Alle Instanzen, benötigten Definitionen und Komponenten auf regulären Seiten bleiben erhalten.",
+  "cleanupKeep": "Alles behalten",
+  "cleanupRemove": "Unbenutzte Komponenten entfernen",
+  "cleanupIntro": "Wähle, wie „{name}“ geöffnet wird. Die Originaldatei bleibt bis zum Speichern unverändert.",
+  "cleanupInternalHeading": "Interne Seiten und verknüpfte Instanzen entfernen",
+  "cleanupInternalDescription": "Entferne {canvases} interne Seiten, {components} eingebettete Definitionen und {instances} verknüpfte Instanzebenen auf {pages} regulären Seiten.",
+  "cleanupInternalWarning": "Dies verändert deine Designs, einschließlich ausgeblendeter Inhalte und Instanzen externer Bibliotheken. Verschachtelte verknüpfte Ebenen werden entfernt, ihre umgebenden Buttons oder Frames bleiben erhalten. Gültige Komponenten auf regulären Seiten bleiben bestehen.",
+  "cleanupHiddenInstances": "Blende {count} verschachtelte ausgetauschte Instanzen aus, deren Ersatz entfernt wird. Die umgebenden Komponenten bleiben erhalten.",
+  "cleanupInternalRemove": "Seiten und verknüpfte Instanzen entfernen"
 }

@@ -1,7 +1,7 @@
 import type { Editor } from '@open-pencil/core/editor'
 
 import type { HitTestFns } from '#vue/shared/input/select'
-import { drillHit, resolveLabelHit } from '#vue/shared/input/select/hit'
+import { drillHit, hitTestLabel } from '#vue/shared/input/select/hit'
 import type { DragMove } from '#vue/shared/input/types'
 
 export function createSelectionClick(editor: Editor, fns: HitTestFns) {
@@ -18,7 +18,7 @@ export function createSelectionClick(editor: Editor, fns: HitTestFns) {
       editor.state.activeTool !== 'SELECT' ||
       editor.state.editingTextId ||
       editor.state.nodeEditState ||
-      resolveLabelHit(cx, cy, fns)
+      hitTestLabel(cx, cy, fns)
     ) {
       return
     }

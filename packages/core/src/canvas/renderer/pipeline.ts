@@ -3,7 +3,7 @@ import type { Canvas } from 'canvaskit-wasm'
 import type { SceneGraph } from '@open-pencil/scene-graph'
 import { computeDescendantVisualBounds } from '@open-pencil/scene-graph/geometry'
 
-import { drawPixelGrid } from '#core/canvas/pixel-grid'
+import { needsImagePreviews } from '#core/canvas/images/previews'
 import type { RenderOverlays, SkiaRenderer } from '#core/canvas/renderer'
 import { playIslandRoots } from '#core/editor/play/islands'
 import type { EditorState } from '#core/editor/types'
@@ -14,20 +14,24 @@ import { renderSceneBacking, updateSceneBackingPreviewState } from './retained-b
 import { hasTransientPreviews, renderPageWithPreviews } from './transient-previews'
 
 export function renderSceneToCanvas(
-  r: SkiaRenderer,
+  r: Pick<SkiaRenderer, 'worldViewport' | 'viewportImageRendering' | 'renderNode'>,
   canvas: Canvas,
   graph: SceneGraph,
   pageId: string
 ): void {
   const prevViewport = r.worldViewport
+  const previewMode = r.viewportImageRendering
+  r.viewportImageRendering = false
   r.worldViewport = { x: -1e9, y: -1e9, w: 2e9, h: 2e9 }
-  const pageNode = graph.getNode(pageId)
-  if (pageNode) {
-    for (const childId of pageNode.childIds) {
-      r.renderNode(canvas, graph, childId, {})
+  try {
+    const pageNode = graph.getNode(pageId)
+    if (pageNode) {
+      for (const childId of pageNode.childIds) r.renderNode(canvas, graph, childId, {})
     }
+  } finally {
+    r.worldViewport = prevViewport
+    r.viewportImageRendering = previewMode
   }
-  r.worldViewport = prevViewport
 }
 
 export type RenderLayer = 'full' | 'scene' | 'overlays'
@@ -44,6 +48,21 @@ export function renderFromEditorState(
   layer: RenderLayer = 'full',
   interactive = false
 ): void {
+  const previewMode = r.imagePreviews.enabled && needsImagePreviews(graph)
+  if (
+    r.imageMemoryGraph !== graph ||
+    r.viewportImageRendering !== previewMode ||
+    (previewMode && r.imageMemoryPage !== state.currentPageId)
+  ) {
+    r.invalidateAllPictures()
+    r.imageCache.clear()
+    // Previews of another document hold its encoded images, which a document without
+    // previews would otherwise keep alive.
+    if (r.imageMemoryGraph !== graph) r.imagePreviews.release()
+    r.imageMemoryGraph = graph
+    r.imageMemoryPage = state.currentPageId
+  }
+  r.viewportImageRendering = previewMode
   r.dpr = dpr
   r.panX = state.panX
   r.panY = state.panY
@@ -53,6 +72,7 @@ export function renderFromEditorState(
   r.showRulers = showRulers
   r.pageColor = state.pageColor
   r.rulerTheme = state.rulerTheme ?? null
+  r.setSelectionTheme(state.selectionTheme)
   r.pageId = state.currentPageId
   r.navigationPhase = state.navigation.phase
   r.navigationGeneration = state.navigation.generation
@@ -63,10 +83,12 @@ export function renderFromEditorState(
     graph,
     previewing ? new Set<string>() : state.selectedIds,
     {
-      showPixelGrid: state.showPixelGrid,
       playing: previewing,
       playIslands: previewing ? new Set(playIslandRoots(graph, state.currentPageId)) : undefined,
       hoveredNodeId: previewing ? null : state.hoveredNodeId,
+      showPixelGrid: !previewing && state.showPixelGrid !== false,
+      gradientEdit: state.gradientEdit,
+      transforming: interactive,
       measurementMode: state.measurementMode,
       enteredContainerId: state.enteredContainerId,
       editingTextId: state.editingTextId,
@@ -84,11 +106,13 @@ export function renderFromEditorState(
             cursorY: state.penCursorY ?? undefined
           } as RenderOverlays['penState'])
         : null,
+      pencilState: state.pencilState,
       nodeEditState: state.nodeEditState ?? null,
       presenceCursors: state.presenceCursors,
       designIssues: state.designIssues,
       codeFocusNodeId: state.codeFocusNodeId,
-      autoLayoutHover: state.autoLayoutHover
+      autoLayoutHover: state.autoLayoutHover,
+      shapeHandleHover: state.shapeHandleHover
     },
     // Recorded pictures follow what the canvas draws, not every document change.
     state.canvasVersion,
@@ -153,6 +177,7 @@ function getSceneRenderPolicy(
     graph.positionPreviewVersion !== r.scenePicturePositionPreviewVersion &&
     sceneVersion === r.scenePictureVersion
   const requiresUncachedSceneRender =
+    r.viewportImageRendering ||
     interactive ||
     hasPositionPreview ||
     sceneContentDependsOnOverlay(overlays) ||
@@ -185,7 +210,6 @@ function drawAboveScene(
 ): void {
   canvas.save()
   canvas.scale(r.dpr, r.dpr)
-  if (!overlays.playing && overlays.showPixelGrid) drawPixelGrid(r, canvas)
   r.labelCache.update(graph, r.pageId, sceneVersion, graph.positionPreviewVersion)
   if (!overlays.playing) drawLabelPass(r, canvas, graph, selectedIds, overlays)
   canvas.restore()
@@ -338,7 +362,23 @@ function renderSceneContent(
   requiresUncachedSceneRender: boolean
 ): void {
   const p = r.profiler
-  if (canUsePicture) {
+  if (
+    requiresUncachedSceneRender ||
+    (r.navigationPhase !== 'idle' && r.foregroundBlurCache.size > 0)
+  ) {
+    const previous = r.renderingSceneBacking
+    r.renderingSceneBacking = interactivePreview(r, overlays)
+    p.setScenePictureMode('volatile', cacheMissReason)
+    r._nodeCount = 0
+    r._culledCount = 0
+    p.beginPhase('render:volatile')
+    try {
+      renderPageChildren(r, canvas, graph, overlays)
+    } finally {
+      r.renderingSceneBacking = previous
+      p.endPhase('render:volatile')
+    }
+  } else if (canUsePicture) {
     p.setScenePictureMode('hit')
     p.beginPhase('render:drawPicture')
     if (r.scenePicture) {
@@ -347,13 +387,6 @@ function renderSceneContent(
       p.setScenePictureDrawTime(duration)
     }
     p.endPhase('render:drawPicture')
-  } else if (requiresUncachedSceneRender) {
-    p.setScenePictureMode('volatile', cacheMissReason)
-    r._nodeCount = 0
-    r._culledCount = 0
-    p.beginPhase('render:volatile')
-    renderPageChildren(r, canvas, graph, overlays)
-    p.endPhase('render:volatile')
   } else {
     p.setScenePictureMode('record', cacheMissReason)
     r._nodeCount = 0
@@ -363,6 +396,12 @@ function renderSceneContent(
     p.setScenePictureRecordTime(duration)
     p.endPhase('render:recordPicture')
   }
+}
+
+function interactivePreview(r: SkiaRenderer, overlays: RenderOverlays): boolean {
+  return (
+    !r.viewportImageRendering && (r.navigationPhase !== 'idle' || overlays.transforming === true)
+  )
 }
 
 function renderPageChildren(

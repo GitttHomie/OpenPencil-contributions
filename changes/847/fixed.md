@@ -1,0 +1,40 @@
+- Preserve text, fill, and stroke style assignments when reopening variable-backed designs.
+- Hide empty and resource-only internal canvases from the page list while preserving variables, shared styles, and access to embedded component pages.
+- Selection colors refresh when clicking a frame or switching selections, without requiring a second edit to reveal the palette.
+- Focusing and leaving negative numeric values preserves their exact value and variable binding; arrow-key edits no longer reinterpret displayed negatives as subtraction.
+- Apply a text style’s variable bindings together with its typography values, so the inspector follows the selected style instead of retaining the previous style’s tokens.
+- Open files with repeated library collection keys when their references identify distinct local collections, without merging collections or changing variable values. Preserve collection versions when importing, saving, copying, and sharing documents.
+- Keep imported frames visible during navigation when nested Boolean geometry contains non-finite positions or dimensions.
+- AI generation continues in its original document when opening or switching tabs, with separate live conversations and MCP selections per document. Closing imported documents releases their canvas and chat resources.
+- Keep subsequent AI edits on the working page after inspecting library content on another page.
+- Reorder existing sections within their frame through reparent_node, honoring an explicit index or moving them to the end when omitted.
+- Bound stock-photo preparation so stalled credentials or downloads release subsequent canvas edits and cannot place images after reporting a timeout.
+- Keep Hug columns sized to their text rather than expanding each column to the full available row width, including reused footer components.
+- Preserve nested component links and overrides when duplicating frames and instances, so repeated components save without ambiguous geometry errors.
+- Draw inside strokes around the current bounds and corners of imported buttons, frames, and instances after resizing, instead of clipping their saved outlines.
+- Allow AI property edits in large documents with incremental rollback and undo, discover components on unopened pages by name, and resize oversized chat previews while preserving requested file exports. Show the working page when CLI chat switches pages, and keep edit highlights on the page containing their objects.
+- Keep canvas shortcuts available when a focused numeric inspector field is removed, allow Save and Save As while editing canvas text or inspector inputs, and accept Cmd/Ctrl+| alongside Cmd/Ctrl+\\ for toggling the UI.
+- Vector selection boxes fit the drawn curves, including paths in reopened SVG artwork, while enclosing SVG frames keep their original dimensions.
+- Preserve clipping, corner-radius and smoothing overrides when saving and reopening component instances or copying through Figma format, including independent corner values.
+- Preserve custom nested-instance names when swapping components or variants and undoing or redoing the change.
+- Recalculate saved Hug/Fill bounds after structural edits inside components and their instances, including Figma-format paste Undo/Redo and save/reopen.
+- Resize Hug ancestors and reflow Fill siblings after variant, exposed text, or visibility changes, including component visibility defaults, nested variants in reopened files, and property assignments through AI, JSX, and scripts. Preserve explicit instance size and visibility overrides while releasing redundant imported size claims.
+- Keep Fill contents distributed across their instance's available space after reopening a document or resizing its surrounding frame, instead of collapsing them to their content widths or retaining their largest size when the frame shrinks.
+- Resize Fill frames and reposition their siblings after reopening a document instead of retaining saved dimensions and positions when the surrounding frame changes size.
+- Reflow saved frames, component definitions, and instances after padding, gap, alignment, text, visibility, or sizing edits; retain the updated positions and Hug bounds when saving and reopening. Recover stale content offsets in older OpenPencil saves when they contradict the frame's start-aligned padding.
+- Preserve layout edits committed from live property previews through save/reopen, and restore geometry and instance overrides when canceling or returning a preview to its original value.
+- Wrap Fill text at its allocated width when drawing and saving, so visible lines match the text box even when it retains Auto width and height sizing.
+- Preserve copied component links, nested property assignments, per-side variable overrides, auto-layout exclusion, corner smoothing, and child identity through synchronization and layout wrapping. Deleting an ordinary instance child hides it without removing its component structure.
+- Keep right, bottom, and center constraints on excluded Hug frames when their own or surrounding content changes, including instance overrides and Undo/Redo.
+- Preserve per-side values and variable bindings when expanding or collapsing padding, corner radius, and border controls, and restore grouped edits together with Undo.
+- Place pasted objects correctly in nested or rotated containers, preserve relative spacing, prevent recursive component nesting, and restore geometry and sibling order through structural Undo.
+- Nest new objects under the frame beneath the pointer, allow dragging them out, and reorder auto-layout children with arrow keys while preserving multi-object order and drag cancellation.
+- Preserve fixed text-sizing axes through font and weight changes, recompute Hug bounds when fonts arrive, and render new characters in downloaded subsets, including overridden instance labels after a component font change. Commit font choices immediately, offer only supported styles, preload visible previews, and reopen the list at the selected family.
+- Keep rendered text and selection bounds aligned, preserve empty trailing-line caret navigation, and recover text from older OpenPencil files with approximate saved glyph placement.
+- Synchronize variable definitions, collections, aliases, modes, and bindings in collaboration rooms, including reconnects, cached restoration, and remote layout refresh.
+- Calculate text contrast through translucent ancestor fills and group opacity; avoid numeric claims for unknown image, gradient, or unsupported-blend backdrops.
+- Keep existing canvas content visible while AI edits load fonts, and refresh cached tiles when font loading completes.
+- Keep queued AI permissions visible until an explicit decision; group Kiro reasoning coherently and support session approval for canvas tools. Recognize successful Codex results containing `error: null` and unavailable-model errors even when an adapter reports a completed turn.
+- Remove partial nodes after failed render calls so retries do not duplicate components, and preserve replacement placement and fragment results through MCP.
+- Keep active-document Undo/Redo available after switching tabs, update layer names immediately, and reveal selected layers after reparenting them into collapsed containers.
+- Open external desktop links once without a spurious shell permission error, keep circular loading indicators centered throughout their rotation, and use consistent composer gaps and control sizes.

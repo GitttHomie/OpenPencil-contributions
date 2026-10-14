@@ -126,10 +126,8 @@ export function createPastedTrees(
   }
   for (const node of nodes) createRoot(node)
   remapReferences()
-  const canReplace = replacementTargets.every(
-    (target) =>
-      target.parentId === pasteTarget &&
-      [...references].every((id) => canCreateInstance(graph, id, target.id))
+  const canReplace = replacementTargets.every((target) =>
+    [...references].every((id) => id !== target.id && !graph.isDescendant(id, target.id))
   )
   return { created, dependencyRootIds, pasteTarget, canReplace }
 }

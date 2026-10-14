@@ -1,4 +1,7 @@
+import type { SceneNode } from '@open-pencil/scene-graph'
+
 import type { SkiaRenderer } from '#core/canvas/renderer'
+import { changesShaping } from '#core/canvas/text/paragraph/inputs'
 
 export function invalidateScenePicture(r: SkiaRenderer): void {
   r.scenePicture?.delete()
@@ -29,13 +32,23 @@ export function invalidateAllPictures(r: SkiaRenderer): void {
   r.nodePictureCacheGenerations.clear()
   r.nodePictureCacheDependencies.clear()
   r.effectRasterCache.clear()
+  r.foregroundBlurCache.clear()
   clearSubtreePictureCache(r)
 }
 
-export function invalidateNodePicture(r: SkiaRenderer, nodeId: string): void {
-  r.textPreparationCache.deleteNode(nodeId)
+export function invalidateNodePicture(
+  r: SkiaRenderer,
+  nodeId: string,
+  changedKeys?: readonly (keyof SceneNode)[]
+): void {
+  r.textPreparationCache.deleteNode(nodeId, {
+    keepShaping: changedKeys !== undefined && !changesShaping(changedKeys)
+  })
   r.effectRasterCache.delete(nodeId)
   r.effectRasterCache.deleteDependencies(nodeId)
+  if (!changedKeys?.every((key) => key === 'x' || key === 'y')) {
+    r.foregroundBlurCache.delete(nodeId)
+  }
   for (const [ownerId, dependencyIds] of r.nodePictureCacheDependencies) {
     if (!dependencyIds.includes(nodeId)) continue
     r.nodePictureCache.get(ownerId)?.delete()

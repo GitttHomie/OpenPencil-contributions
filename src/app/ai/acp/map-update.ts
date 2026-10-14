@@ -85,7 +85,7 @@ function mapToolUpdate(
     chunks.push({
       type: 'tool-output-available',
       toolCallId: update.toolCallId,
-      output: update.rawOutput ?? textFromContent(update.content ?? undefined),
+      output: update.rawOutput ?? outputFromContent(update.content ?? undefined),
       providerExecuted: true
     })
   } else if (update.status === 'failed') {
@@ -97,6 +97,19 @@ function mapToolUpdate(
     })
   }
   return chunks
+}
+
+function outputFromContent(content: JSONObject[] | undefined) {
+  const blocks =
+    content?.flatMap((item) =>
+      item.type === 'content' && item.content && typeof item.content === 'object'
+        ? [item.content]
+        : []
+    ) ?? []
+  if (blocks.some((block) => 'type' in block && block.type === 'image')) {
+    return { content: blocks }
+  }
+  return textFromContent(content)
 }
 
 export function textFromContent(content: JSONObject[] | undefined): string | undefined {

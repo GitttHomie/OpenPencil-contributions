@@ -56,6 +56,31 @@ test('malformed and unsafe definitions are rejected before changing a profile', 
   expect(() => parseIntegration(JSON.stringify({ ...configuration(), version: 2 }))).toThrow()
 })
 
+test('imported Codex config fields use the adapter encoding without changing their definitions', () => {
+  const manifest = parseIntegration(
+    JSON.stringify({
+      version: 1,
+      agent: 'codex',
+      fields: [
+        {
+          id: 'teamRegion',
+          label: 'Region',
+          type: 'region',
+          target: {
+            kind: 'config',
+            flag: '--config',
+            key: 'model_providers.team.aws.region'
+          }
+        }
+      ]
+    })
+  )
+  expect(acpLaunchOptions('codex', { teamRegion: 'eu-west-1' }, manifest)).toEqual({
+    args: [],
+    env: { CODEX_CONFIG: '{"model_providers.team.aws.region":"eu-west-1"}' }
+  })
+})
+
 test('profile save and reopen preserve imported fields and session choices independently', () => {
   const previous = structuredClone(toRaw(aiModelSettings.value))
   try {

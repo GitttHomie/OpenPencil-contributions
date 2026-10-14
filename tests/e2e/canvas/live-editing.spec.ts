@@ -5,6 +5,7 @@ import type { Page } from '@playwright/test'
 import { expect, test } from '#tests/e2e/fixtures'
 import { expectDefined } from '#tests/helpers/assert'
 import { CanvasHelper } from '#tests/helpers/canvas'
+import { keepEmbeddedDefinitions } from '#tests/helpers/document/open'
 
 // This size exceeds the 3x overscan budget and previously produced fractional
 // raster offsets, even though the live scene itself was pixel-aligned.
@@ -84,7 +85,7 @@ for (const imported of [false, true]) {
           contentType: 'application/octet-stream'
         })
       )
-      await page.evaluate(async () => {
+      const opening = page.evaluate(async () => {
         const store = window.openPencil?.getStore?.()
         if (!store) throw new Error('Editor unavailable')
         const response = await fetch('/__fixtures/gold-preview.fig')
@@ -92,6 +93,7 @@ for (const imported of [false, true]) {
         store.setZoomAroundPoint(1, 0, 0)
         store.pan(-store.state.panX, -store.state.panY)
       })
+      await keepEmbeddedDefinitions(page, opening)
       await createSelectedFrame(page)
     }
     // Recreate the surface in sRGB for platform-independent pixel expectations.

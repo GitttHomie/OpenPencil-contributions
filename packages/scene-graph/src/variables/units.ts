@@ -5,7 +5,7 @@ export function scaleVariableBindingUnits(node: SceneNode, factor: number): Part
   const variableBindingScales = { ...node.variableBindingScales }
   const variableAssignmentScales = { ...node.variableAssignmentScales }
   for (const field of NUMERIC_FIELDS) {
-    if (field === 'opacity' || field === 'rotation') continue
+    if (field === 'opacity' || field === 'rotation' || field === 'cornerSmoothing') continue
     if (field in node.boundVariables)
       variableBindingScales[field] = (variableBindingScales[field] ?? 1) * factor
     if (node.type === 'INSTANCE')

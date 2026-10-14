@@ -33,6 +33,29 @@ function settings(overrides: Record<string, unknown> = {}) {
 }
 
 describe('parseAIModelSettings', () => {
+  test('preserves image-capable CLI assignments and their verification status', () => {
+    const parsed = parseAIModelSettings(
+      settings({
+        connections: [{ ...connection, providerID: 'acp:codex' }],
+        models: [{ ...profile, capabilities: ['tools', 'vision'], imageSupport: 'verified' }],
+        assignments: { design: 'model-a', review: 'design', fast: null, vision: 'design' }
+      })
+    )
+    expect(parsed?.assignments.vision).toBe('design')
+    expect(parsed?.models[0].imageSupport).toBe('verified')
+  })
+
+  test('rejects a Vision assignment when the CLI explicitly cannot receive images', () => {
+    const parsed = parseAIModelSettings(
+      settings({
+        connections: [{ ...connection, providerID: 'acp:codex' }],
+        models: [{ ...profile, capabilities: ['tools', 'vision'], imageSupport: 'unsupported' }],
+        assignments: { design: 'model-a', review: null, fast: null, vision: 'model-a' }
+      })
+    )
+    expect(parsed?.assignments.vision).toBeNull()
+  })
+
   test('keeps CLI launch fields, discovered mappings, and thinking choices', () => {
     const acp = {
       acpThinking: { configId: 'effort', value: 'low' },

@@ -14,7 +14,7 @@ import { useDesignCheckMessages } from '@open-pencil/vue'
 import { useEditorStore } from '@/app/editor/active-store'
 import { issueDetail, ruleTitle } from '@/app/editor/design-check/format'
 import { compareIssueSeverity, type DesignIssue } from '@/app/editor/design-check/issues'
-import { nodeIcon } from '@/app/editor/icons'
+import { sceneNodeIcon } from '@/app/editor/icons'
 import SeverityIcon from '@/components/ui/feedback/SeverityIcon.vue'
 import { issueTooltip } from '@/theme/design-check'
 
@@ -123,7 +123,7 @@ const edgeHeading = computed(() => {
             <span v-if="edgeHeading" :class="styles.headerText()">{{ edgeHeading }}</span>
             <template v-else-if="singleNode">
               <component
-                :is="nodeIcon(singleNode)"
+                :is="sceneNodeIcon(singleNode)"
                 :class="styles.headerIcon()"
                 aria-hidden="true"
               />

@@ -8,7 +8,6 @@ import { drawNodeHighlightRect } from '#core/canvas/highlight-rect'
 import type { RenderOverlays, SkiaRenderer } from '#core/canvas/renderer'
 import {
   FLASH_ATTACK_MS,
-  FLASH_COLOR,
   FLASH_HOLD_MS,
   FLASH_OVERSHOOT,
   FLASH_RELEASE_MS,
@@ -79,7 +78,17 @@ export function drawFlashes(r: SkiaRenderer, canvas: Canvas, graph: SceneGraph):
       extraPad = 0
     }
 
-    if (!drawNodeHighlightRect(r, canvas, graph, flash.nodeId, FLASH_COLOR, opacity, extraPad)) {
+    if (
+      !drawNodeHighlightRect(
+        r,
+        canvas,
+        graph,
+        flash.nodeId,
+        r.selectionTheme.color,
+        opacity,
+        extraPad
+      )
+    ) {
       r._flashes.splice(i, 1)
     }
   }

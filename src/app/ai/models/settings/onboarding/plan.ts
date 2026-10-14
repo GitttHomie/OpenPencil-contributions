@@ -170,10 +170,11 @@ function keepable(model: PlannedModel | null, access: OnboardingAccess[]): model
   return !isOnboardingAccess(model.providerID) || access.includes(model.providerID)
 }
 
-/** Whether a role may follow the design model: agents cannot, and vision needs image input. */
+/** Image understanding can follow a CLI with discovered image support. */
 export function canFollowDesign(role: AIModelRole, design: PlannedModel | null): boolean {
-  if (!design || isAgentModel(design)) return false
-  return role !== 'vision' || hasVision(design)
+  if (!design) return false
+  if (role === 'vision') return hasVision(design)
+  return !isAgentModel(design)
 }
 
 function planDesign(

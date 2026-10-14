@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'bun:test'
 
 import * as layoutModule from '@open-pencil/core/layout'
 
+import { createCanvasSession, canvasSessionPage } from '@/app/ai/acp/canvas/session'
 import { makeFigmaFromStore } from '@/app/automation/bridge/figma-factory'
 import { createAutomationCommandHandlers } from '@/app/automation/bridge/handlers'
 import { createTab, getActiveStore, getActiveTabId, getTabById, getTabsSnapshot } from '@/app/tabs'
@@ -92,6 +93,96 @@ describe('activate_document', () => {
   })
 })
 
+describe('CLI chat page switches', () => {
+  test('switch_page moves the chat and visible page, without adding an undo step', async () => {
+    const tab = createTab()
+    const store = tab.store
+    const pageId = store.graph.addPage('Generated design').id
+    const session = createCanvasSession(store)
+    session.start()
+    const undoBefore = store.undo.peekUndo()
+    try {
+      await settle(
+        handleRequest(store, 'tool', { name: 'switch_page', args: { page: pageId } }, session.id)
+      )
+      expect(canvasSessionPage(session.id)).toBe(pageId)
+      expect(store.state.currentPageId).toBe(pageId)
+      expect(store.undo.peekUndo()).toBe(undoBefore)
+
+      await handleRequest(
+        store,
+        'tool',
+        {
+          name: 'create_shape',
+          args: { type: 'RECTANGLE', x: 20, y: 30, width: 40, height: 50, name: 'Visible card' }
+        },
+        session.id
+      )
+      expect(store.graph.getChildren(pageId).map((node) => node.name)).toEqual(['Visible card'])
+    } finally {
+      session.dispose()
+    }
+  })
+
+  test('reading another page does not switch the visible canvas', async () => {
+    const tab = createTab()
+    const store = tab.store
+    const shown = store.state.currentPageId
+    const other = store.graph.addPage('Library').id
+    const session = createCanvasSession(store)
+    session.start()
+    try {
+      await handleRequest(
+        store,
+        'tool',
+        { page_id: other, name: 'get_current_page', args: {} },
+        session.id
+      )
+      expect(store.state.currentPageId).toBe(shown)
+      expect(canvasSessionPage(session.id)).toBe(shown)
+      await handleRequest(
+        store,
+        'tool',
+        {
+          name: 'create_shape',
+          args: {
+            type: 'FRAME',
+            name: 'After library inspection',
+            x: 0,
+            y: 0,
+            width: 40,
+            height: 40
+          }
+        },
+        session.id
+      )
+      expect(store.graph.getChildren(shown).map((node) => node.name)).toContain(
+        'After library inspection'
+      )
+      expect(store.graph.getChildren(other)).toHaveLength(0)
+    } finally {
+      session.dispose()
+    }
+  })
+
+  test('a stopped chat cannot move the visible canvas with a late page switch', async () => {
+    const tab = createTab()
+    const store = tab.store
+    const shown = store.state.currentPageId
+    const other = store.graph.addPage('Generated design').id
+    const session = createCanvasSession(store)
+    session.start()
+    session.finish()
+    try {
+      await handleRequest(store, 'tool', { name: 'switch_page', args: { page: other } }, session.id)
+      expect(store.state.currentPageId).toBe(shown)
+      expect(canvasSessionPage(session.id)).toBe(shown)
+    } finally {
+      session.dispose()
+    }
+  })
+})
+
 describe('undo and redo', () => {
   test('step through automation changes and report their labels', async () => {
     const tab = createTab()
@@ -151,6 +242,26 @@ describe('undo and redo', () => {
     expect(tab.store.graph.getNode(id)).toBeUndefined()
   })
 
+  test('undo and redo of a deletion leave the layers it did not touch alone', async () => {
+    const tab = createTab()
+    const graph = tab.store.graph
+    const kept = tab.store.createShape('RECTANGLE', 0, 0, 40, 40)
+    const deleted = tab.store.createShape('RECTANGLE', 60, 0, 40, 40)
+    const keptNode = graph.getNode(kept)
+    const pageId = tab.store.state.currentPageId
+    const order = [...(graph.getNode(pageId)?.childIds ?? [])]
+    await request('tool', { document_id: tab.id, name: 'delete_node', args: { id: deleted } })
+
+    await request('undo', { document_id: tab.id })
+    expect(graph.getNode(deleted)?.x).toBe(60)
+    expect(graph.getNode(pageId)?.childIds).toEqual(order)
+    expect(graph.getNode(kept)).toBe(keptNode)
+
+    await request('redo', { document_id: tab.id })
+    expect(graph.getNode(deleted)).toBeUndefined()
+    expect(graph.getNode(kept)).toBe(keptNode)
+  })
+
   test('undo reverts a render into a frame on another page', async () => {
     const tab = createTab()
     const graph = tab.store.graph
@@ -161,7 +272,7 @@ describe('undo and redo', () => {
       name: 'render',
       args: {
         parent_id: frame.id,
-        tree: { type: 'frame', props: { name: 'Rendered', w: 40, h: 40 }, children: [] }
+        jsx: '<Frame name="Rendered" w={40} h={40} />'
       }
     })
     const id = String(rendered.result.id)
@@ -172,10 +283,131 @@ describe('undo and redo', () => {
     expect(graph.getNode(frame.id)?.childIds).toEqual([])
   })
 
+  test('undo reverts a render that replaces a layer on another page', async () => {
+    const tab = createTab()
+    const graph = tab.store.graph
+    const otherPage = graph.addPage('Other')
+    const frame = graph.createNode('FRAME', otherPage.id, { width: 200, height: 200 })
+    const placeholder = graph.createNode('RECTANGLE', frame.id, { width: 40, height: 40 })
+    // replace_id decides where the layer goes, so its page records the change.
+    const rendered = await request('tool', {
+      document_id: tab.id,
+      name: 'render',
+      args: {
+        jsx: '<Frame name="Rendered" w={40} h={40} />',
+        replace_id: placeholder.id,
+        parent_id: tab.store.state.currentPageId
+      }
+    })
+    const id = String(rendered.result.id)
+    expect(graph.getNode(id)?.parentId).toBe(frame.id)
+
+    await request('undo', { document_id: tab.id })
+    expect(graph.getNode(id)).toBeUndefined()
+    expect(graph.getNode(frame.id)?.childIds).toEqual([placeholder.id])
+  })
+
+  test('undo reverts a script’s edits to other pages, pages, and variables', async () => {
+    const tab = createTab()
+    const graph = tab.store.graph
+    const otherPage = graph.addPage('Other')
+    const card = graph.createNode('FRAME', otherPage.id, { name: 'Card', width: 200, height: 200 })
+    const pages = graph.getPages().map((page) => page.id)
+    await request('eval', {
+      document_id: tab.id,
+      code: `
+        const other = figma.root.children.find((page) => page.name === 'Other')
+        other.findOne((node) => node.name === 'Card').name = 'Renamed'
+        other.name = 'Renamed page'
+        figma.createPage().name = 'Added'
+        const colors = figma.createVariableCollection('Colors')
+        figma.createVariable('Brand', 'COLOR', colors.id)
+      `
+    })
+    expect(graph.getNode(card.id)?.name).toBe('Renamed')
+    expect(graph.variables.size).toBe(1)
+
+    const undone = await request('undo', { document_id: tab.id })
+    expect(undone.result).toMatchObject({ applied: true, label: 'Agent: eval' })
+    expect(graph.getNode(card.id)?.name).toBe('Card')
+    expect(graph.getNode(otherPage.id)?.name).toBe('Other')
+    expect(graph.getPages().map((page) => page.id)).toEqual(pages)
+    expect(graph.variables.size).toBe(0)
+    expect(graph.variableCollections.size).toBe(0)
+
+    await request('redo', { document_id: tab.id })
+    expect(graph.getNode(card.id)?.name).toBe('Renamed')
+    expect(graph.getPages().map((page) => page.name)).toEqual(['Page 1', 'Renamed page', 'Added'])
+    expect(graph.variables.size).toBe(1)
+  })
+
   test('a read-only eval leaves the history unchanged', async () => {
     const tab = createTab()
     await request('eval', { document_id: tab.id, code: 'return figma.currentPage.name' })
     expect(tab.store.undo.canUndo).toBe(false)
+  })
+})
+
+// The stdio MCP server sends render JSX as written; these are what #830 lost on that path.
+describe('render JSX', () => {
+  function render(tabId: string, args: Record<string, unknown>) {
+    return request('tool', { document_id: tabId, name: 'render', args })
+  }
+
+  test('binds a design variable', async () => {
+    const tab = createTab()
+    const graph = tab.store.graph
+    graph.addCollection({
+      id: 'brand',
+      name: 'Brand',
+      modes: [{ modeId: 'default', name: 'Default' }],
+      defaultModeId: 'default',
+      variableIds: []
+    })
+    graph.addVariable({
+      id: 'var-primary',
+      name: 'Brand/primary',
+      type: 'COLOR',
+      collectionId: 'brand',
+      valuesByMode: { default: { r: 1, g: 0, b: 0, a: 1 } },
+      description: '',
+      hiddenFromPublishing: false
+    })
+    const rendered = await render(tab.id, {
+      jsx: "<Frame w={100} h={100} fill={designVar('Brand/primary')} />"
+    })
+    const node = graph.getNode(String(rendered.result.id))
+    expect(node?.boundVariables['fills/0/color']).toBe('var-primary')
+  })
+
+  test('replaces a placeholder in its place', async () => {
+    const tab = createTab()
+    const graph = tab.store.graph
+    const placeholder = tab.store.createShape('RECTANGLE', 60, 30, 40, 40)
+    const rendered = await render(tab.id, {
+      jsx: '<Frame name="Card" w={40} h={40} />',
+      replace_id: placeholder
+    })
+    const node = graph.getNode(String(rendered.result.id))
+    expect(graph.getNode(placeholder)).toBeUndefined()
+    expect([node?.x, node?.y]).toEqual([60, 30])
+  })
+
+  test('inserts at the requested index', async () => {
+    const tab = createTab()
+    const graph = tab.store.graph
+    const frame = graph.createNode('FRAME', tab.store.state.currentPageId, {
+      width: 200,
+      height: 200
+    })
+    graph.createNode('RECTANGLE', frame.id, { name: 'First' })
+    graph.createNode('RECTANGLE', frame.id, { name: 'Second' })
+    const rendered = await render(tab.id, {
+      jsx: '<Frame name="Inserted" w={20} h={20} />',
+      parent_id: frame.id,
+      insert_index: 1
+    })
+    expect(graph.getNode(frame.id)?.childIds[1]).toBe(String(rendered.result.id))
   })
 })
 

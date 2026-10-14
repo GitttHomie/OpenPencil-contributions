@@ -25,5 +25,15 @@
   "newDesign": "Nuevo diseño",
   "noMatchingFiles": "Ningún archivo coincide con «{query}».",
   "saveAsPrompt": "Guardar como:",
-  "browserFileAPINotSupported": "Tu navegador no admite la API de archivos locales. Los archivos se descargarán en lugar de guardarse en el mismo lugar."
+  "browserFileAPINotSupported": "Tu navegador no admite la API de archivos locales. Los archivos se descargarán en lugar de guardarse en el mismo lugar.",
+  "cleanupHeading": "¿Limpiar componentes incrustados?",
+  "cleanupDescription": "Elimina {count} definiciones sin usar de las páginas internas. Conserva todas las instancias, sus definiciones necesarias y los componentes de las páginas normales.",
+  "cleanupKeep": "Conservar todo",
+  "cleanupRemove": "Eliminar componentes sin usar",
+  "cleanupIntro": "Elige cómo abrir «{name}». El archivo original no cambia hasta que guardes.",
+  "cleanupInternalHeading": "Eliminar páginas internas e instancias vinculadas",
+  "cleanupInternalDescription": "Elimina {canvases} páginas internas, {components} definiciones incrustadas y {instances} capas de instancia vinculadas en {pages} páginas normales.",
+  "cleanupInternalWarning": "Esto modifica los diseños, incluido el contenido oculto y las instancias de bibliotecas externas. Las capas vinculadas anidadas se eliminan sin borrar los botones o marcos que las contienen. Se conservan los componentes válidos de las páginas normales.",
+  "cleanupHiddenInstances": "Oculta {count} instancias anidadas intercambiadas cuyos reemplazos se eliminan, conservando los componentes que las contienen.",
+  "cleanupInternalRemove": "Eliminar páginas e instancias vinculadas"
 }

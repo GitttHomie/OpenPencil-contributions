@@ -1,5 +1,7 @@
 import { expect, test } from 'bun:test'
 
+import { NestedLayoutScaleFixture, readFixture } from '#core-tests/helpers/fig/fixtures'
+
 import { createEditor } from '@open-pencil/core/editor'
 import { exportFigFile } from '@open-pencil/core/io'
 import { initCodec } from '@open-pencil/core/kiwi'
@@ -8,10 +10,8 @@ import { materializeDocument, parseFigBuffer } from '@open-pencil/fig'
 import { symbolOverridesOf } from '@open-pencil/fig/instance-overrides'
 import type { NodeChange } from '@open-pencil/kiwi/fig/codec'
 import { hasInstanceOverride } from '@open-pencil/scene-graph'
-import { readFixtureObject } from '#core-tests/helpers/fig/fixtures'
 
-const fixture = readFixtureObject('nested-layout-scale.json')
-
+const fixture = readFixture('nested-layout-scale.json', NestedLayoutScaleFixture)
 
 function assembly(phase: 'before' | 'edited') {
   return materializeDocument(
@@ -68,9 +68,9 @@ test('scaled padding edits undo and export in the declaring owner space', async 
   const { graph: reopened } = materializeDocument(parsed.nodeChanges, parsed.blobs, {
     derivedBounds: true
   })
-  const placed = reopened
-    .getAllNodes()
-    .find((node) => node.type === 'INSTANCE' && node.name === 'Scaled outer')
+  const placed = [...reopened.getAllNodes()].find(
+    (node) => node.type === 'INSTANCE' && node.name === 'Scaled outer'
+  )
   if (!placed) throw new Error('Missing reopened instance')
   expect(reopened.getChildren(placed.id)[0].paddingLeft).toBe(7)
 })

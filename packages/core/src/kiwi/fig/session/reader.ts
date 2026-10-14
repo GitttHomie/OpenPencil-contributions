@@ -3,6 +3,9 @@ import type { FigPageManifestEntry } from '@open-pencil/kiwi/fig'
 
 import { buildFigPopulationDelta, installFigMutationJournal } from '#core/kiwi/fig/population/delta'
 import { readerSessionOptions, type FigReaderDiagnostic } from '#core/kiwi/fig/session/options'
+import { fitImportedVectorBounds } from '#core/vector/fitted-bounds'
+
+import { releaseStaleSavedLayouts } from './layout'
 
 /** Worker and main-thread transport for the .fig reader session for the FIG reader session. */
 export function openReaderSession(
@@ -33,6 +36,8 @@ export function openReaderSession(
     const page = pages.find((page) => !page.internalOnly)
     if (page) session.loadPage(page.sourceId)
   }
+  fitImportedVectorBounds(session.graph)
+  releaseStaleSavedLayouts(session.graph, session.metaJSON)
   return {
     session,
     /** Records skipped so far, including those of pages loaded later. */
@@ -47,6 +52,8 @@ export function openReaderSession(
       const journal = installFigMutationJournal(session.graph)
       try {
         session.loadPage(sourceId)
+        fitImportedVectorBounds(session.graph)
+        releaseStaleSavedLayouts(session.graph, session.metaJSON)
         return {
           checkpoint: session.checkpoint(),
           populated,

@@ -19,7 +19,7 @@ use credentials::{
 use deep_link::path_matches_suffix;
 use fig_container::build_fig_file;
 use fonts::{list_system_fonts, load_system_font};
-use http::proxy_http_request;
+use http::{cancel_http_request, proxy_http_request, ProxyHttpRequests};
 use menu::{install_app_menu, native_menu_checked, set_native_menu_checked};
 use menu_events::handle_menu_event;
 use std::{
@@ -75,15 +75,38 @@ fn webview_version() -> Option<String> {
     tauri::webview_version().ok()
 }
 
+/// Whether the environment turns off pings and usage stats: `OPENPENCIL_TELEMETRY` set to
+/// `0`, `false`, or `no`, or `DO_NOT_TRACK` set to anything but `0` or `false`.
+#[tauri::command]
+fn sharing_disabled_by_env() -> bool {
+    let is_off = |name: &str, off: &[&str]| {
+        std::env::var(name)
+            .map(|value| off.contains(&value.trim().to_ascii_lowercase().as_str()))
+            .unwrap_or(false)
+    };
+    let do_not_track = std::env::var("DO_NOT_TRACK")
+        .map(|value| !matches!(value.trim().to_ascii_lowercase().as_str(), "" | "0" | "false"))
+        .unwrap_or(false);
+    is_off("OPENPENCIL_TELEMETRY", &["0", "false", "no"]) || do_not_track
+}
+
 #[tauri::command]
 fn set_recent_files(app: tauri::AppHandle, paths: Vec<String>) -> Result<(), String> {
     install_app_menu(&app, &paths).map_err(|error| error.to_string())
 }
 
-/// Name of the MCP entry point installed by `@open-pencil/mcp`.
+/// The self-contained sidecar installed beside the application executable by Tauri.
 const MCP_EXECUTABLE: &str = "openpencil-mcp-http";
-/// Bound on the directories reported back to the settings diagnostics.
-const MAX_REPORTED_SEARCH_DIRS: usize = 12;
+
+fn bundled_mcp_path() -> Option<PathBuf> {
+    let name = if cfg!(windows) {
+        format!("{MCP_EXECUTABLE}.exe")
+    } else {
+        MCP_EXECUTABLE.to_owned()
+    };
+    let path = std::env::current_exe().ok()?.with_file_name(name);
+    path.is_file().then_some(path)
+}
 
 /// Directories that commonly hold a globally installed Node/Bun CLI.
 ///
@@ -93,7 +116,14 @@ const MAX_REPORTED_SEARCH_DIRS: usize = 12;
 /// cover managers that only modify an interactive rc file.
 fn mcp_candidate_dirs() -> Vec<PathBuf> {
     let mut dirs: Vec<PathBuf> = Vec::new();
-    if let Some(home) = std::env::var_os("HOME").map(PathBuf::from) {
+    // Bun, Volta, and npm keep their Windows folders under USERPROFILE, which a HOME set by
+    // Unix-style tools does not always match; HOME remains the fallback there.
+    let home = if cfg!(windows) {
+        std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME"))
+    } else {
+        std::env::var_os("HOME")
+    };
+    if let Some(home) = home.map(PathBuf::from) {
         dirs.push(home.join(".bun/bin"));
         dirs.push(home.join(".local/bin"));
         dirs.push(home.join(".toolbox/bin"));
@@ -120,20 +150,6 @@ fn mcp_candidate_dirs() -> Vec<PathBuf> {
         }
     }
     dirs
-}
-
-fn push_unique_dir(dirs: &mut Vec<String>, dir: String) {
-    if !dirs.contains(&dir) {
-        dirs.push(dir);
-    }
-}
-
-/// Existing candidate directories, most specific first, for diagnostics.
-fn mcp_search_dirs() -> Vec<PathBuf> {
-    mcp_candidate_dirs()
-        .into_iter()
-        .filter(|dir| dir.is_dir())
-        .collect()
 }
 
 /// Append candidate directories that the current process `PATH` is missing.
@@ -169,20 +185,12 @@ struct McpLookup {
 
 #[tauri::command]
 fn mcp_lookup() -> McpLookup {
-    let resolved = which::which(MCP_EXECUTABLE).ok();
+    let resolved = bundled_mcp_path();
     let path = resolved.as_ref().map(|p| p.display().to_string());
-    let mut searched: Vec<String> = Vec::new();
-    if let Some(dir) = resolved.as_ref().and_then(|p| p.parent()) {
-        push_unique_dir(&mut searched, dir.display().to_string());
-    }
-    for dir in mcp_search_dirs() {
-        push_unique_dir(&mut searched, dir.display().to_string());
-    }
-    searched.truncate(MAX_REPORTED_SEARCH_DIRS);
     McpLookup {
         available: resolved.is_some(),
         path,
-        searched,
+        searched: Vec::new(),
     }
 }
 
@@ -343,10 +351,12 @@ pub fn run() {
         .manage(PendingOpen(Mutex::new(Vec::new())))
         .manage(laya::LayaState::default())
         .manage(agent_process::AgentProcesses::default())
+        .manage(ProxyHttpRequests::default())
         .manage(PendingRooms(Mutex::new(Vec::new())))
         .invoke_handler(tauri::generate_handler![
             agents::agent_lookup,
             agent_process::agent_process_spawn,
+            agent_process::mcp_process_spawn,
             agent_process::agent_process_write,
             agent_process::agent_process_kill,
             laya::laya_status,
@@ -367,11 +377,13 @@ pub fn run() {
             color_sampler::pick_screen_color,
             load_system_font,
             proxy_http_request,
+            cancel_http_request,
             set_recent_files,
             native_menu_checked,
             set_native_menu_checked,
             take_pending_open,
             take_pending_rooms,
+            sharing_disabled_by_env,
             webview_version
         ])
         .plugin(tauri_plugin_opener::init())

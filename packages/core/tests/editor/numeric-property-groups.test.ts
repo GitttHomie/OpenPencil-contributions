@@ -73,7 +73,7 @@ test('independent values and mixed bindings survive saving and reopening a .fig 
   editor.updateNodeWithUndo(node.id, { topLeftRadius: 4 })
   const data = await exportFigFile(editor.graph)
   const reopened = await parseFigFile(data.slice().buffer as ArrayBuffer)
-  const restored = reopened.getAllNodes().find((node) => node.name === 'Mixed corners')
+  const restored = [...reopened.getAllNodes()].find((node) => node.name === 'Mixed corners')
   if (!restored) throw new Error('Missing reopened frame')
   expect(restored.independentCorners).toBe(true)
   expect(CORNER_RADIUS_PATHS.map((path) => restored[path])).toEqual([4, 16, 16, 16])

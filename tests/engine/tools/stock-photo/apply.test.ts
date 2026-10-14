@@ -88,7 +88,12 @@ describe('applyPhoto', () => {
       expect(calls).toEqual([
         {
           query: 'mountain sunset',
-          options: { perPage: 3, orientation: 'landscape', targetDim: 320 }
+          options: {
+            perPage: 3,
+            orientation: 'landscape',
+            targetDim: 320,
+            signal: expect.any(AbortSignal)
+          }
         }
       ])
       expect(node.fills[0]).toMatchObject({ type: 'IMAGE', imageScaleMode: 'FILL' })

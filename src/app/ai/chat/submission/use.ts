@@ -14,10 +14,10 @@ import {
 import { setVisibleMessageText } from '@/app/ai/chat/presentation'
 import { reportSubmissionError, type SubmissionErrorOptions } from '@/app/ai/chat/submission/errors'
 import { prepareSubmittedImages } from '@/app/ai/chat/submission/images'
-import { useRevertRecords } from '@/app/ai/chat/submission/reverts'
+import { chatToResend } from '@/app/ai/chat/submission/resend'
 import type { ChatInstance, ChatSubmission } from '@/app/ai/chat/submission/types'
-import { recordTurn, restoreTurn, revertTurn } from '@/app/ai/chat/turns'
-import { runUndoEntries } from '@/app/ai/tools'
+import { useUndoRecords } from '@/app/ai/chat/submission/undone'
+import { restoreTurn, revertTurn } from '@/app/ai/chat/turns'
 import type { EditorStore } from '@/app/editor/active-store'
 
 interface SubmissionOptions extends SubmissionErrorOptions {
@@ -33,33 +33,19 @@ export function useChatSubmission(options: SubmissionOptions) {
   const failed = ref(false)
   let operationVersion = 0
 
-  function lastAssistantId(chat: ChatInstance): string | undefined {
-    return chat.messages.findLast((message) => message.role === 'assistant')?.id
-  }
+  const undone = useUndoRecords(options)
+  const { withTurn } = undone
 
-  const reverts = useRevertRecords({ chat: options.chat, flush: options.flush })
-
-  /** Redoes a reverted reply's edits; Redo noticing them removes the mark. */
+  /** Redoes a reply's undone edits; Redo noticing them removes the marks. */
   async function restore(messageId: string): Promise<void> {
     if (!readyChat() || !restoreTurn(messageId)) return
     await options.flush?.().catch(() => undefined)
   }
 
-  /** Undoes a reply's edits and marks it, so the chat and the next request both say so. */
+  /** Undoes a reply's edits; the history change marks them, for the chat and the next request. */
   async function revert(messageId: string): Promise<void> {
-    const currentChat = readyChat()
-    if (!currentChat || !reverts.revert(currentChat, messageId)) return
+    if (!readyChat() || !revertTurn(messageId)) return
     await options.flush?.().catch(() => undefined)
-  }
-
-  /** Runs one message and keeps the undo entries its edits pushed, so the turn can be reverted. */
-  async function withTurn(chat: ChatInstance, send: () => Promise<void>): Promise<void> {
-    const editor = options.getEditor()
-    const previous = lastAssistantId(chat)
-    await send()
-    const reply = lastAssistantId(chat)
-    if (!reply || reply === previous) return
-    recordTurn(reply, editor, runUndoEntries(editor))
   }
 
   async function sendText(
@@ -171,7 +157,7 @@ export function useChatSubmission(options: SubmissionOptions) {
         if (submission.images.length > 0) options.reportError(options.messages.value.requestFailed)
         return false
       }
-      const note = reverts.note(submission.modelText, currentChat.messages)
+      const note = undone.note(submission.modelText, currentChat.messages)
       const noted = { ...submission, modelText: note.text }
       const previousIds = new Set(currentChat.messages.map((message) => message.id))
       if (submission.images.length === 0 && submission.nodes.length === 0) {
@@ -179,7 +165,10 @@ export function useChatSubmission(options: SubmissionOptions) {
       } else {
         await sendAttachments(currentChat, noted, version, dispatch)
       }
-      reverts.reportedNewRequest(currentChat, note.reverts, previousIds)
+      const request = currentChat.messages.find(
+        (message) => message.role === 'user' && !previousIds.has(message.id)
+      )
+      if (request) undone.reported(currentChat, note.reports, request.id)
       return true
     } catch (error) {
       if (version === operationVersion) failed.value = true
@@ -197,16 +186,16 @@ export function useChatSubmission(options: SubmissionOptions) {
     return currentChat.status === 'ready' || currentChat.status === 'error' ? currentChat : null
   }
 
-  /** Asks again for the last reply, undoing its edits first while nothing has been edited since. */
+  /** Asks again for the last reply, undoing its edits when it can, or for an unanswered request. */
   async function regenerate(): Promise<void> {
-    const currentChat = readyChat()
-    const reply = currentChat ? lastAssistantId(currentChat) : undefined
-    if (!currentChat || !reply) return
+    const currentChat = await chatToResend(options, readyChat())
+    const last = currentChat?.messages.at(-1)
+    if (!currentChat || !last) return
     options.clearFailure()
-    revertTurn(reply)
+    if (last.role === 'assistant') revertTurn(last.id)
     try {
       await withTurn(currentChat, () =>
-        currentChat.regenerate({ messageId: reply }).catch(() => undefined)
+        currentChat.regenerate({ messageId: last.id }).catch(() => undefined)
       )
     } finally {
       await options.flush?.().catch(() => undefined)
@@ -215,7 +204,7 @@ export function useChatSubmission(options: SubmissionOptions) {
 
   /** Replaces the last user message and asks again, undoing the old reply's edits when it can. */
   async function resend(messageId: string, text: string): Promise<void> {
-    const currentChat = readyChat()
+    const currentChat = await chatToResend(options, readyChat())
     const trimmed = text.trim()
     if (!currentChat || !trimmed) return
     const index = currentChat.messages.findIndex((message) => message.id === messageId)
@@ -223,14 +212,14 @@ export function useChatSubmission(options: SubmissionOptions) {
     if (index === -1 || later.some((message) => message.role === 'user')) return
     options.clearFailure()
     for (const message of later) if (message.role === 'assistant') revertTurn(message.id)
-    // Replies after the edited message are replaced; the reverts it reported need a new report.
-    const note = reverts.note(trimmed, currentChat.messages.slice(0, index))
+    // Replies after the edited message are replaced; what it reported needs a new report.
+    const note = undone.note(trimmed, currentChat.messages.slice(0, index))
     setVisibleMessageText(messageId, trimmed)
     try {
       await withTurn(currentChat, () =>
         currentChat.sendMessage({ messageId, text: note.text }).catch(() => undefined)
       )
-      reverts.reported(currentChat, note.reverts, messageId)
+      undone.reported(currentChat, note.reports, messageId)
     } finally {
       await options.flush?.().catch(() => undefined)
     }

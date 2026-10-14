@@ -77,3 +77,34 @@ export async function createRestoredLayoutScene(page: Page) {
     }
   }
 }
+
+export async function addIndependentSizingLayer(
+  page: Page,
+  ids: { parent: string; child: string }
+) {
+  return page.evaluate((ids) => {
+    const editor = window.openPencil?.getStore?.()
+    if (!editor) throw new Error('Editor unavailable')
+    const sibling = editor.graph.createNode('FRAME', ids.parent, {
+      name: 'Independent content',
+      width: 200,
+      height: 40,
+      fills: [{ type: 'SOLID', color: { r: 0.2, g: 0.6, b: 0.5, a: 1 }, opacity: 1, visible: true }]
+    })
+    editor.updateNode(ids.child, {
+      layoutMode: 'VERTICAL',
+      primaryAxisSizing: 'FIXED',
+      counterAxisSizing: 'FIXED'
+    })
+    editor.setLayoutMode(ids.parent, 'VERTICAL')
+    editor.updateNode(ids.parent, {
+      paddingTop: 16,
+      paddingBottom: 16,
+      paddingLeft: 16,
+      paddingRight: 16,
+      itemSpacing: 12
+    })
+    editor.select([ids.child])
+    return sibling.id
+  }, ids)
+}

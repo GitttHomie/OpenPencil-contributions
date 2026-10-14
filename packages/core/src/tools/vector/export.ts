@@ -5,6 +5,10 @@ import type { RasterExportFormat } from '#core/io/formats/raster/index'
 import { toolNumber } from '#core/tools/input'
 import { defineTool } from '#core/tools/schema'
 
+// Base64 adds one third; leave room below the MCP response budget for transport metadata.
+const MAX_PREVIEW_BYTES = 600_000
+const MAX_PREVIEW_REDUCTIONS = 4
+
 const exportInputs = {
   ids: v.optional(
     v.pipe(
@@ -69,7 +73,7 @@ export const exportSVG = defineTool({
   description: 'Export nodes as SVG markup. Returns the SVG string.',
   execution: { kind: 'async', mutation: 'none' },
   exposure: { webmcp: false },
-  input: v.object({ ...exportInputs }),
+  input: v.strictObject({ ...exportInputs }),
   execute: async (figma, args) => {
     const { renderNodesToSVG } = await import('#core/io/formats/svg/index')
     const pageId = figma.currentPageId
@@ -87,7 +91,7 @@ export const exportPDF = defineTool({
     'Export nodes as a vector PDF document. Text remains selectable, paths stay sharp at any zoom. Returns base64-encoded PDF data.',
   execution: { kind: 'async', mutation: 'none' },
   exposure: { webmcp: false },
-  input: v.object({ ...exportInputs }),
+  input: v.strictObject({ ...exportInputs }),
   execute: async (figma, args) => {
     const { renderNodesToPDF } = await import('#core/io/formats/pdf/index')
     const pageId = figma.currentPageId
@@ -103,10 +107,10 @@ export const exportPDF = defineTool({
 export const exportImage = defineTool({
   name: 'export_image',
   description:
-    'Export nodes as a raster image (PNG, JPG, or WEBP). Returns base64-encoded image data. Use to visually verify designs.',
+    'Export nodes as a raster image (PNG, JPG, or WEBP). Returns base64-encoded image data. Chat previews automatically reduce resolution to fit the response budget. Supply path for a file export at the requested scale and maxEdge. Use a fresh preview after the last edit to visually verify designs.',
   execution: { kind: 'async', mutation: 'none' },
   exposure: { webmcp: false },
-  input: v.object({
+  input: v.strictObject({
     ...exportInputs,
     format: v.optional(
       v.pipe(v.picklist(['PNG', 'JPG', 'WEBP']), v.description('Image format')),
@@ -143,12 +147,28 @@ export const exportImage = defineTool({
     )
     const width = bounds.maxX - bounds.minX
     const height = bounds.maxY - bounds.minY
-    const boundedScale = boundedRasterScale(width, height, requestedScale, maxEdge)
+    let boundedScale = boundedRasterScale(width, height, requestedScale, maxEdge)
     if (boundedScale <= 0) return { error: 'No visible nodes to export' }
-    const data = await figma.exportImage(ids, {
+    let data = await figma.exportImage(ids, {
       scale: boundedScale,
       format
     })
+    let previewReduced = false
+    for (
+      let attempt = 0;
+      !args.path && data && data.length > MAX_PREVIEW_BYTES && attempt < MAX_PREVIEW_REDUCTIONS;
+      attempt++
+    ) {
+      boundedScale *= 0.5
+      previewReduced = true
+      data = await figma.exportImage(ids, { scale: boundedScale, format })
+    }
+    if (!args.path && data && data.length > MAX_PREVIEW_BYTES) {
+      return {
+        error:
+          'Preview is too large. Export a smaller region, or supply path to save the requested image to a file.'
+      }
+    }
     if (!data || data.length === 0) return { error: 'No visible nodes to export' }
     const base64 = fromUint8Array(data)
     const mimeMap = { PNG: 'image/png', JPG: 'image/jpeg', WEBP: 'image/webp' } as const
@@ -158,7 +178,8 @@ export const exportImage = defineTool({
       byteLength: data.length,
       width: Math.ceil(width * boundedScale),
       height: Math.ceil(height * boundedScale),
-      scale: boundedScale
+      scale: boundedScale,
+      ...(previewReduced ? { previewReduced: true } : {})
     }
   }
 })

@@ -1,10 +1,76 @@
 import { describe, expect, test } from 'bun:test'
 
-import { SceneGraph } from '@open-pencil/scene-graph'
+import { SceneGraph, getInstanceOverride, setInstanceOverride } from '@open-pencil/scene-graph'
 
 import { expectDefined, getNodeOrThrow } from '../helpers/assert'
 
 describe('SceneGraph.cloneTree', () => {
+  test('copies nested override targets while retaining external definitions and literal strings', () => {
+    const graph = new SceneGraph()
+    const page = graph.getPages()[0]
+    const component = graph.createNode('COMPONENT', page.id)
+    const source = graph.createNode('TEXT', component.id, { text: 'Default' })
+    const frame = graph.createNode('FRAME', page.id)
+    const owner = expectDefined(graph.createInstance(component.id, frame.id))
+    const child = graph.getChildren(owner.id)[0]
+    for (const [field, value] of [
+      ['sourceComponentId', source.id],
+      ['text', child.id],
+      ['boundVariables/fontSize', 'font-size-variable']
+    ]) {
+      setInstanceOverride(owner.instanceOverrides, owner.id, child.id, field, value)
+    }
+    const before = structuredClone(owner.instanceOverrides)
+    for (const copy of [
+      expectDefined(graph.cloneTree(frame.id, page.id)),
+      expectDefined(graph.cloneTree(frame.id, page.id))
+    ]) {
+      const copiedOwner = graph.getChildren(copy.id)[0]
+      const copiedChild = graph.getChildren(copiedOwner.id)[0]
+      expect([...copiedOwner.instanceOverrides.descendants.keys()]).toEqual([copiedChild.id])
+      expect(copiedOwner.componentId).toBe(component.id)
+      expect(copiedChild.componentId).toBe(source.id)
+      expect(
+        getInstanceOverride(
+          copiedOwner.instanceOverrides,
+          copiedOwner.id,
+          copiedChild.id,
+          'sourceComponentId'
+        )
+      ).toBe(source.id)
+      expect(
+        getInstanceOverride(copiedOwner.instanceOverrides, copiedOwner.id, copiedChild.id, 'text')
+      ).toBe(child.id)
+      expect(
+        getInstanceOverride(
+          copiedOwner.instanceOverrides,
+          copiedOwner.id,
+          copiedChild.id,
+          'boundVariables/fontSize'
+        )
+      ).toBe('font-size-variable')
+    }
+    expect(owner.instanceOverrides).toEqual(before)
+  })
+
+  test('copies internal component references when the definition and instance are duplicated together', () => {
+    const graph = new SceneGraph()
+    const page = graph.getPages()[0]
+    const frame = graph.createNode('FRAME', page.id)
+    const component = graph.createNode('COMPONENT', frame.id)
+    const source = graph.createNode('RECTANGLE', component.id)
+    graph.createInstance(component.id, frame.id)
+    const copy = expectDefined(graph.cloneTree(frame.id, page.id))
+    const [copiedComponent, copiedInstance] = graph.getChildren(copy.id)
+    expect(copiedInstance.componentId).toBe(copiedComponent.id)
+    const copiedSource = graph.getChildren(copiedComponent.id)[0]
+    expect(graph.getChildren(copiedInstance.id)[0].componentId).toBe(copiedSource.id)
+    graph.updateNode(copiedSource.id, { opacity: 0.5 })
+    graph.syncInstances(copiedComponent.id)
+    expect(graph.getChildren(copiedInstance.id)[0].opacity).toBe(0.5)
+    expect(source.opacity).toBe(1)
+  })
+
   test('clone clears source.id from the clone', () => {
     const graph = new SceneGraph()
     const page = graph.getPages()[0]

@@ -9,11 +9,7 @@ export async function createTypographyFixture(
   await page.evaluate(async ({ google }) => {
     const editor = window.openPencil?.getStore?.()
     if (!editor?.renderer) throw new Error('Editor unavailable')
-    const moduleURL = performance
-      .getEntriesByType('resource')
-      .map((entry) => entry.name)
-      .find((url) => url.includes('/packages/core/src/text/fonts.ts'))
-    if (!moduleURL) throw new Error('Font runtime unavailable')
+    const moduleURL = '/packages/core/src/text/fonts.ts'
     const { fontManager } = (await import(/* @vite-ignore */ moduleURL)) as {
       fontManager: FontManager
     }
@@ -53,11 +49,7 @@ export async function readTypography(page: Page, id: string) {
   return page.evaluate(async (nodeId) => {
     const editor = window.openPencil?.getStore?.()
     const node = editor?.graph.getNode(nodeId)
-    const moduleURL = performance
-      .getEntriesByType('resource')
-      .map((entry) => entry.name)
-      .find((url) => url.includes('/packages/core/src/text/fonts.ts'))
-    if (!moduleURL) throw new Error('Font runtime unavailable')
+    const moduleURL = '/packages/core/src/text/fonts.ts'
     const { fontManager, weightToStyle } = (await import(/* @vite-ignore */ moduleURL)) as {
       fontManager: FontManager
       weightToStyle: (weight: number, italic: boolean) => string

@@ -72,7 +72,7 @@ export const lint = defineTool({
     'off-scale spacing and radius, colors that match a variable but are not bound, and structure hygiene. ' +
     'Findings are sorted by severity. A `fix` is safe to apply with lint_fix; `suggestions` change values and need judgment.',
   execution: { kind: 'sync', mutation: 'none' },
-  input: v.object({ ...lintScopeInput, limit: analysisLimitInput }),
+  input: v.strictObject({ ...lintScopeInput, limit: analysisLimitInput }),
   execute: (figma, args) => {
     const result = runLint(figma, args)
     const rank = { error: 0, warning: 1, info: 2 }
@@ -91,9 +91,10 @@ export const lintFix = defineTool({
   description:
     'Apply lint fixes: bind colors to the variable they match and round geometry to whole pixels. ' +
     'With suggestions: true, also apply each finding’s first suggestion (snap radius and spacing to the scale, ' +
-    'raise text to the minimum size). Returns what was applied and what remains.',
-  execution: { kind: 'sync', mutation: 'properties' },
-  input: v.object({
+    'raise text to the minimum size, convert groups to frames, delete hidden layers). ' +
+    'Returns what was applied and what remains.',
+  execution: { kind: 'sync', mutation: 'document' },
+  input: v.strictObject({
     ...lintScopeInput,
     suggestions: v.optional(
       v.pipe(v.boolean(), v.description('Also apply the first suggestion of each finding')),

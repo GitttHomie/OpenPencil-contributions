@@ -1,4 +1,4 @@
-import { isEqual, pick } from 'es-toolkit'
+import { isEqual, pick, uniq } from 'es-toolkit'
 
 import type { SceneNode } from '@open-pencil/scene-graph'
 
@@ -10,6 +10,19 @@ export interface NodePreview {
   update: (id: string, changes: Partial<SceneNode>) => void
   commit: () => void
   cancel: () => void
+}
+
+const PREVIEW_IMPLICIT_FIELDS = new Set<keyof SceneNode>([
+  'source',
+  'derivedLayout',
+  'derivedTextGlyphs',
+  'instanceOverrides'
+])
+
+function hasAuthoredChange(before: Partial<SceneNode>, node: SceneNode): boolean {
+  return (Object.keys(before) as (keyof SceneNode)[]).some(
+    (key) => !PREVIEW_IMPLICIT_FIELDS.has(key) && !isEqual(before[key], node[key])
+  )
 }
 
 /** One owned numeric/property edit, including every node changed by its layout. */
@@ -29,19 +42,36 @@ export function createNodePreviewActions(
     const originals = new Map<string, Partial<SceneNode>>()
     const targets = new Set<string>()
     const layoutOnly = new Set<string>()
+    const editedBefore = new Map<string, string[]>()
     let closed = false
     let endInteraction: (() => void) | undefined
     const subscriptions: Array<() => void> = []
 
     function capture(node: SceneNode, changes: Partial<SceneNode>) {
       if (!originals.has(node.id) && graph.isApplyingLayout) layoutOnly.add(node.id)
-      if (!graph.isApplyingLayout) layoutOnly.delete(node.id)
+      if (!graph.isApplyingLayout) {
+        layoutOnly.delete(node.id)
+      }
       const previous = originals.get(node.id) ?? {}
+      if (!graph.isApplyingLayout && !previous.source)
+        previous.source = structuredClone(node.source)
       const keys = (Object.keys(changes) as (keyof SceneNode)[]).filter(
         (key) => !Object.hasOwn(previous, key)
       )
       if (keys.length) Object.assign(previous, structuredClone(pick(node, keys)))
       originals.set(node.id, previous)
+      if (!graph.isApplyingLayout) markEdited(node, changes)
+    }
+
+    // Fields count as edited while previewed, as a committed edit marks them, so the preview's
+    // own layout stops keeping geometry a file saved; cancel takes the marks back.
+    function markEdited(node: SceneNode, changes: Partial<SceneNode>) {
+      if (graph.isPreservingSourceMetadata) return
+      if (!editedBefore.has(node.id)) editedBefore.set(node.id, node.source.editedFields)
+      node.source.editedFields = uniq([
+        ...node.source.editedFields,
+        ...Object.keys(changes).filter((key) => key !== 'source')
+      ])
     }
 
     function close() {
@@ -76,13 +106,42 @@ export function createNodePreviewActions(
           preview.cancel()
           throw error
         }
+        if (
+          ![...targets].some((id) => {
+            const before = originals.get(id)
+            const node = graph.getNode(id)
+            return before && node && hasAuthoredChange(before, node)
+          })
+        ) {
+          preview.cancel()
+          return
+        }
         const edits: Array<{ id: string; before: Partial<SceneNode>; after: Partial<SceneNode> }> =
           []
         for (const [id, before] of originals) {
           const node = graph.getNode(id)
           if (!node) continue
-          const after = structuredClone(pick(node, Object.keys(before) as (keyof SceneNode)[]))
-          if (!isEqual(before, after)) edits.push({ id, before, after })
+          const after: Partial<SceneNode> = structuredClone(
+            pick(node, Object.keys(before) as (keyof SceneNode)[])
+          )
+          if (!isEqual(before, after)) {
+            // Preview updates don't mark authored fields. Keep that provenance in the
+            // committed snapshot, rather than overwriting it with a saved source object.
+            if (targets.has(id)) {
+              before.source ??= structuredClone(node.source)
+              const source = after.source ?? node.source
+              after.source = {
+                ...source,
+                editedFields: [
+                  ...new Set([
+                    ...source.editedFields,
+                    ...Object.keys(after).filter((key) => key !== 'source')
+                  ])
+                ]
+              }
+            }
+            edits.push({ id, before, after })
+          }
         }
         close()
         if (edits.length === 0) {
@@ -90,11 +149,13 @@ export function createNodePreviewActions(
           return
         }
         function apply(direction: 'before' | 'after') {
-          for (const edit of edits) {
-            const update = () => graph.updateNode(edit.id, structuredClone(edit[direction]))
-            if (layoutOnly.has(edit.id)) graph.withLayoutMutations(update)
-            else update()
-          }
+          graph.preserveSourceMetadataDuring(() => {
+            for (const edit of edits) {
+              const update = () => graph.updateNode(edit.id, structuredClone(edit[direction]))
+              if (layoutOnly.has(edit.id)) graph.withLayoutMutations(update)
+              else update()
+            }
+          })
           ctx.requestRender()
         }
         ctx.undo.push({ label, forward: () => apply('after'), inverse: () => apply('before') })
@@ -106,6 +167,10 @@ export function createNodePreviewActions(
         close()
         for (const [id, previous] of originals)
           graph.updateNodePreview(id, structuredClone(previous))
+        for (const [id, fields] of editedBefore) {
+          const node = graph.getNode(id)
+          if (node) node.source.editedFields = fields
+        }
         // Reconcile retained/tiled resources once; cancellation publishes no committed node edits.
         if (originals.size) ctx.requestRender()
       }

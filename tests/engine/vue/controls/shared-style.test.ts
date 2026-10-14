@@ -90,6 +90,74 @@ describe('shared style model', () => {
     })
   })
 
+  test('switching text styles replaces their variable bindings and restores them on undo', () => {
+    const graph = makeSceneGraph()
+    const pageId = firstPageId(graph)
+    const collection = graph.createCollection('Typography')
+    const oldSize = graph.createVariable('Display size', 'FLOAT', collection.id, 48)
+    const newSize = graph.createVariable('Heading size', 'FLOAT', collection.id, 24)
+    const newHeight = graph.createVariable('Heading height', 'FLOAT', collection.id, 32)
+    const target = graph.createNode('TEXT', pageId, {
+      text: 'A heading',
+      fontSize: 48,
+      lineHeight: 56,
+      textStyleId: '1:20',
+      boundVariables: { fontSize: oldSize.id, fontStyle: 'old-weight', opacity: 'opacity-token' },
+      variableBindingScales: { fontSize: 2, opacity: 0.01 }
+    })
+    const style = graph.createNode('TEXT', pageId, {
+      fontSize: 24,
+      lineHeight: 32,
+      boundVariables: { fontSize: newSize.id, lineHeight: newHeight.id, opacity: 'style-opacity' },
+      variableBindingScales: { fontSize: 1, lineHeight: 1, opacity: 0.5 }
+    })
+    const editor = createEditor({ graph })
+    const before = structuredClone({
+      textStyleId: target.textStyleId,
+      fontSize: target.fontSize,
+      lineHeight: target.lineHeight,
+      boundVariables: target.boundVariables,
+      variableBindingScales: target.variableBindingScales
+    })
+    editor.updateNodeWithUndo(target.id, sharedStylePatch('text', target, '1:21', style))
+    expect(target).toMatchObject({
+      textStyleId: '1:21',
+      fontSize: 24,
+      lineHeight: 32,
+      boundVariables: {
+        fontSize: newSize.id,
+        lineHeight: newHeight.id,
+        opacity: 'opacity-token'
+      },
+      variableBindingScales: { fontSize: 1, lineHeight: 1, opacity: 0.01 }
+    })
+    expect(target.boundVariables.fontStyle).toBeUndefined()
+    expect(graph.resolveNumberVariableForNode(target.id, target.boundVariables.fontSize)).toBe(24)
+    editor.undo.undo()
+    expect(target).toMatchObject(before)
+    editor.undo.redo()
+    expect(target.boundVariables.fontSize).toBe(newSize.id)
+    expect(style.boundVariables.opacity).toBe('style-opacity')
+  })
+
+  test('a literal text style removes old typography bindings but keeps other bindings', () => {
+    const graph = makeSceneGraph()
+    const pageId = firstPageId(graph)
+    const target = graph.createNode('TEXT', pageId, {
+      boundVariables: { fontSize: 'old-size', fontFamily: 'old-font', text: 'caption' },
+      variableBindingScales: { fontSize: 2, width: 1 }
+    })
+    const style = graph.createNode('TEXT', pageId, {
+      fontSize: 16,
+      fontFeatures: [{ tag: 'LIGA', enabled: false }]
+    })
+    const patch = sharedStylePatch('text', target, '1:21', style)
+    expect(patch.boundVariables).toEqual({ text: 'caption' })
+    expect(patch.variableBindingScales).toEqual({ width: 1 })
+    expect(patch.fontFeatures).toEqual(style.fontFeatures)
+    expect(patch.fontFeatures).not.toBe(style.fontFeatures)
+  })
+
   test('detaching a reference invalidates only its effective Figma fallback', () => {
     const graph = makeSceneGraph()
     const target = graph.createNode('RECTANGLE', firstPageId(graph), {
@@ -111,7 +179,7 @@ describe('shared style model', () => {
     })
   })
 
-  test('manual visual edits detach only the matching style and undo restores it', () => {
+  test('manual paint edits detach while typography edits retain the style for updating', () => {
     const graph = makeSceneGraph()
     const pageId = firstPageId(graph)
     const target = graph.createNode('RECTANGLE', pageId, {
@@ -133,7 +201,7 @@ describe('shared style model', () => {
 
     const text = graph.createNode('TEXT', pageId, { fontSize: 16, textStyleId: '1:21' })
     editor.updateNodeWithUndo(text.id, { fontSize: 24 }, 'Change font size')
-    expect(graph.getNode(text.id)).toMatchObject({ fontSize: 24, textStyleId: null })
+    expect(graph.getNode(text.id)).toMatchObject({ fontSize: 24, textStyleId: '1:21' })
     editor.undo.undo()
     expect(graph.getNode(text.id)).toMatchObject({ fontSize: 16, textStyleId: '1:21' })
   })

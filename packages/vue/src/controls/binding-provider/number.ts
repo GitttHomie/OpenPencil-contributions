@@ -58,19 +58,36 @@ function resolveNumber(editor: Editor, id: string, target?: BindingTarget) {
     ? resolveEffectiveBindingValue(editor, id, target)
     : editor.resolveNumberVariable(id)
   if (typeof value !== 'number') return undefined
-  return (
+  const effective =
     value * (target ? (editor.getNode(target.nodeId)?.variableBindingScales[target.path] ?? 1) : 1)
-  )
+  return target?.path === 'opacity' || target?.path === 'cornerSmoothing'
+    ? Math.max(0, Math.min(1, effective))
+    : effective
 }
 
-export function useNumberBindingProvider() {
+/** displayScale converts scene units to field units, e.g. 100 for a percentage field. */
+export function useNumberBindingProvider(displayScale = 1) {
+  if (!Number.isFinite(displayScale) || displayScale <= 0)
+    throw new Error('Number binding display scale must be positive and finite')
   return useOpenPencilBindingProvider<number>({
     type: 'FLOAT',
     bindingTarget: numberBindingTarget,
     prepareTargets: prepareNumberTargets,
-    resolve: resolveNumber,
-    prepareEdit: (editor, id, target) =>
-      prepareModeEdit(editor, id, target, () => resolveNumber(editor, id, target)),
-    create: createAndBindNumberVariable
+    resolve: (editor, id, target) => {
+      const value = resolveNumber(editor, id, target)
+      return value === undefined ? undefined : value * displayScale
+    },
+    prepareEdit: (editor, id, target) => {
+      const edit = prepareModeEdit(editor, id, target, () => resolveNumber(editor, id, target))
+      return (
+        edit && {
+          ...edit,
+          value: edit.value * displayScale,
+          set: (value: number) => edit.set(value / displayScale)
+        }
+      )
+    },
+    create: (editor, target, value, name) =>
+      createAndBindNumberVariable(editor, target, value / displayScale, name)
   })
 }

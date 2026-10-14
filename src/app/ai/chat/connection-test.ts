@@ -1,4 +1,5 @@
 import { generateText } from 'ai'
+import { toUint8Array } from 'js-base64'
 
 import { ACPConfigurationError } from '@/app/ai/acp/configuration/session'
 import { ACPLaunchSettingsError } from '@/app/ai/acp/launch'
@@ -100,19 +101,36 @@ export function classifyConnectionError(error: unknown): ProviderConnectionTestF
 }
 
 export async function testProviderConnection(
-  config: ModelConfig
+  config: ModelConfig,
+  imageProbe?: { data: string; expected: string },
+  signal?: AbortSignal
 ): Promise<ProviderConnectionTestResult> {
   const invalidReason = validateConfig(config)
   if (invalidReason) return { ok: false, reason: invalidReason }
 
   try {
-    await generateText({
+    const result = await generateText({
       model: createLanguageModel(config),
-      prompt: 'Reply with OK.',
-      maxOutputTokens: 1,
+      messages: [
+        {
+          role: 'user',
+          content: imageProbe
+            ? [
+                {
+                  type: 'text',
+                  text: 'Read the six digits in this image. Reply with only those digits.'
+                },
+                { type: 'file', mediaType: 'image/png', data: toUint8Array(imageProbe.data) }
+              ]
+            : [{ type: 'text', text: 'Reply with OK.' }]
+        }
+      ],
+      maxOutputTokens: imageProbe ? 128 : 1,
       maxRetries: 0,
-      abortSignal: AbortSignal.timeout(15_000)
+      abortSignal: signal ?? AbortSignal.timeout(15_000)
     })
+    if (imageProbe && result.text.trim() !== imageProbe.expected)
+      return { ok: false, reason: 'unknown' }
     return { ok: true }
   } catch (error) {
     return { ok: false, reason: classifyConnectionError(error) }

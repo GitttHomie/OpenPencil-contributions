@@ -31,6 +31,8 @@ export interface FillSwatchProps extends PrimitiveProps {
   fill: Fill
   /** Accessible name for the preview. */
   label?: string
+  /** Resolve the surrounding field binding. Disable for independent picker previews. @default true */
+  inheritBinding?: boolean
 }
 
 export interface FillSwatchSlotProps {

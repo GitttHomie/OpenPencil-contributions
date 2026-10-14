@@ -24,7 +24,7 @@ import type {
 import { geometryCommandCoordCount } from './geometry'
 import { cloneInstanceOverrideState } from './instance-overrides'
 import { createDefaultSourceMetadata, strokePaintType } from './node-defaults'
-import { cloneVectorNetwork } from './vector-network'
+import { cloneVectorNetwork } from './vector'
 
 // --- Individual copy functions ---
 
@@ -57,7 +57,7 @@ export function copyEffect(e: Effect): Effect {
 }
 
 export function copyStyleRun(r: StyleRun): StyleRun {
-  return {
+  const copy: StyleRun = {
     ...r,
     style: {
       ...r.style,
@@ -71,6 +71,9 @@ export function copyStyleRun(r: StyleRun): StyleRun {
       fontFeatures: r.style.fontFeatures ? r.style.fontFeatures.map((v) => ({ ...v })) : undefined
     }
   }
+  if (r.style.hyperlink) copy.style.hyperlink = { ...r.style.hyperlink }
+  if (r.style.boundVariables) copy.style.boundVariables = { ...r.style.boundVariables }
+  return copy
 }
 
 // --- Array copy functions ---
@@ -273,6 +276,7 @@ export function cloneNodeProps(
     dashPattern: copyOpt(src.dashPattern, (a) => [...a]),
     fontVariations: copyOpt(src.fontVariations, (a) => a.map((v) => ({ ...v }))),
     fontFeatures: copyOpt(src.fontFeatures, (a) => a.map((v) => ({ ...v }))),
+    textParagraphs: copyOpt(src.textParagraphs, (a) => a.map((v) => ({ ...v }))),
     textDecorationFills: copyOpt(src.textDecorationFills, copyFills),
     fillGeometry: copyOpt(src.fillGeometry, copyGeometryPaths),
     strokeGeometry: copyOpt(src.strokeGeometry, copyGeometryPaths),
@@ -296,6 +300,7 @@ export function cloneNodeProps(
       : null,
     textPathData: src.textPathData ? structuredClone(src.textPathData) : null,
     textPathBox: src.textPathBox ? { ...src.textPathBox } : null,
-    gridPosition: src.gridPosition ? { ...src.gridPosition } : null
+    gridPosition: src.gridPosition ? { ...src.gridPosition } : null,
+    targetAspectRatio: src.targetAspectRatio ? { ...src.targetAspectRatio } : null
   }
 }

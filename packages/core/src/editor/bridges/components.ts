@@ -76,6 +76,9 @@ export function createComponentBridge(
     deleteComponentProperty: components.deleteComponentProperty,
     getInstanceComponentPropertyValue: components.getInstanceComponentPropertyValue,
     setInstanceComponentProperty: components.setInstanceComponentProperty,
+    getExposableInstances: components.getExposableInstances,
+    moveComponentProperty: components.moveComponentProperty,
+    setInstanceExposed: components.setInstanceExposed,
     resetSlot: components.resetSlot,
     clearSlot: components.clearSlot,
     addInstanceToSlot: components.addInstanceToSlot

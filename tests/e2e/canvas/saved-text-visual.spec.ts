@@ -4,8 +4,25 @@ import { parseFigBuffer } from '@open-pencil/fig'
 
 import { expect, test } from '#tests/e2e/fixtures'
 import { CanvasHelper } from '#tests/helpers/canvas'
+import { createFillTextWrapScene } from '#tests/helpers/canvas/fill-text'
 
 const MESSAGE = 'A sentence long enough that it has to wrap onto a second line.'
+
+test('Fill labels draw within their growing bounds in a component and narrower instance', async ({
+  page
+}) => {
+  await page.goto('/?test&no-chrome&no-rulers')
+  const canvas = new CanvasHelper(page)
+  await canvas.waitForInit()
+  const [main, instance] = await createFillTextWrapScene(page)
+  expect(main).toMatchObject({ width: 269, autoResize: 'WIDTH_AND_HEIGHT' })
+  expect(instance).toMatchObject({ width: 160, autoResize: 'WIDTH_AND_HEIGHT' })
+  expect(main.height).toBeGreaterThan(24)
+  expect(instance.height).toBeGreaterThan(main.height)
+  await canvas.waitForRender()
+  canvas.assertNoErrors()
+  expect(await canvas.screenshotCanvasRegion(570, 300)).toMatchSnapshot('fill-text-wrap.png')
+})
 
 test('wrapped text keeps its lines after a .fig is saved and reopened (#914)', async ({ page }) => {
   await page.goto('/?test&no-chrome&no-rulers')

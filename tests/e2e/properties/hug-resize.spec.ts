@@ -1,6 +1,6 @@
 import { expect, test, useEditorSetupWithClear } from '#tests/e2e/fixtures'
 import { createHugResizeFixture, readHugResizeGeometry } from '#tests/helpers/canvas/hug-resize'
-import { setPixelGridViewport } from '#tests/helpers/canvas/pixel-grid'
+import { setPixelGridViewport } from '#tests/helpers/canvas/pixel/grid'
 
 const editor = useEditorSetupWithClear('/?test&no-rulers')
 

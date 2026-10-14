@@ -29,12 +29,25 @@ function setup(handle: DragResize['handle'] = 'se') {
     origStrokes: [],
     origTextPathData: null,
     origTextPathBox: null,
+    lockedAspectRatio: null,
     origChildren: null
   }
   return { editor, nodeId: node.id, drag }
 }
 
 describe('resize snapping preferences', () => {
+  // Figma desktop 126 lands a resized edge on a whole pixel at any zoom.
+  test('snaps edges to whole pixels however far zoomed in', () => {
+    const { editor, nodeId, drag } = setup()
+    editor.state.snappingPreferences = { geometry: true, objects: false, pixelGrid: true }
+    editor.state.zoom = 16
+
+    applyResize(drag, drag.startX + 0.4, drag.startY + 0.4, false, editor)
+    commitResizePreview(drag, editor)
+
+    expect(editor.graph.getNode(nodeId)).toMatchObject({ x: 10, y: 20, width: 101, height: 81 })
+  })
+
   test('preserves fractional edges when pixel snapping is disabled', () => {
     const { editor, nodeId, drag } = setup()
     editor.state.snappingPreferences = { geometry: true, objects: false, pixelGrid: false }

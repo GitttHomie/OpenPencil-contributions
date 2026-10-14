@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, useId } from 'vue'
 
 import { MIXED, useComponentProperties, useI18n, useSlotProperties } from '@open-pencil/vue'
 
@@ -34,6 +34,10 @@ const visible = computed(
 const SLOT_THUMBNAIL_SIZE = 32
 const { panels, common } = useI18n()
 const componentSectionUI = { title: 'text-component' }
+const fieldId = useId()
+const toggleFieldUI = {
+  container: 'items-end'
+}
 
 function selectOptions(control: (typeof controls.value)[number]) {
   return control.value === MIXED
@@ -72,8 +76,15 @@ function booleanValue(control: (typeof controls.value)[number]) {
 <template>
   <PanelSection v-if="variantControls.length" :label="panels.variants" :ui="componentSectionUI">
     <div class="flex flex-col gap-field-group">
-      <PanelFieldGroup v-for="control in variantControls" :key="control.id" :label="control.name">
+      <PanelFieldGroup
+        v-for="control in variantControls"
+        :key="control.id"
+        :label="control.name"
+        :for="`${fieldId}-${control.id}`"
+        layout="inline"
+      >
         <AppSelect
+          :id="`${fieldId}-${control.id}`"
           :label="control.name"
           :model-value="selectValue(control)"
           :options="selectOptions(control)"
@@ -89,22 +100,31 @@ function booleanValue(control: (typeof controls.value)[number]) {
     </p>
     <div class="flex flex-col gap-field-group">
       <template v-for="control in attributeControls" :key="control.id">
-        <label
+        <PanelFieldGroup
           v-if="control.type === 'BOOLEAN'"
-          class="flex min-h-field items-center justify-between gap-2 text-xs text-surface"
+          :label="control.name"
+          :for="`${fieldId}-${control.id}`"
+          layout="inline"
+          :ui="toggleFieldUI"
         >
-          <span class="min-w-0 truncate">{{ control.name }}</span>
           <AppSwitch
+            :id="`${fieldId}-${control.id}`"
             :model-value="booleanValue(control)"
             :label="control.name"
             :state="control.value === MIXED ? 'mixed' : 'idle'"
             :data-property="control.id"
             @update:model-value="setValue(control.id, String($event))"
           />
-        </label>
-        <PanelFieldGroup v-else :label="control.name">
+        </PanelFieldGroup>
+        <PanelFieldGroup
+          v-else
+          :label="control.name"
+          :for="`${fieldId}-${control.id}`"
+          :layout="control.type === 'TEXT' ? 'stacked' : 'inline'"
+        >
           <ComponentPropertyTextField
             v-if="control.type === 'TEXT'"
+            :id="`${fieldId}-${control.id}`"
             :value="control.value"
             :label="control.name"
             :focus-request="
@@ -118,6 +138,7 @@ function booleanValue(control: (typeof controls.value)[number]) {
           />
           <AppPickerField
             v-else-if="control.type === 'INSTANCE_SWAP'"
+            :id="`${fieldId}-${control.id}`"
             :model-value="control.value === MIXED ? '' : control.value"
             :items="swapItems(control)"
             :label="control.name"
@@ -130,6 +151,7 @@ function booleanValue(control: (typeof controls.value)[number]) {
           />
           <AppSelect
             v-else
+            :id="`${fieldId}-${control.id}`"
             :label="control.name"
             :model-value="selectValue(control)"
             :options="selectOptions(control)"

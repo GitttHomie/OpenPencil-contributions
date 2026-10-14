@@ -125,7 +125,7 @@ describe('occurrence derived symbol data', () => {
       [blob]
     )
     expect(child.derivedTextGlyphs).toEqual([
-      { commandsBlob: blob, firstCharacter: 0, x: 4, y: 15, fontSize: 14, rotation: 0 }
+      { commandsBlob: blob, firstCharacter: 0, x: 4, y: 15, fontSize: 14, advance: 14, rotation: 0 }
     ])
   })
 })

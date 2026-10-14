@@ -3,8 +3,9 @@ import { describe, expect, test } from 'bun:test'
 import { tool } from 'ai'
 
 import { ALL_TOOLS, FigmaAPI, SceneGraph, toolsToAI } from '@open-pencil/core'
+import { isToolExposed } from '@open-pencil/core/tools'
 
-import { expectDefined } from '#tests/helpers/assert'
+import { expectDefined, expectFills } from '#tests/helpers/assert'
 
 type AdapterTool = { execute(args: Record<string, unknown>): Promise<unknown>; description: string }
 type SDKTool = {
@@ -59,12 +60,13 @@ describe('AI adapter', () => {
     expect(Object.keys(tools)).toEqual(['default', 'other-interface'])
   })
 
-  test('generates tool for every definition', () => {
+  test('generates a tool for every definition exposed to AI', () => {
     const { tools } = setup()
-    for (const def of ALL_TOOLS) {
+    const exposed = ALL_TOOLS.filter((def) => isToolExposed(def, 'ai'))
+    for (const def of exposed) {
       expect(tools[def.name]).toBeDefined()
     }
-    expect(Object.keys(tools).length).toBe(ALL_TOOLS.length)
+    expect(Object.keys(tools).length).toBe(exposed.length)
   })
 
   test('each tool has description and execute', () => {
@@ -106,7 +108,7 @@ describe('AI adapter', () => {
     const setFill = adapterTool(tools, 'set_fill')
     await setFill.execute({ id: rect.id, color: '#00ff00' })
 
-    const fills = expectDefined(figma.getNodeById(rect.id), 'filled rectangle').fills
+    const fills = expectFills(expectDefined(figma.getNodeById(rect.id), 'filled rectangle').fills)
     expect(fills.length).toBe(1)
     expect(fills[0].color.g).toBeCloseTo(1)
   })

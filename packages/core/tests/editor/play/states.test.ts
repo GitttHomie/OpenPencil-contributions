@@ -6,7 +6,12 @@ import {
   playIslandRoots,
   resolvePlayState
 } from '@open-pencil/core/editor'
-import { emptyBehaviour, instanceMainComponent, SceneGraph } from '@open-pencil/scene-graph'
+import {
+  emptyBehaviour,
+  findLayerByPath,
+  instanceMainComponent,
+  SceneGraph
+} from '@open-pencil/scene-graph'
 
 /** A Switch set (State × Interaction) and a card frame holding an Off instance with a label. */
 function switchCard() {
@@ -16,7 +21,13 @@ function switchCard() {
   const set = graph.createNode('COMPONENT_SET', pageId, {
     name: 'Switch',
     componentPropertyDefinitions: [
-      { id: 'state', name: 'State', type: 'VARIANT', defaultValue: 'Off', variantOptions: ['Off', 'On'] },
+      {
+        id: 'state',
+        name: 'State',
+        type: 'VARIANT',
+        defaultValue: 'Off',
+        variantOptions: ['Off', 'On']
+      },
       {
         id: 'interaction',
         name: 'Interaction',
@@ -39,7 +50,7 @@ function switchCard() {
     booleans: { value: { propertyId: 'state', on: 'On', off: 'Off' } }
   })
   const card = graph.createNode('FRAME', pageId, { name: 'Card', x: 400 })
-  const instance = graph.createInstance(off.id, card.id)
+  const instance = graph.createInstance(off.id, card.id, { name: off.name })
   if (!instance) throw new Error('No instance')
   graph.updateNode(instance.id, { name: 'Wifi' })
   graph.createNode('FRAME', pageId, { name: 'Empty', x: 800 })
@@ -61,6 +72,24 @@ describe('preview islands', () => {
     const copy = shown.getChildren(card.id)[0]
     expect(copy && instanceMainComponent(shown, copy)?.id).toBe(on.id)
     expect(instanceMainComponent(graph, instance)?.id).toBe(off.id)
+  })
+
+  test('an instance named after its variant keeps its path through a state switch', () => {
+    const { graph, card, off, on } = switchCard()
+    // Left with its default name, which is its variant's, as instances placed from a set are.
+    const instance = graph.createInstance(off.id, card.id, { name: off.name })
+    if (!instance) throw new Error('No instance')
+    const path = layerPath(graph, card.id, instance.id)
+    expect(instance.name).toBe(off.name)
+
+    const shown = resolvePlayState(graph, card.id, new Map([[path, { variants: { State: 'On' } }]]))
+    const copy = findLayerByPath(shown, card.id, path)
+    expect(copy && instanceMainComponent(shown, copy)?.id).toBe(on.id)
+    expect(copy?.name).toBe(off.name)
+    // The same path switches it back, so a control toggles both ways.
+    const back = resolvePlayState(graph, card.id, new Map([[path, { variants: { State: 'Off' } }]]))
+    const restored = findLayerByPath(back, card.id, path)
+    expect(restored && instanceMainComponent(back, restored)?.id).toBe(off.id)
   })
 
   test('a preferred state shows only where the set draws it with the required values', () => {
@@ -94,5 +123,29 @@ describe('preview islands', () => {
     editor.resetPlay()
     editor.replaceGraph(new SceneGraph())
     expect(editor.state.play).toEqual({ revision: 2 })
+  })
+
+  test('a copy paints bound colors in the mode the canvas is showing, not as they were saved', () => {
+    const { graph, card } = switchCard()
+    const collection = graph.createCollection('Theme')
+    const dark = collection.defaultModeId
+    graph.addMode(collection.id, 'light', 'Light', dark)
+    const surface = graph.createVariable('Surface', 'COLOR', collection.id, {
+      r: 0.1,
+      g: 0.1,
+      b: 0.1,
+      a: 1
+    })
+    surface.valuesByMode.light = { r: 1, g: 1, b: 1, a: 1 }
+    graph.updateNode(card.id, {
+      fills: [{ type: 'SOLID', color: { r: 0.1, g: 0.1, b: 0.1, a: 1 }, opacity: 1, visible: true }]
+    })
+    graph.bindVariable(card.id, 'fills/0/color', surface.id)
+    graph.setActiveMode(collection.id, 'light')
+
+    const shown = resolvePlayState(graph, card.id, new Map())
+
+    expect(shown.getNode(card.id)?.fills[0]?.color).toEqual({ r: 1, g: 1, b: 1, a: 1 })
+    expect(graph.getNode(card.id)?.fills[0]?.color).toEqual({ r: 0.1, g: 0.1, b: 0.1, a: 1 })
   })
 })

@@ -23,15 +23,15 @@ for (const type of ['COMPONENT', 'INSTANCE'] as const) {
     await page.keyboard.up('Meta')
     await expect.poll(() => selectionDepthState(page)).toMatchObject({ selected: [ids.text] })
     const row = page.locator(`[data-node-id="${ids.text}"] [data-slot="row"]`)
-    await expect(row.locator('[data-slot="label"]')).toHaveCSS('color', 'rgb(151, 71, 255)')
-    await expect(row.locator('[data-slot="icon"]')).toHaveCSS('color', 'rgb(151, 71, 255)')
+    await expect(row.locator('[data-slot="label"]')).toHaveCSS('color', 'rgb(187, 140, 255)')
+    await expect(row.locator('[data-slot="icon"]')).toHaveCSS('color', 'rgb(187, 140, 255)')
     await page.mouse.move(10, 10)
     await canvas.waitForRender()
     expect(await canvas.screenshotCanvasRegion(500, 330)).toMatchSnapshot(
       `${type.toLowerCase()}-descendant-selection.png`
     )
     await moveSelectionSubtreeToPage(page, ids.wrapper)
-    await expect(row.locator('[data-slot="label"]')).not.toHaveCSS('color', 'rgb(151, 71, 255)')
+    await expect(row.locator('[data-slot="label"]')).not.toHaveCSS('color', 'rgb(187, 140, 255)')
     canvas.assertNoErrors()
   })
 }

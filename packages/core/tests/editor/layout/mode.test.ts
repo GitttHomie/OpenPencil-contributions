@@ -2,6 +2,8 @@ import { describe, expect, test } from 'bun:test'
 
 import { createEditor, type Editor } from '@open-pencil/core/editor'
 
+import { expectDefined } from '#core-tests/helpers/assert'
+
 function scene() {
   const editor = createEditor()
   const outer = editor.graph.createNode('FRAME', editor.state.currentPageId, {
@@ -42,7 +44,6 @@ function scene() {
   editor.graph.createNode('RECTANGLE', second.id, {
     width: 60,
     height: 20,
-    primaryAxisSizing: 'FILL',
     layoutGrow: 1
   })
   const sibling = editor.graph.createNode('RECTANGLE', outer.id, { width: 100, height: 70 })
@@ -141,6 +142,33 @@ test('undo wrapping a nested selection restores parent order and all affected ge
       editor.redoAction()
       expect(layoutState(editor)).toEqual(after)
     }
+  } finally {
+    editor.dispose()
+  }
+})
+
+// Figma places a new container in the slot of the topmost selected layer.
+test('the wrapper takes the slot of the topmost selected layer', () => {
+  const editor = createEditor()
+  try {
+    const parent = editor.graph.createNode('FRAME', editor.state.currentPageId, {
+      width: 600,
+      height: 200
+    })
+    const [a, b, c, d] = ['A', 'B', 'C', 'D'].map((name, index) =>
+      editor.graph.createNode('RECTANGLE', parent.id, {
+        name,
+        x: 20 + index * 140,
+        y: 40,
+        width: 80,
+        height: 60
+      })
+    )
+    editor.select([d.id, b.id])
+    const frameId = editor.wrapInAutoLayout()
+    expect(parent.childIds).toEqual([a.id, c.id, expectDefined(frameId, 'wrapper')])
+    editor.undoAction()
+    expect(parent.childIds).toEqual([a.id, b.id, c.id, d.id])
   } finally {
     editor.dispose()
   }

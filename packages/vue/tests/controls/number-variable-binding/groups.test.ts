@@ -44,6 +44,36 @@ function fixture() {
 }
 
 describe('grouped numeric properties', () => {
+  for (const paths of [CORNER_RADIUS_PATHS, BORDER_WIDTH_PATHS]) {
+    test(`an unbound uniform ${paths[0]} edit updates the rendered value and undoes exactly`, () => {
+      const { editor, node } = fixture()
+      const before = structuredClone(node)
+      const actions = createNumberPropertyActions(
+        editor,
+        computed(() => paths.map((path) => ({ nodeId: node.id, path })))
+      )
+      actions.update(8)
+      actions.commit()
+      expect(paths.map((path) => numberPropertyValue(node, path))).toEqual([8, 8, 8, 8])
+      expect(node.independentCorners).toBe(false)
+      expect(node.independentStrokeWeights).toBe(false)
+      editor.undo.undo()
+      expect(omit(node, ['source'])).toEqual(omit(before, ['source']))
+    })
+  }
+
+  test('editing an unbound single corner preserves the other corners and cancels its conversion', () => {
+    const { editor, node } = fixture()
+    const before = structuredClone(node)
+    const actions = createNumberPropertyActions(editor, computed(() => [
+      { nodeId: node.id, path: 'topLeftRadius' }
+    ]))
+    actions.update(8)
+    expect(CORNER_RADIUS_PATHS.map((path) => numberPropertyValue(node, path))).toEqual([8, 16, 16, 16])
+    actions.cancel()
+    expect(omit(node, ['source'])).toEqual(omit(before, ['source']))
+  })
+
   test('expanding and collapsing uniform or independent corners never changes storage or history', () => {
     const { editor, node } = fixture()
     const options = {

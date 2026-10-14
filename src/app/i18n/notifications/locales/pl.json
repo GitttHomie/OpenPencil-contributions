@@ -27,5 +27,11 @@
   "deepLinkCancelled": "Link anulowany: oczekiwano pliku kończącego się na „{file}”.",
   "deepLinkNodeNotFound": "Nie znaleziono warstwy „{node}” w „{file}”.",
   "openQueuedFilesFailed": "Nie udało się otworzyć plików przekazanych do OpenPencil: {error}",
-  "tokensLeftOut": "Pominięte w arkuszu stylów: {names}."
+  "tokensLeftOut": "Pominięte w arkuszu stylów: {names}.",
+  "layoutContainerFixedWidth": "„{name}” ma teraz stałą szerokość, aby „{layer}” mogła wypełnić dostępne miejsce.",
+  "layoutContainerFixedHeight": "„{name}” ma teraz stałą wysokość, aby „{layer}” mogła wypełnić dostępne miejsce.",
+  "layoutLayerFixedWidth": "1 warstwa wewnątrz „{name}” ma teraz stałą szerokość, aby rozmiar „{name}” mógł dopasować się do zawartości.",
+  "layoutLayerFixedHeight": "1 warstwa wewnątrz „{name}” ma teraz stałą wysokość, aby rozmiar „{name}” mógł dopasować się do zawartości.",
+  "layoutLayersFixedWidth": "Warstwy wewnątrz „{name}” ({count}) mają teraz stałą szerokość, aby rozmiar „{name}” mógł dopasować się do zawartości.",
+  "layoutLayersFixedHeight": "Warstwy wewnątrz „{name}” ({count}) mają teraz stałą wysokość, aby rozmiar „{name}” mógł dopasować się do zawartości."
 }

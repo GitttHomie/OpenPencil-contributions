@@ -4,7 +4,6 @@ import { agentDiscovery } from './discovery'
 export type AgentSetupProblem =
   | 'companion-missing'
   | 'companion-outdated'
-  | 'mcp-outdated'
   | 'pi-sign-in'
   | 'pi-model'
 
@@ -18,12 +17,7 @@ export class AgentSetupError extends Error {
 
 type AgentDiscovery = Pick<
   typeof agentDiscovery,
-  | 'supported'
-  | 'refresh'
-  | 'error'
-  | 'harnessAvailable'
-  | 'harnessOutdated'
-  | 'canvasBridgeOutdated'
+  'supported' | 'refresh' | 'error' | 'harnessAvailable' | 'harnessOutdated'
 >
 
 /**
@@ -43,5 +37,4 @@ export async function assertAgentReady(
   if (agent === 'pi' && discovery.harnessOutdated.value) {
     throw new AgentSetupError('companion-outdated')
   }
-  if (discovery.canvasBridgeOutdated.value) throw new AgentSetupError('mcp-outdated')
 }

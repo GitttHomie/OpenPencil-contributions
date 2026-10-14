@@ -73,7 +73,14 @@ test('dragging selected nested instance content reorders its auto-layout item', 
   })
   await canvas.waitForRender()
 
-  await canvas.drag(270, 128, 130, 128, 12)
+  const start = await page.evaluate((id) => {
+    const store = window.openPencil?.getStore?.()
+    const node = store?.graph.getNode(id)
+    if (!store || !node) throw new Error('Selected text missing')
+    const position = store.graph.getAbsolutePosition(id)
+    return { x: position.x + node.width / 2, y: position.y + node.height / 2 }
+  }, ids.secondText)
+  await canvas.drag(start.x, start.y, start.x - 140, start.y, 12)
   await canvas.waitForRender()
 
   const childIds = await page.evaluate((frameId) => {
@@ -145,9 +152,9 @@ test('auto-layout drag does not show an insert indicator before order changes', 
 
   const box = await canvas.canvas.boundingBox()
   if (!box) throw new Error('Canvas has no bounding box')
-  await page.mouse.move(box.x + 270, box.y + 128)
+  await page.mouse.move(box.x + 310, box.y + 140)
   await page.mouse.down()
-  await page.mouse.move(box.x + 265, box.y + 128, { steps: 3 })
+  await page.mouse.move(box.x + 305, box.y + 140, { steps: 3 })
   await canvas.waitForRender()
 
   const indicator = await page.evaluate(() => {

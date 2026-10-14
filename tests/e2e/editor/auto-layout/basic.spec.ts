@@ -224,42 +224,35 @@ test('editing a Hug width switches to Fixed in one reversible interaction', asyn
 })
 
 test('editing a Fill height switches to Fixed in one undo step', async () => {
-  await selectFrame()
-  await page.evaluate((id) => {
-    const store = window.openPencil?.getStore?.()
-    if (!store) throw new Error('Editor unavailable')
-    const parent = store.graph.createNode('FRAME', store.state.currentPageId, {
-      width: 400,
-      height: 300,
-      layoutMode: 'VERTICAL',
-      primaryAxisSizing: 'FIXED',
-      counterAxisSizing: 'FIXED'
-    })
-    store.graph.reparentNode(id, parent.id)
-    store.requestRender()
-  }, frameId)
+  const frame = expectDefined(await getNodeById(page, frameId), 'frame')
+  const childId = expectDefined(frame.childIds[0], 'child')
+  await page.evaluate((id: string) => window.openPencil?.getStore?.()?.select([id]), childId)
+  await canvas.waitForRender()
+  // Fill is stored on the child: grow along a column, stretch across a row.
+  const fillsHeight = (node: { layoutGrow: number; layoutAlignSelf: string }) =>
+    frame.layoutMode === 'VERTICAL' ? node.layoutGrow > 0 : node.layoutAlignSelf === 'STRETCH'
   const heightField = propertyField(page, 'height')
 
   await heightField.getByRole('combobox', { name: 'Height' }).click()
   await page.getByRole('option', { name: 'Fill' }).click()
   await canvas.waitForRender()
 
-  const before = expectDefined(await getNodeById(page, frameId), 'before')
-  expect(before.primaryAxisSizing).toBe('FILL')
+  const before = expectDefined(await getNodeById(page, childId), 'before')
+  expect(fillsHeight(before)).toBe(true)
 
   await heightField.focus()
   await heightField.getByRole('spinbutton').fill(String(Math.round(before.height + 30)))
   await heightField.getByRole('spinbutton').press('Enter')
   await canvas.waitForRender()
 
-  const changed = expectDefined(await getNodeById(page, frameId), 'changed')
-  expect(changed.primaryAxisSizing).toBe('FIXED')
+  const changed = expectDefined(await getNodeById(page, childId), 'changed')
+  expect(fillsHeight(changed)).toBe(false)
   expect(changed.height).toBe(Math.round(before.height + 30))
 
   await canvas.pressKey('Meta+z')
   await canvas.waitForRender()
-  const undone = expectDefined(await getNodeById(page, frameId), 'undone')
-  expect(undone.primaryAxisSizing).toBe('FILL')
+  const undone = expectDefined(await getNodeById(page, childId), 'undone')
+  expect(fillsHeight(undone)).toBe(true)
   expect(undone.height).toBeCloseTo(before.height)
   canvas.assertNoErrors()
 })

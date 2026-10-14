@@ -25,5 +25,15 @@
   "newDesign": "新建设计",
   "noMatchingFiles": "没有与“{query}”匹配的文件。",
   "saveAsPrompt": "另存为：",
-  "browserFileAPINotSupported": "你的浏览器不支持本地文件 API。文件将被下载，而不是保存在原位置。"
+  "browserFileAPINotSupported": "你的浏览器不支持本地文件 API。文件将被下载，而不是保存在原位置。",
+  "cleanupHeading": "清理嵌入组件？",
+  "cleanupDescription": "从内部页面删除 {count} 个未使用的定义。保留所有实例、所需定义和普通页面上的组件。",
+  "cleanupKeep": "全部保留",
+  "cleanupRemove": "移除未使用的组件",
+  "cleanupIntro": "选择如何打开“{name}”。保存前不会更改原始文件。",
+  "cleanupInternalHeading": "删除内部页面和关联实例",
+  "cleanupInternalDescription": "删除 {canvases} 个内部页面、{components} 个嵌入定义，以及 {pages} 个普通页面上的 {instances} 个关联实例图层。",
+  "cleanupInternalWarning": "这会改变设计，包括隐藏内容和外部库实例。只删除嵌套的关联图层，保留包含它们的按钮或画框。普通页面上的有效组件会保留。",
+  "cleanupHiddenInstances": "隐藏替换目标被删除的 {count} 个嵌套实例，保留包含它们的组件。",
+  "cleanupInternalRemove": "删除页面和关联实例"
 }

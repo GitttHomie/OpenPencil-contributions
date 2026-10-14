@@ -113,9 +113,9 @@ test('an assignment of the wrong type names the prop and the property', async ()
   const { graph, component } = await setup()
   await expect(
     // A script can pass any value; the types only describe valid calls.
-    renderTree(graph, Instance({ of: component.id, properties: { message: 42 } as never }))
+    renderTree(graph, Instance({ of: component.id, properties: { message: {} } as never }))
   ).rejects.toThrow(
-    'Invalid properties on <Instance>:\n× Invalid type: Expected string but received 42\n  → at message'
+    'Invalid properties on <Instance>:\n× Invalid type: Expected (string | boolean | number) but received Object\n  → at message'
   )
 })
 

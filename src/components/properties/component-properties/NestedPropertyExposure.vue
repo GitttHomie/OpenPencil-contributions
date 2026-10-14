@@ -50,7 +50,7 @@ function toggle(propertyId: string, checked: boolean) {
       <label
         v-for="property in current?.properties"
         :key="property.id"
-        class="flex min-h-field items-center gap-2 text-xs text-surface"
+        class="flex min-h-7 items-center gap-2 text-xs text-surface"
       >
         <PropertyTypeIcon :kind="property.type" />
         <span class="min-w-0 flex-1 truncate">{{ property.name }}</span>

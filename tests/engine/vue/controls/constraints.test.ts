@@ -129,6 +129,7 @@ describe('constraint resize geometry', () => {
       origDerivedTextGlyphs: null,
       origStrokes: [],
       origTextPathBox: null,
+      lockedAspectRatio: null,
       origChildren: new Map([
         [nested.id, original(nested)],
         [grandchild.id, original(grandchild)]
@@ -177,6 +178,7 @@ describe('constraint resize geometry', () => {
       origDerivedTextGlyphs: null,
       origStrokes: [],
       origTextPathBox: null,
+      lockedAspectRatio: null,
       origChildren: collectResizeDescendants(graph, root.id)
     }
 

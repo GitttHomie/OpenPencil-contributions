@@ -27,5 +27,11 @@
   "deepLinkCancelled": "Ссылка отменена: ожидался файл с окончанием «{file}».",
   "deepLinkNodeNotFound": "Слой «{node}» не найден в «{file}».",
   "openQueuedFilesFailed": "Не удалось открыть файлы, переданные OpenPencil: {error}",
-  "tokensLeftOut": "Не вошли в таблицу стилей: {names}."
+  "tokensLeftOut": "Не вошли в таблицу стилей: {names}.",
+  "layoutContainerFixedWidth": "Ширина «{name}» стала фиксированной, чтобы «{layer}» мог заполнить доступное пространство.",
+  "layoutContainerFixedHeight": "Высота «{name}» стала фиксированной, чтобы «{layer}» мог заполнить доступное пространство.",
+  "layoutLayerFixedWidth": "Ширина 1 слоя внутри «{name}» стала фиксированной, чтобы размер «{name}» мог подстраиваться под содержимое.",
+  "layoutLayerFixedHeight": "Высота 1 слоя внутри «{name}» стала фиксированной, чтобы размер «{name}» мог подстраиваться под содержимое.",
+  "layoutLayersFixedWidth": "Слои внутри «{name}» ({count}) получили фиксированную ширину, чтобы размер «{name}» мог подстраиваться под содержимое.",
+  "layoutLayersFixedHeight": "Слои внутри «{name}» ({count}) получили фиксированную высоту, чтобы размер «{name}» мог подстраиваться под содержимое."
 }

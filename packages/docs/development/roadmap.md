@@ -18,21 +18,55 @@ OpenPencil is moving toward production-grade Figma compatibility while keeping d
 
 ## Recently delivered
 
-v0.14.0 established several foundations that earlier versions of this roadmap treated as future work:
+v0.15.0 and v0.15.1 shipped work that earlier versions of this roadmap listed as in development:
 
-- A searchable Assets panel, component details, instance insertion, frame presets, richer component properties, layout grids, constraints, and deeper typography controls.
-- A local-first Storage Workspace for S3-compatible providers with background synchronization and remote document previews.
-- Editable PowerPoint export; editable HTML, CSS, Tailwind, JSX, SVG, and image-vectorization workflows.
-- Private local MCP transport discovery, an installable OpenPencil agent skill, and stronger CLI/MCP support for large and multi-document sessions.
-- Published `@open-pencil/scene-graph`, `@open-pencil/pen`, `@open-pencil/kiwi`, `@open-pencil/fig`, `@open-pencil/dom-css`, and `@open-pencil/vue` packages with documented public boundaries.
+- Editable ruler guides, snapping to geometry and guides, and Option/Alt distance measurements.
+- Multidimensional component variants and published component libraries with revision review and linked-instance updates.
+- Local recovery of unsaved documents, saved AI conversations, and CLI font diagnostics.
+- Opt-in browser WebMCP access, separate controls for the local MCP server and remote connections, and per-tool permissions.
+- `openpencil://` and web links that open a document and select a layer.
 
 ### Current development version
 
-Since v0.14.0, the development branch adds editable ruler guides and snapping preferences, Option/Alt distance measurements, multidimensional variant authoring, component-library publication and revision review, local document recovery, saved AI conversations, CLI font diagnostics, and opt-in browser WebMCP access. These workflows are implemented on the development branch but are not part of v0.14.0.
+Since v0.15.1, the development branch adds:
 
-See [canvas navigation](../user-guide/canvas-navigation), [components and libraries](../user-guide/components), [document recovery](../user-guide/layers-and-pages#documents-and-recovery), [AI chat](../programmable/ai-chat), and [font diagnostics](../programmable/cli/inspecting#font-diagnostics).
+- Behaviours and preview mode: components that run as Reka UI controls, with a Controls page in the demo and Storybook controls for them.
+- Variables modelled as design tokens, edited as tokens, imported and exported as W3C design tokens, written as a CSS token stylesheet, and used by name in exported code.
+- Live design checks: a Lint panel with canvas markers and one-click fixes.
+- AI agents shown on the canvas and to collaborators, with follow mode for people and agents, per-page presence, and MCP agents in rooms.
+- AI chat turns that can be reverted, regenerated, and edited, with tool calls summarised by what they changed and a thinking level per message.
+- The Code tab linked to canvas layers both ways, and visual diff and patch tools, including `openpencil diff`.
+- Collaboration rooms that sync layer trees as a CRDT and open in their own tab.
+- Slots, progressive canvas previews while an AI provider streams JSX, Storybook export, HTML and Tailwind JSX export, and a faster occurrence-scoped `.fig` reader with wider override and variable export.
+- Comments pinned to layers and voice calls in shared rooms, with collaborators watching the AI chat's streamed JSX as it builds.
+- Vue and React components of the selection in the Code tab, with variants as props and Reka UI or Radix behaviour.
+- SVG and HTML imported as editable layers, with HTML and CSS laid out as a browser lays them out.
+- Shader fills from the open-source `shaders` library, on-canvas gradient and corner-radius handles, multi-selection editing, and accent colours with a customizable toolbar.
+
+These changes are not part of v0.15.1; they ship with the next release.
+
+See [AI chat](../programmable/ai-chat), [exporting](../user-guide/exporting), and [components and libraries](../user-guide/components).
+
+### In development
+
+Work with open pull requests. It may change before it merges:
+
+- Storybook stories generated as Reka UI components for Vue and Radix UI components for React.
+- Component authoring: variant editing and canvas selection inside components.
+- The OpenPencil Cloud foundation.
 
 ## Near-term work
+
+### AI rendering and editor responsiveness
+
+Prioritize the first two items, then use measured interaction delays to guide the remaining optimizations.
+
+1. Fix the reported first-attempt `render` failure. Trace arguments from the agent through dispatch, MCP validation, JSX preprocessing, and desktop execution; cover fresh sessions for built-in providers and CLI adapters. A valid first render must succeed without a retry, while invalid arguments produce an actionable error.
+2. Remove the perceptible freeze when generated designs appear. Measure creation, font preparation, component synchronization, layout, undo snapshots, change previews, and first presentation separately. Batch or defer work where measurements justify it, preserving complete designs, cancellation, and correct Undo/Redo.
+3. Improve panning, zooming, selection, moving, resizing, and text editing. Compare an empty document, a representative existing document, and a large design system; measure input-to-presentation latency, slow frames, and idle activity in the macOS app as well as the browser. Reuse unchanged scene content and invalidate only the affected regions while preserving final rendering quality.
+4. Reduce component synchronization and layout work using the [component synchronization performance](#component-synchronization-performance) plan below, including nested variants, exposed properties, constraints, and Hug/Fill behavior.
+5. Keep interaction responsive during AI runs. Coalesce redundant graph notifications and UI refreshes, keep previews and review artifacts from blocking input, and bound queued background work without weakening undo or exposing inconsistent intermediate document state.
+6. Check sustained-session behavior: repeated generation, document switching, images, fonts, and undo history. Verify resource release and bounded caches, distinguish CPU stalls from memory pressure, and compare timings and peak memory before and after each optimization.
 
 ### Figma fidelity
 
@@ -44,7 +78,7 @@ See [canvas navigation](../user-guide/canvas-navigation), [components and librar
 ### Editor depth
 
 - Complete variable inspector coverage for common numeric/text/layout fields.
-- Extend component and instance authoring with deeper override inspection and slots. Multidimensional variant definitions, instance property editing, and component-library publish/update workflows are already supported.
+- Extend component and instance authoring with deeper override inspection and slots. Multidimensional variant definitions, text, boolean, and instance-swap property authoring, exposed nested instances, instance property editing, and component-library publish/update workflows are already supported.
 - Treat variables, styles, components, and libraries as governed design-system assets with proposal, review, publish, update, migration, and conformance workflows.
 - Complete layout-grid style parity beyond existing grid geometry controls and editable page/frame guides.
 - Extend inspection aids beyond the existing Option/Alt measurements between selected and hovered layers.
@@ -52,15 +86,9 @@ See [canvas navigation](../user-guide/canvas-navigation), [components and librar
 
 ### Variable references and expressions
 
-- Extend existing variable aliases with reference authoring for colors, numbers, strings, and booleans, plus persistent numeric and boolean expressions. For example, `spacing/base = 4`, `spacing/md = {spacing/base} * 2`, and `button/padding = {spacing/md}` resolve to 4, 8, and 8; changing the base to 6 updates both dependants to 12. Token naming and primitive, semantic, or component layers remain optional.
-- Use stable variable IDs for references and one shared resolver across the canvas, property controls, and automation. Resolve each reference using its own collection's applicable mode and require matching types for aliases.
-- Provide literal, reference, and expression editing with reference autocomplete, calculated previews, and actionable validation errors. Keep object properties bound to the selected token; distinguish editing a token definition from editing an object's value and detaching its binding.
-- Parse numeric expressions with a restricted grammar supporting numbers, references, unary signs, `+`, `-`, `*`, `/`, and parentheses. Reject cycles, missing references, type mismatches, and non-finite results without silently substituting zero; invalid drafts must not replace valid definitions.
-- Support boolean literals, references, parentheses, and logical `AND`, `OR`, `NOT`, `XOR`, `NAND`, and `NOR` expressions; for example, `badge/visible = {state/has-notification} AND NOT {state/is-muted}`. Require boolean operands without implicit number or string coercion, define operator precedence explicitly, and validate every reference even when evaluation could short-circuit. Boolean expressions use the same dependency tracking, mode resolution, editing, persistence, and automation APIs as numeric expressions; invalid results must not silently become `false`.
-- Track dependencies, cache results by mode context, and batch updates to affected consumers. Verify changes across at least 100 component instances without recalculating the same expression for each instance sharing that context.
-- Ship lossless save/reopen and clipboard support with expression authoring. Verify native `.fig` representation before choosing an encoding; where necessary, preserve definitions in versioned OpenPencil metadata alongside resolved numeric or boolean fallbacks for interoperability, with reference remapping on import and paste.
-- Expose reference and expression creation, inspection, editing, and diagnostics through the same validated APIs used by the UI and AI/MCP tools.
-- Cover reference chains, shared dependencies, cross-collection modes, renaming, deletion, cycles, Undo/Redo, save/reopen, copy/paste, grouped property bindings, and component overrides before shipping. Verify boolean truth tables, precedence, nested negation, invalid operands, and visibility updates when referenced boolean values change.
+- Delivered: numeric arithmetic (`+`, `-`, `*`, `/`, unary signs, parentheses) and Boolean logic (`AND`, `OR`, `NOT`, `XOR`, `NAND`, `NOR`), stable variable references, per-mode authoring, previews, validation, and detach-to-literal in the Variables inspector. The scripting API shares the same validation. Canvas updates batch results by mode context; tests cover 100 instances, undo/redo, clipboard, collaboration, and fresh/patched `.fig` round trips.
+- Imported two-argument Figma `COMPOSE_COLOR` expressions retain their color and opacity operands, resolve in collection modes, and survive `.fig` saves, clipboard transfer, and collaboration. The Variables panel previews these definitions and can detach them to their resolved color.
+- Pending: live-Figma interoperability verification for authored numeric/Boolean expressions, color expression authoring, CSS/DTCG formula export, numeric functions and unit-aware calculations. Stored-unit arithmetic uses pixels for lengths; formula import does not implement prototype conditionals or actions.
 
 ### Reliability and international text
 
@@ -116,12 +144,6 @@ See [canvas navigation](../user-guide/canvas-navigation), [components and librar
 - Extend HTML, CSS, Tailwind, and JSX support from editable import toward URL-based website capture, direct JSX paste/edit workflows, and component-aware design↔code updates that preserve intentional code structure instead of regenerating whole files.
 - Provide an adapter contract for additional design sources such as Stitch and Pixso, prioritizing formats with documented or testable semantics over brittle UI scraping.
 - Package desktop-side MCP integration so local agent workflows do not require global installs.
-
-### Performance and scale
-
-- Incremental layout and render invalidation for large documents.
-- Better renderer profiling surfaces for slow nodes, effects, masks, and imported files.
-- Smarter raster/retained caching that preserves fidelity during zoom and pan.
 
 ### Interactive shader layers
 
@@ -276,7 +298,7 @@ OpenPencil deliberately preserves many Figma/Kiwi fields even when they are not 
 | `source.fig.derivedSymbolDataLayoutVersion`                             |            ✅ |        — |   — | Figma bookkeeping.                                                                                                                                                                                                                                                                                                                                      |
 | `source.fig.uniformScaleFactor`                                         |            ✅ | Indirect |   — | Important for scaled instances.                                                                                                                                                                                                                                                                                                                         |
 | Style IDs: fill/stroke/text/effect/grid                                 |             ↩ |        — |   — | Preserves style linkage for Figma, but OpenPencil has no style manager yet.                                                                                                                                                                                                                                                                             |
-| Component property refs/defs/specs                                      |            ✅ | Indirect |   ◐ | Full Figma component-property authoring is incomplete.                                                                                                                                                                                                                                                                                                  |
+| Component property refs/defs/specs                                      |            ✅ | Indirect |   ◐ | Text, boolean, and instance-swap properties, their links, and exposed nested instances (`propsAreBubbled`) are authored in the panel.                                                                                                                                                                                                                   |
 | State-group metadata                                                    |             ↩ |        — |   — | Preserved only.                                                                                                                                                                                                                                                                                                                                         |
 | Version/sort/publish/library metadata                                   |             ↩ |        — |   ◐ | Figma metadata is preserved; OpenPencil's component-library publish/update workflow uses its own stable asset identities and revision review.                                                                                                                                                                                                                                                                                           |
 | Variable and parameter consumption maps                                 |            ✅ |        ◐ |   ◐ | Filtered/preserved for safe round-trip; normalized bindings cover common cases.                                                                                                                                                                                                                                                                         |

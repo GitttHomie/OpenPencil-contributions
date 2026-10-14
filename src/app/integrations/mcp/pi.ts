@@ -1,18 +1,27 @@
-import { AUTOMATION_HTTP_PORT } from '@open-pencil/core/constants'
-
+import { getMCPServerURL } from '@/app/automation/mcp/endpoint'
 import { getAutomationAuthToken } from '@/app/automation/mcp/spawn'
 import { describeDiagnosticError, recordMCPConnectionFailure } from '@/app/diagnostics'
 import { appCredentialServices } from '@/app/settings/credentials/app'
 
+import { resolveMCPEnvironment } from './environment'
 import { enabledMCPConnections } from './store'
 import type { MCPConnection } from './types'
-export type PiMCPServer = {
-  url: string
-  headers?: Record<string, string>
-  auth: false
-}
+export type PiMCPServer =
+  | {
+      url: string
+      headers?: Record<string, string>
+      auth: false
+    }
+  | { command: string; args: string[]; env: Record<string, string> }
 
 async function externalPiMCPServer(connection: MCPConnection): Promise<PiMCPServer> {
+  if (connection.transport.type === 'stdio') {
+    return {
+      command: connection.transport.command,
+      args: connection.transport.args,
+      env: await resolveMCPEnvironment(connection)
+    }
+  }
   const headers: Record<string, string> = {}
   if (connection.authentication.type === 'bearer') {
     try {
@@ -35,20 +44,23 @@ async function externalPiMCPServer(connection: MCPConnection): Promise<PiMCPServ
 
 export async function buildPiMCPServers(options?: {
   authorizationToken?: string | null
+  connectionIds?: readonly string[]
 }): Promise<Record<string, PiMCPServer>> {
   const authorizationToken =
     options && 'authorizationToken' in options
       ? options.authorizationToken
       : await getAutomationAuthToken()
   const entries = await Promise.all(
-    enabledMCPConnections.value.map(
-      async (connection) => [connection.name, await externalPiMCPServer(connection)] as const
-    )
+    enabledMCPConnections.value
+      .filter(
+        (connection) => !options?.connectionIds || options.connectionIds.includes(connection.id)
+      )
+      .map(async (connection) => [connection.name, await externalPiMCPServer(connection)] as const)
   )
   return {
     ...Object.fromEntries(entries),
     'open-pencil': {
-      url: `http://127.0.0.1:${AUTOMATION_HTTP_PORT}/mcp`,
+      url: getMCPServerURL(),
       ...(authorizationToken ? { headers: { Authorization: `Bearer ${authorizationToken}` } } : {}),
       auth: false
     }

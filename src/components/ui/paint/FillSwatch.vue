@@ -12,6 +12,7 @@ export type FillSwatchUI = ComponentUI<typeof theme>
 export interface FillSwatchProps {
   fill: Fill
   label?: string
+  inheritBinding?: boolean
   ui?: FillSwatchUI
 }
 
@@ -28,7 +29,7 @@ import { FillSwatch as FillSwatchPrimitive } from '@open-pencil/vue'
 
 import fillSwatchTheme from '@/theme/paint/fill-swatch'
 
-const { fill, label, ui } = defineProps<FillSwatchProps>()
+const { fill, label, inheritBinding = true, ui } = defineProps<FillSwatchProps>()
 const attrs = useAttrs()
 const styles = computed(() => tv(fillSwatchTheme)())
 const forwardedAttrs = computed(() => {
@@ -45,6 +46,7 @@ defineOptions({ inheritAttrs: false })
     v-bind="forwardedAttrs"
     :fill="fill"
     :label="label"
+    :inherit-binding="inheritBinding"
     :class="styles.root({ class: [ui?.root, normalizeClass(attrs.class)] })"
   >
     <slot v-bind="swatch">

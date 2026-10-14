@@ -4,6 +4,7 @@ import {
   copyFills,
   copyLayoutGrids,
   sharedStyleRefKey,
+  textStyleApplication,
   type SceneNode,
   type SharedStyleKind
 } from '@open-pencil/scene-graph'
@@ -44,18 +45,7 @@ export function sharedStylePatch(
   else if (kind === 'stroke') patch.strokes = strokePaintsFromStyle(target, style)
   else if (kind === 'effect') patch.effects = copyEffects(style.effects)
   else if (kind === 'grid') patch.layoutGrids = copyLayoutGrids(style.layoutGrids)
-  else {
-    Object.assign(patch, {
-      fontFamily: style.fontFamily,
-      fontWeight: style.fontWeight,
-      italic: style.italic,
-      fontSize: style.fontSize,
-      lineHeight: style.lineHeight,
-      letterSpacing: style.letterSpacing,
-      textDecoration: style.textDecoration,
-      textCase: style.textCase
-    })
-  }
+  else Object.assign(patch, textStyleApplication(target, style, styleId))
   return patch
 }
 

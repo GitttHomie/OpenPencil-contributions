@@ -6,11 +6,7 @@ import { computed } from 'vue'
 import type { ACPAgentDef } from '@open-pencil/core/constants'
 import { useI18n } from '@open-pencil/vue'
 
-import {
-  codingAgentGuideURL,
-  codingAgentSetupPrompt,
-  MCP_INSTALL_COMMAND
-} from '@/app/ai/acp/setup-prompt'
+import { codingAgentGuideURL, codingAgentSetupPrompt } from '@/app/ai/acp/setup-prompt'
 import type { AgentSetupState } from '@/app/ai/models/settings/onboarding/agents'
 import SettingsLink from '@/components/settings/layout/SettingsLink.vue'
 import AppButton from '@/components/ui/button/AppButton.vue'
@@ -23,51 +19,45 @@ import SetupInstallItem from './SetupInstallItem.vue'
 
 const { agent, setup } = defineProps<{ agent: ACPAgentDef; setup: AgentSetupState }>()
 const emit = defineEmits<{ check: []; installAgent: []; installBridge: [] }>()
-const { ai, common } = useI18n()
+const { ai, common, automation } = useI18n()
 const styles = tv(theme)()
 const { copy, copied, text } = useClipboard({ copiedDuring: 1500 })
 
 const detected = computed(() => setup.detected)
 const prompt = computed(() => codingAgentSetupPrompt(agent.id))
 const busy = computed(() => setup.installingAgent || setup.installingBridge)
-const bridgeReady = computed(() => setup.bridge && !setup.bridgeOutdated)
+const bridgeReady = computed(() => setup.bridge)
 /** Manual commands are for where one-click installation cannot help. */
 const manualAgentCommand = computed(() => {
   if (!agent.installCommand || detected.value?.status === 'available') return null
+  if (setup.adapterNeedsAdmin) return `sudo ${agent.installCommand}`
   if (!setup.supported || !setup.npm || setup.error === 'install') {
     return agent.installCommand
   }
   return agent.adapterPackage ? null : agent.installCommand
 })
-const manualBridgeCommand = computed(() => {
-  if (!setup.supported) return MCP_INSTALL_COMMAND
-  return !bridgeReady.value && (!setup.npm || setup.error === 'canvas-install')
-    ? setup.bridgeCommand
-    : null
-})
-const needsNpm = computed(
-  () =>
-    !setup.npm &&
-    (detected.value?.status === 'needs-adapter' || (setup.detected !== null && !bridgeReady.value))
-)
+const needsNpm = computed(() => !setup.npm && detected.value?.status === 'needs-adapter')
 const agentAction = computed(() => {
-  if (detected.value?.status !== 'needs-adapter' || !setup.npm) return undefined
+  if (detected.value?.status !== 'needs-adapter' || !setup.npm || setup.adapterNeedsAdmin)
+    return undefined
   return setup.installingAgent
     ? ai.value.aiSetupAgentInstalling
     : ai.value.aiSetupAgentInstallAdapter
 })
 const bridgeState = computed(() => {
-  if (setup.bridgeOutdated) return ai.value.aiSetupAgentOutdated
   return setup.bridge ? ai.value.aiSetupAgentInstalled : ai.value.aiSetupAgentNotFound
 })
 const bridgeAction = computed(() => {
-  if (bridgeReady.value || !setup.npm) return undefined
-  if (setup.installingBridge) return ai.value.aiSetupAgentInstalling
-  return setup.bridgeOutdated ? ai.value.aiSetupAgentUpdateMCP : ai.value.aiSetupAgentInstallMCP
+  if (!setup.supported || !setup.bridge) return undefined
+  if (setup.installingBridge) return automation.value.starting
+  return common.value.connect
 })
 const errorMessage = computed(() => {
+  if (setup.supported && !setup.bridge) return automation.value.mcpFailureNotInstalledHint
+  if (setup.adapterNeedsAdmin && detected.value?.status === 'needs-adapter')
+    return ai.value.aiSetupAgentNeedsAdmin
   if (setup.error === 'npm' || needsNpm.value) return ai.value.aiSetupAgentNeedsNpm
-  if (setup.error === 'install' || setup.error === 'canvas-install') {
+  if (setup.error === 'install') {
     return ai.value.aiSetupAgentInstallFailed
   }
   if (setup.error === 'canvas-start') return ai.value.aiSetupAgentMCPStartFailed
@@ -87,7 +77,10 @@ function copiedLabel(value: string, label: string): string {
 </script>
 
 <template>
-  <p :class="styles.help()">{{ ai.aiSetupAgentDescription({ agent: agent.name }) }}</p>
+  <p :class="styles.help()">
+    {{ ai.aiSetupAgentDescription({ agent: agent.name }) }}
+    <SettingsLink :href="codingAgentGuideURL(agent.id)">{{ common.learnMore }}</SettingsLink>
+  </p>
 
   <template v-if="setup.supported">
     <p v-if="setup.scanning && !detected" role="status" :class="styles.signInStatus()">
@@ -135,21 +128,15 @@ function copiedLabel(value: string, label: string): string {
       </AppButton>
     </div>
   </template>
-  <template v-if="manualBridgeCommand">
-    <p :class="styles.help()">{{ ai.aiSetupAgentMCPInstall }}</p>
-    <div :class="styles.command()">
-      <code>{{ manualBridgeCommand }}</code>
-      <AppButton size="xs" @click="copy(manualBridgeCommand)">
-        {{ copiedLabel(manualBridgeCommand, common.copy) }}
-      </AppButton>
-    </div>
-  </template>
 
   <p :class="styles.help()">{{ ai.aiSetupAgentPromptHint({ agent: agent.name }) }}</p>
   <div :class="styles.signInActions()">
     <AppButton size="xs" variant="outline" @click="copy(prompt)">
-      <template #leading><icon-lucide-clipboard-copy class="size-3" /></template>
-      {{ copiedLabel(prompt, ai.aiSetupAgentCopyPrompt) }}
+      <template #leading>
+        <icon-lucide-check v-if="copied" class="size-3" />
+        <icon-lucide-copy v-else class="size-3" />
+      </template>
+      {{ copied ? common.copied : ai.aiSetupAgentCopyPrompt }}
     </AppButton>
     <AppButton
       v-if="setup.supported"
@@ -159,6 +146,5 @@ function copiedLabel(value: string, label: string): string {
     >
       {{ ai.aiSetupAgentCheckAgain }}
     </AppButton>
-    <SettingsLink :href="codingAgentGuideURL(agent.id)">{{ ai.aiSetupAgentGuide }}</SettingsLink>
   </div>
 </template>

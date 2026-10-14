@@ -3,6 +3,8 @@ import type { Paint, ParagraphBuilder, TextStyle } from 'canvaskit-wasm'
 export interface ParagraphBuildOptions {
   halfLeading?: boolean
   foregroundPaint?: Paint
+  /** Resolved width for drawing or export; omit when measuring intrinsic Hug text. */
+  layoutWidth?: number
 }
 
 export interface ParagraphPaintStyle {

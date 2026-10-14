@@ -3,8 +3,19 @@ import { uniq } from 'es-toolkit'
 import * as v from 'valibot'
 
 import { DEFAULT_SNAPPING_PREFERENCES, type SnappingPreferences } from '@open-pencil/core/editor'
+import { COMMENT_SORTS, type CommentSort } from '@open-pencil/scene-graph'
 
 import { DEFAULT_AGENT_STEPS, resolveAgentStepLimit } from '@/app/ai/chat/step-limit'
+import {
+  DEFAULT_TOOLBAR_LAYOUT,
+  normalizeToolbarLayout,
+  type ToolbarLayout
+} from '@/app/editor/toolbar/layout'
+import {
+  accentPreferenceSchema,
+  DEFAULT_ACCENT,
+  type AccentPreference
+} from '@/app/shell/accent/palette'
 
 export const ANIMATION_PREFERENCES = ['system', 'off'] as const
 export type AnimationPreference = (typeof ANIMATION_PREFERENCES)[number]
@@ -30,12 +41,36 @@ export interface DesignCheckPreferences {
   disabledRules: string[]
 }
 
+export interface CommentPreferences {
+  /** Pins on the canvas outside the Comment tool; View → Comments, Shift+C. */
+  showOnCanvas: boolean
+  /** The comments list and the canvas also show resolved threads. */
+  showResolved: boolean
+  /** The comments list shows only the current page's threads. */
+  onlyPage: boolean
+  /** The comments list shows only threads you started or replied to. */
+  onlyMine: boolean
+  sort: CommentSort
+}
+
+/** Whether the person was asked to share usage stats, and what they answered. */
+export const USAGE_STATS_CONSENTS = ['unset', 'granted', 'denied'] as const
+export type UsageStatsConsent = (typeof USAGE_STATS_CONSENTS)[number]
+
+export interface SharingPreferences {
+  /** The daily anonymous ping, on unless turned off. */
+  dailyPing: boolean
+  /** Opt-in usage stats; nothing is sent until this is `granted`. */
+  usageStats: UsageStatsConsent
+}
+
 /** Whether guided AI setup was offered and finished or skipped. */
 export type AISetupState = 'pending' | 'done'
 
 export interface AppPreferences {
-  appearance: { animations: AnimationPreference }
+  appearance: { animations: AnimationPreference; accent: AccentPreference }
   chat: {
+    followAgents: boolean
     reasoningDisplay: ReasoningDisplay
     maxAgentSteps: number
     changePreviewSize: ChangePreviewSize
@@ -51,14 +86,18 @@ export interface AppPreferences {
     canvasMode: CanvasRenderingMode
   }
   designCheck: DesignCheckPreferences
+  comments: CommentPreferences
+  toolbar: ToolbarLayout
   onboarding: {
     aiSetup: AISetupState
   }
+  sharing: SharingPreferences
 }
 
 export const DEFAULT_APP_PREFERENCES: Readonly<AppPreferences> = {
-  appearance: { animations: 'system' },
+  appearance: { animations: 'system', accent: { ...DEFAULT_ACCENT } },
   chat: {
+    followAgents: false,
     reasoningDisplay: 'collapsed',
     maxAgentSteps: DEFAULT_AGENT_STEPS,
     changePreviewSize: 'medium'
@@ -70,7 +109,16 @@ export const DEFAULT_APP_PREFERENCES: Readonly<AppPreferences> = {
   },
   rendering: { canvasMode: 'retained' },
   designCheck: { showOnCanvas: true, preset: 'recommended', disabledRules: [] },
-  onboarding: { aiSetup: 'pending' }
+  comments: {
+    showOnCanvas: true,
+    showResolved: false,
+    onlyPage: false,
+    onlyMine: false,
+    sort: 'newest'
+  },
+  toolbar: structuredClone(DEFAULT_TOOLBAR_LAYOUT),
+  onboarding: { aiSetup: 'pending' },
+  sharing: { dailyPing: true, usageStats: 'unset' }
 }
 
 const STORAGE_KEY = 'open-pencil:preferences:v1'
@@ -90,9 +138,11 @@ const appPreferencesSchema = section({
     aiSetup: v.fallback(v.picklist(['done', 'pending']), defaults.onboarding.aiSetup)
   }),
   appearance: section({
-    animations: v.fallback(v.picklist(ANIMATION_PREFERENCES), defaults.appearance.animations)
+    animations: v.fallback(v.picklist(ANIMATION_PREFERENCES), defaults.appearance.animations),
+    accent: v.fallback(accentPreferenceSchema, () => ({ ...DEFAULT_ACCENT }))
   }),
   chat: section({
+    followAgents: v.fallback(v.boolean(), defaults.chat.followAgents),
     reasoningDisplay: v.fallback(v.picklist(REASONING_DISPLAYS), defaults.chat.reasoningDisplay),
     maxAgentSteps: v.fallback(
       v.pipe(v.unknown(), v.transform(resolveAgentStepLimit)),
@@ -122,6 +172,29 @@ const appPreferencesSchema = section({
       ),
       () => []
     )
+  }),
+  comments: section({
+    showOnCanvas: v.fallback(v.boolean(), defaults.comments.showOnCanvas),
+    showResolved: v.fallback(v.boolean(), defaults.comments.showResolved),
+    onlyPage: v.fallback(v.boolean(), defaults.comments.onlyPage),
+    onlyMine: v.fallback(v.boolean(), defaults.comments.onlyMine),
+    sort: v.fallback(v.picklist(COMMENT_SORTS), defaults.comments.sort)
+  }),
+  toolbar: v.fallback(
+    v.pipe(
+      v.object({
+        groups: v.fallback(v.array(v.array(v.unknown())), () =>
+          structuredClone(DEFAULT_TOOLBAR_LAYOUT.groups)
+        ),
+        hidden: v.fallback(v.array(v.unknown()), () => [])
+      }),
+      v.transform(({ groups, hidden }) => normalizeToolbarLayout(groups, hidden))
+    ),
+    () => structuredClone(DEFAULT_TOOLBAR_LAYOUT)
+  ),
+  sharing: section({
+    dailyPing: v.fallback(v.boolean(), defaults.sharing.dailyPing),
+    usageStats: v.fallback(v.picklist(USAGE_STATS_CONSENTS), defaults.sharing.usageStats)
   })
 })
 
@@ -137,7 +210,17 @@ export const appPreferences = useLocalStorage<AppPreferences>(
 )
 
 export function updateAnimationPreference(animations: AnimationPreference): void {
-  appPreferences.value = { ...appPreferences.value, appearance: { animations } }
+  appPreferences.value = {
+    ...appPreferences.value,
+    appearance: { ...appPreferences.value.appearance, animations }
+  }
+}
+
+export function updateAccentPreference(accent: AccentPreference): void {
+  appPreferences.value = {
+    ...appPreferences.value,
+    appearance: { ...appPreferences.value.appearance, accent }
+  }
 }
 
 export function updateRecoveryEnabled(enabled: boolean): void {
@@ -148,6 +231,13 @@ export function updateRecoveryEnabled(enabled: boolean): void {
 
 export function updateAISetupState(aiSetup: AISetupState): void {
   appPreferences.value = { ...appPreferences.value, onboarding: { aiSetup } }
+}
+
+export function updateSharingPreferences(changes: Partial<SharingPreferences>): void {
+  appPreferences.value = {
+    ...appPreferences.value,
+    sharing: { ...appPreferences.value.sharing, ...changes }
+  }
 }
 
 export function updateCanvasRenderingMode(canvasMode: CanvasRenderingMode): void {
@@ -175,4 +265,15 @@ export function updateDesignCheckPreferences(changes: Partial<DesignCheckPrefere
     ...appPreferences.value,
     designCheck: { ...appPreferences.value.designCheck, ...changes }
   }
+}
+
+export function updateCommentPreferences(changes: Partial<CommentPreferences>): void {
+  appPreferences.value = {
+    ...appPreferences.value,
+    comments: { ...appPreferences.value.comments, ...changes }
+  }
+}
+
+export function updateToolbarLayout(toolbar: ToolbarLayout): void {
+  appPreferences.value = { ...appPreferences.value, toolbar }
 }

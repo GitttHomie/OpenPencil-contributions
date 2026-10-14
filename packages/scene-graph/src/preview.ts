@@ -1,6 +1,7 @@
-import { textCacheInvalidationChanges } from './text-picture'
+import { textCacheInvalidationChanges } from './text/picture'
 import type { SceneNode } from './types'
-import { normalizeVectorNetwork } from './vector-network'
+import { normalizeVectorNetwork } from './vector'
+import { vectorGeometryChanges } from './vector/geometry'
 
 export type NodePreviewObserver = (node: SceneNode, changes: Partial<SceneNode>) => void
 
@@ -61,6 +62,7 @@ export function updateNodePreview(
   if ((Object.keys(changes) as (keyof SceneNode)[]).every((key) => node[key] === changes[key])) {
     return null
   }
+  changes = vectorGeometryChanges(node, changes)
   const affectsLayout = Object.keys(changes).some((key) => LAYOUT_AFFECTING_KEYS.has(key))
   if (affectsLayout) graph.clearAbsPosCache()
   let normalizedChanges = changes

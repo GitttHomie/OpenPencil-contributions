@@ -1,17 +1,14 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
 
 import { CanvasHelper } from '#tests/helpers/canvas'
 import { saveAndReopenPropertyDocument } from '#tests/helpers/components/property-authoring'
 import {
   readVariantPropertyScene,
-  seedVariantPropertyScene,
-  selectVariantPropertyNode
+  seedVariantPropertyScene
 } from '#tests/helpers/components/variant-properties'
 import { propertySection } from '#tests/helpers/properties'
 
-test('descriptor values reorder, persist independently of components and require safe replacement on deletion', async ({
-  page
-}) => {
+async function createDescriptors(page: Page) {
   await page.goto('/?test')
   const canvas = new CanvasHelper(page)
   await canvas.waitForInit()
@@ -33,6 +30,11 @@ test('descriptor values reorder, persist independently of components and require
   await card.getByRole('textbox', { name: 'Add value', exact: true }).fill('Pressed')
   await card.getByRole('button', { name: 'Add value', exact: true }).click()
   await expect(values).toHaveCount(3)
+  return { canvas, initial, section, card, values }
+}
+
+test('descriptor values reorder and persist independently of components', async ({ page }) => {
+  const { canvas, initial, section, card, values } = await createDescriptors(page)
   const handles = card.locator('[data-reorder-handle]')
   await handles.last().dragTo(handles.first(), { targetPosition: { x: 12, y: 1 } })
   await expect(values.first().getByRole('textbox')).toHaveValue('Pressed')
@@ -43,10 +45,13 @@ test('descriptor values reorder, persist independently of components and require
   await saveAndReopenPropertyDocument(page, test.info().outputPath('descriptors.fig'))
   const reopened = await readVariantPropertyScene(page)
   expect(reopened.properties[0].values).toEqual(['Pressed', 'Base', 'Hover'])
-  if (!reopened.set) throw new Error('Missing set')
-  await selectVariantPropertyNode(page, reopened.set.id)
-  const toggle = card.getByRole('button', { name: 'Variant properties: State', exact: true })
-  if ((await toggle.getAttribute('aria-expanded')) !== 'true') await toggle.click()
+  canvas.assertNoErrors()
+})
+
+test('descriptor deletion rejects conflicting replacements and preserves components', async ({
+  page
+}) => {
+  const { canvas, section, card, values } = await createDescriptors(page)
   await card
     .locator('[data-variant-value="Hover"]')
     .getByRole('button', { name: 'Delete value', exact: true })

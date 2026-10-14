@@ -3,6 +3,8 @@ import { APICallError, StreamProviderError } from 'ai'
 import { ACPConfigurationError } from '@/app/ai/acp/configuration/session'
 import { ACPModelSelectionError } from '@/app/ai/acp/models'
 import { MCPStartupError } from '@/app/automation/mcp/failure'
+import { MCPConnectionError } from '@/app/integrations/mcp/failure'
+import { CredentialStoreError } from '@/app/settings/credentials/types'
 
 export type AIChatFailureReason =
   | 'authentication'
@@ -15,12 +17,15 @@ export type AIChatFailureReason =
   | 'request-failed'
   | 'mcp-unavailable'
   | 'cli-configuration'
+  | 'credential-access'
+  | 'external-mcp'
 
 export type AIChatFailure = {
   reason: AIChatFailureReason
   detail?: string
   statusCode?: number
   retryable?: boolean
+  connectionName?: string
 }
 
 export type ProviderErrorShape = {
@@ -94,10 +99,19 @@ function statusFailureReason(status: number | null): AIChatFailureReason | null 
   return null
 }
 
-function failureReason(error: unknown): AIChatFailureReason {
+function setupFailureReason(error: unknown): AIChatFailureReason | null {
+  if (error instanceof CredentialStoreError) return 'credential-access'
+  if (error instanceof MCPConnectionError)
+    return error.credentialAccess ? 'credential-access' : 'external-mcp'
   if (error instanceof ACPConfigurationError) return 'cli-configuration'
   if (error instanceof MCPStartupError) return 'mcp-unavailable'
   if (error instanceof ACPModelSelectionError) return 'model-not-found'
+  return null
+}
+
+function failureReason(error: unknown): AIChatFailureReason {
+  const setupReason = setupFailureReason(error)
+  if (setupReason) return setupReason
   const statusReason = statusFailureReason(providerErrorStatus(error))
   if (statusReason) return statusReason
   if (isInsufficientCreditError(error)) return 'insufficient-credit'
@@ -128,7 +142,8 @@ export function classifyAIChatFinish(finishReason?: string): AIChatFailure | nul
 export function classifyAIChatError(error: unknown): AIChatFailure {
   return {
     reason: failureReason(error),
-    detail: errorText(error),
+    detail: error instanceof CredentialStoreError ? undefined : errorText(error),
+    connectionName: error instanceof MCPConnectionError ? error.connectionName : undefined,
     statusCode: providerErrorStatus(error) ?? undefined,
     // A provider error after the stream starts arrives as StreamProviderError, not APICallError.
     retryable:

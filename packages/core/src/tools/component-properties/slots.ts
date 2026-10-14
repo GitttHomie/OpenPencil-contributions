@@ -29,7 +29,7 @@ export const createComponentSlot = defineTool({
   description:
     'Turn an existing frame inside a main component into a content slot, preserving its layout and children as defaults. Instances can customize children inside this slot. Returns the slot property ID for configuration.',
   execution: { kind: 'sync', mutation: 'document' },
-  input: v.object({ id: nodeIdInput }),
+  input: v.strictObject({ id: nodeIdInput }),
   execute(figma, { id }) {
     const node = figma.graph.getNode(id)
     const owner = node && slotOwner(figma.graph, node)
@@ -50,7 +50,7 @@ export const configureComponentSlot = defineTool({
   description:
     'Set a slot name, description, preferred component IDs and child limits/behavior. Null clears a child limit; omitted fields keep their values. Preferred-only and min/max settings are constraints reported by the editor, not automatic deletion of content.',
   execution: { kind: 'sync', mutation: 'properties' },
-  input: v.object({
+  input: v.strictObject({
     owner_id: nodeIdInput,
     property_id: v.string(),
     name: v.optional(v.string()),
@@ -109,7 +109,7 @@ export const resetInstanceSlot = defineTool({
   description:
     'Discard one instance slot’s customized children and restore its main component’s default content. The ID must be the slot frame inside the instance, not the main component’s frame.',
   execution: { kind: 'sync', mutation: 'document' },
-  input: v.object({ id: nodeIdInput }),
+  input: v.strictObject({ id: nodeIdInput }),
   execute(figma, { id }) {
     const scope = slotScope(figma.graph, id)
     if (scope.kind !== 'slot' || scope.frame.id !== id)

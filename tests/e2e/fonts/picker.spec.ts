@@ -66,11 +66,64 @@ test('font picker centers the selected family on first open and after a searched
   await expect(page.getByTestId('font-picker-trigger')).toContainText('G Sample 3')
 })
 
+test('bound fonts remain selectable and a local font edit can update the shared text style', async ({
+  page
+}, testInfo) => {
+  await mockGoogleFonts(page, [])
+  await mockFontsource(page, [
+    {
+      family: 'Replacement Font',
+      subset: 'latin',
+      data: await readFile('packages/core/assets/Inter-Regular.ttf')
+    }
+  ])
+  const source = await openTypographyForText(page)
+  const ids = await page.evaluate((sourceId) => {
+    const store = window.openPencil.getStore()
+    store.createFontVariable(sourceId, 'fontWeight', 'Display weight')
+    const styleId = store.createTextStyle(sourceId, 'Display / Large')
+    const follower = store.graph.createNode('TEXT', store.state.currentPageId, { text: 'Follower' })
+    store.applyTextStyle(follower.id, styleId)
+    const node = store.graph.getNode(sourceId)
+    return { source: sourceId, follower: follower.id, family: node?.boundVariables.fontFamily }
+  }, source)
+  const typography = page.getByTestId('typography')
+  await typography.screenshot({ path: testInfo.outputPath('bound-font-controls.png') })
+  const state = () =>
+    page.evaluate(({ source, follower }) => {
+      const store = window.openPencil.getStore()
+      return [source, follower].map((id) => {
+        const node = store.graph.getNode(id)
+        return {
+          family: node?.fontFamily,
+          binding: node?.boundVariables.fontFamily,
+          weight: node?.fontWeight
+        }
+      })
+    }, ids)
+  await openFontPicker(page)
+  await page.keyboard.press('Escape')
+  expect((await state())[0]?.binding).toBe(ids.family)
+  await typography.getByRole('combobox', { name: 'Font weight', exact: true }).click()
+  await page.getByRole('option', { name: 'Bold', exact: true }).click()
+  expect((await state())[0]?.weight).toBe(700)
+  await openFontPicker(page)
+  await searchFonts(page, 'Replacement Font')
+  await page.getByRole('option', { name: /^Replacement Font\b/ }).click()
+  expect((await state())[0]?.family).toBe('Replacement Font')
+  expect((await state())[0]?.binding).toBeUndefined()
+  expect((await state())[1]?.family).toBe('Inter')
+  await typography.getByRole('combobox', { name: 'Text style' }).click()
+  await page.getByRole('button', { name: 'Update style', exact: true }).click()
+  await expect.poll(async () => (await state())[1]?.family).toBe('Replacement Font')
+  expect((await state())[1]?.binding).toBeUndefined()
+})
+
 test('visible fonts load previews without hovering or selecting, without loading the whole catalog', async ({
   page
 }, testInfo) => {
   await mockGoogleFonts(page, [])
-  const data = await readFile('public/Inter-Regular.ttf')
+  const data = await readFile('packages/core/assets/Inter-Regular.ttf')
   const fonts = await mockFontsource(
     page,
     Array.from({ length: 40 }, (_, index) => ({

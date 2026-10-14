@@ -1,3 +1,5 @@
+import * as v from 'valibot'
+
 import { standardACPAdapter } from './standard'
 import type { ACPAdapterTurn, ACPAgentAdapter } from './types'
 
@@ -38,5 +40,29 @@ function createTurn(): ACPAdapterTurn {
 
 export const codexAdapter: ACPAgentAdapter = {
   ...standardACPAdapter('codex'),
+  prepareLaunch({ args, env }) {
+    if (!args.length) return { args, env }
+    // codex-acp 2.x reads CODEX_CONFIG; unlike codex itself, it ignores -c.
+    const entries: [string, string][] = []
+    for (let index = 0; index < args.length; index += 2) {
+      const setting = args[index + 1]
+      const separator = setting.indexOf('=')
+      const value = v.parse(
+        v.pipe(v.string(), v.parseJson(), v.string()),
+        setting.slice(separator + 1)
+      )
+      entries.push([setting.slice(0, separator), value])
+    }
+    const config = Object.fromEntries(entries)
+    return {
+      args: [],
+      env: {
+        ...env,
+        CODEX_CONFIG: JSON.stringify(config),
+        // The adapter gives MODEL_PROVIDER precedence over CODEX_CONFIG.
+        ...(config.model_provider ? { MODEL_PROVIDER: config.model_provider } : {})
+      }
+    }
+  },
   createTurn
 }

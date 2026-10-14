@@ -2,8 +2,7 @@ import type { CanvasKit, Path } from 'canvaskit-wasm'
 
 import type { VectorNetwork } from '@open-pencil/scene-graph'
 import type { Vector } from '@open-pencil/scene-graph/primitives'
-
-import { addOpenSegmentsToPath } from './path-helpers'
+import { addOpenSegmentsToPath } from '@open-pencil/scene-graph/vector-network'
 
 export function fitCircleArc(
   pts: Vector[]

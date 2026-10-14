@@ -1,11 +1,10 @@
 import type { EditorStore } from '@/app/editor/active-store'
-
-import type { PresencePoint } from './types'
+import type { PagePoint } from '@/app/editor/pages/point'
 
 const INITIAL_CURSOR_OFFSET = 64
 
 /** Show a thinking agent on the visible canvas before any tool has produced nodes. */
-export function thinkingCursor(store: EditorStore): PresencePoint {
+export function thinkingCursor(store: EditorStore): PagePoint {
   const { viewportWidth, viewportHeight } = store.panes.getActivePane()
   const { panX, panY, zoom, currentPageId } = store.state
   return {

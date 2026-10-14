@@ -2,11 +2,13 @@ import { expect, mock, test } from 'bun:test'
 
 import type { Font, Paint, Surface } from 'canvaskit-wasm'
 
+import { createImageCache } from '#core/canvas/images/cache'
+import { ImagePreviewCache } from '#core/canvas/images/previews'
 import type { SkiaRenderer } from '#core/canvas/renderer'
 import { EffectRasterCache } from '#core/canvas/renderer/effect-raster-cache'
 import { destroyRenderer } from '#core/canvas/renderer/lifecycle'
-import { createGlyphSilhouetteCache } from '#core/canvas/text/derived'
-import { TextPreparationCache } from '#core/canvas/text/preparation-cache'
+import { createDerivedGlyphPathCache, createGlyphSilhouetteCache } from '#core/canvas/text/derived'
+import { TextPreparationCache } from '#core/canvas/text/preparation/cache'
 
 function deletable<T>() {
   return { delete: mock() } as T & { delete: ReturnType<typeof mock> }
@@ -17,13 +19,17 @@ function createRenderer() {
     destroyed: false,
     textPreparationCache: new TextPreparationCache(),
     transientPreviews: new Map(),
-    imageCache: new Map(),
+    imageCache: createImageCache(),
+    liveImages: new Map(),
+    imagePreviews: new ImagePreviewCache(() => undefined),
+    onImagePreviewReady: null,
     vectorPathCache: new Map(),
     vectorStrokePathCache: new Map(),
     vectorStrokeOutlineCache: new Map(),
     fillGeometryCache: new Map(),
     strokeGeometryCache: new Map(),
     glyphSilhouetteCache: createGlyphSilhouetteCache(),
+    derivedGlyphPathCache: createDerivedGlyphPathCache(),
     fillPaint: deletable<Paint>(),
     strokePaint: deletable<Paint>(),
     selectionPaint: deletable<Paint>(),
@@ -49,6 +55,7 @@ function createRenderer() {
     rulerLabelPaint: deletable<Paint>(),
     penPathPaint: deletable<Paint>(),
     penLiveStrokePaint: deletable<Paint>(),
+    pencilStrokePaint: deletable<Paint>(),
     penHandlePaint: deletable<Paint>(),
     penVertexFill: deletable<Paint>(),
     penVertexStroke: deletable<Paint>(),
@@ -56,6 +63,7 @@ function createRenderer() {
     maskFilterCache: new Map(),
     nodePictureCache: new Map(),
     effectRasterCache: new EffectRasterCache(),
+    foregroundBlurCache: new EffectRasterCache(),
     subtreePictureCache: new Map(),
     scenePicture: null,
     sceneBacking: null,
@@ -90,10 +98,12 @@ test('destroyRenderer deletes all renderer-owned paints and label fonts', () => 
   const parentOutlinePaint = renderer.parentOutlinePaint
   const sectionTitleFont = renderer.sectionTitleFont
   const componentLabelFont = renderer.componentLabelFont
+  const pencilStrokePaint = renderer.pencilStrokePaint
 
   destroyRenderer(renderer)
 
   expect(parentOutlinePaint.delete).toHaveBeenCalled()
+  expect(pencilStrokePaint.delete).toHaveBeenCalled()
   expect(sectionTitleFont?.delete).toHaveBeenCalled()
   expect(componentLabelFont?.delete).toHaveBeenCalled()
 })

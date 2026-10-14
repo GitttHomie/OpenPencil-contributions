@@ -18,7 +18,9 @@ interface ConnectionFormMessages {
   serverURLHint: string
   bearerTokenRequired: string
 }
-export type MCPConnectionFieldErrors = Partial<Record<'name' | 'url' | 'credential', string>>
+export type MCPConnectionFieldErrors = Partial<
+  Record<'name' | 'url' | 'command' | 'credential', string>
+>
 
 /** Only credential availability enters form state, never entered or saved secrets. */
 export function useMCPConnectionForm(
@@ -42,21 +44,40 @@ export function useMCPConnectionForm(
             automation.value.connectionNameInvalid
           )
         ),
-        url: v.pipe(
-          requiredSetting(messages.value.requiredField),
-          v.check((value) => {
-            try {
-              validateMCPConnectionURL(value)
-              return true
-            } catch {
-              return false
-            }
-          }, automation.value.serverURLHint)
-        ),
+        url: v.string(),
+        transportType: v.picklist(['streamable-http', 'stdio']),
+        command: v.string(),
+        args: v.array(v.string()),
+        autoApprove: v.array(v.string()),
+        hasEnvironment: v.boolean(),
         enabled: v.boolean(),
         authenticationType: v.picklist(['none', 'bearer']),
         credential: v.boolean()
       }),
+      v.forward(
+        v.partialCheck(
+          [['url'], ['transportType']],
+          (value) => {
+            if (value.transportType === 'stdio') return true
+            try {
+              validateMCPConnectionURL(value.url)
+              return true
+            } catch {
+              return false
+            }
+          },
+          automation.value.serverURLHint
+        ),
+        ['url']
+      ),
+      v.forward(
+        v.partialCheck(
+          [['command'], ['transportType']],
+          (value) => value.transportType !== 'stdio' || !!value.command.trim(),
+          messages.value.requiredField
+        ),
+        ['command']
+      ),
       v.forward(
         v.partialCheck(
           [['enabled'], ['authenticationType'], ['credential']],
@@ -80,11 +101,30 @@ export function useMCPConnectionForm(
   const [url] = form.defineField('url', config)
   const [enabled] = form.defineField('enabled', config)
   const [authenticationType] = form.defineField('authenticationType', config)
+  const [transportType] = form.defineField('transportType', config)
+  watch(transportType, (value) => {
+    if (value === 'stdio') authenticationType.value = 'none'
+  })
+  const [command] = form.defineField('command', config)
+  const [args] = form.defineField('args', config)
+  const [autoApprove] = form.defineField('autoApprove', config)
+  const [hasEnvironment] = form.defineField('hasEnvironment', config)
   form.defineField('credential', config)
   watch([enabled, authenticationType], () => {
     if (form.errors.value.credential) void form.validateField('credential')
   })
-  const fields = reactive({ id, name, url, enabled, authenticationType })
+  const fields = reactive({
+    id,
+    name,
+    url,
+    enabled,
+    authenticationType,
+    transportType,
+    command,
+    args,
+    autoApprove,
+    hasEnvironment
+  })
   const draft = computed<MCPConnectionDraft>({
     get: () => fields,
     set: (values) => {
@@ -97,7 +137,7 @@ export function useMCPConnectionForm(
     draft,
     dirty: computed(() => form.meta.value.dirty),
     errors: form.errors,
-    blur: (field: 'name' | 'url' | 'credential') => form.validateField(field),
+    blur: (field: 'name' | 'url' | 'command' | 'credential') => form.validateField(field),
     setCredentialReady: (ready: boolean) => form.resetField('credential', { value: ready }),
     handleSubmit: form.handleSubmit,
     isSubmitting: form.isSubmitting

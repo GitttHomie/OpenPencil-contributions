@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/vue3-vite'
 import { expect, userEvent, within } from 'storybook/test'
 
+import PickerPreviews from './examples/PickerPreviews.vue'
 import BindingFieldStates from './examples/States.vue'
 
 const meta = {
@@ -21,6 +22,10 @@ export default meta
 type Story = StoryObj<typeof meta>
 
 export const PickerActions: Story = {}
+
+export const VariablePreviews: Story = {
+  render: () => ({ components: { PickerPreviews }, template: '<PickerPreviews />' })
+}
 
 export const StateMatrix: Story = {
   play: async ({ canvasElement }) => {

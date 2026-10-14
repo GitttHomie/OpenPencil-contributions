@@ -5,9 +5,10 @@ import {
   copyStrokes,
   scaleGeometryPaths
 } from './copy'
+import { enforcedAspectRatio } from './layout/aspect-ratio'
 import type { Rect } from './primitives'
 import type { ConstraintType, DerivedTextGlyph, SceneNode, Stroke, VectorNetwork } from './types'
-import { cloneVectorNetwork } from './vector-network'
+import { cloneVectorNetwork } from './vector'
 
 /**
  * Drag-start state a live resize re-scales from. Path text needs more than the
@@ -48,36 +49,67 @@ function constrainedAxis(
   size: number,
   parentBefore: number,
   parentAfter: number,
-  constraint: ConstraintType
+  constraint: ConstraintType,
+  layout = false
 ): { position: number; size: number } {
   const delta = parentAfter - parentBefore
   if (constraint === 'MAX') return { position: position + delta, size }
   if (constraint === 'CENTER') return { position: position + delta / 2, size }
-  if (constraint === 'STRETCH') return { position, size: Math.max(1, size + delta) }
+  if (constraint === 'STRETCH')
+    return { position, size: layout ? Math.abs(size + delta) : Math.max(1, size + delta) }
   if (constraint === 'SCALE' && parentBefore > 0) {
     const scale = parentAfter / parentBefore
-    return { position: position * scale, size: Math.max(1, size * scale) }
+    return { position: position * scale, size: layout ? size * scale : Math.max(1, size * scale) }
   }
   return { position, size }
 }
 
-/** Layout reflow can disable pixel rounding to preserve fractional anchors across repeated passes. */
+type AxisPlacement = { position: number; size: number }
+
+const FLEXIBLE_CONSTRAINTS: ReadonlySet<ConstraintType> = new Set(['STRETCH', 'SCALE'])
+
+/** The axis at `size`, keeping the edge or centre its constraint pins where it was placed. */
+function resizedInPlace(
+  placed: AxisPlacement,
+  size: number,
+  constraint: ConstraintType
+): AxisPlacement {
+  if (constraint === 'MAX') return { position: placed.position + placed.size - size, size }
+  if (constraint === 'CENTER') return { position: placed.position + (placed.size - size) / 2, size }
+  return { position: placed.position, size }
+}
+
+/**
+ * A locked aspect ratio holds when exactly one axis follows the parent, as in Figma: that axis
+ * sizes the other. With both axes following the parent, or neither, the ratio gives way.
+ */
+function keepLockedRatio(
+  x: AxisPlacement,
+  y: AxisPlacement,
+  horizontal: ConstraintType,
+  vertical: ConstraintType,
+  aspectRatio: number | null
+): { x: AxisPlacement; y: AxisPlacement } {
+  const flexibleX = FLEXIBLE_CONSTRAINTS.has(horizontal)
+  if (aspectRatio === null || flexibleX === FLEXIBLE_CONSTRAINTS.has(vertical)) return { x, y }
+  return flexibleX
+    ? { x, y: resizedInPlace(y, x.size / aspectRatio, vertical) }
+    : { x: resizedInPlace(x, y.size * aspectRatio, horizontal), y }
+}
+
+/** A child's box after its parent resizes, keeping a locked aspect ratio as Figma does. */
 export function constrainedChildRect(
   child: Rect,
   parentBefore: Pick<Rect, 'width' | 'height'>,
   parentAfter: Pick<Rect, 'width' | 'height'>,
   horizontal: ConstraintType,
   vertical: ConstraintType,
+  aspectRatio: number | null = null,
   roundToPixels = true
 ): Rect {
-  const x = constrainedAxis(child.x, child.width, parentBefore.width, parentAfter.width, horizontal)
-  const y = constrainedAxis(
-    child.y,
-    child.height,
-    parentBefore.height,
-    parentAfter.height,
-    vertical
-  )
+  let x = constrainedAxis(child.x, child.width, parentBefore.width, parentAfter.width, horizontal)
+  let y = constrainedAxis(child.y, child.height, parentBefore.height, parentAfter.height, vertical)
+  ;({ x, y } = keepLockedRatio(x, y, horizontal, vertical, aspectRatio))
   const rect = { x: x.position, y: y.position, width: x.size, height: y.size }
   if (!roundToPixels) return rect
   return {
@@ -88,13 +120,48 @@ export function constrainedChildRect(
   }
 }
 
+/**
+ * Where a child goes when layout resizes its parent. Layout retains fractional distances and
+ * centers; pixel snapping applies to direct manipulation, not to derived layout geometry.
+ */
+export function layoutConstrainedChildRect(
+  child: Rect,
+  parentBefore: Pick<Rect, 'width' | 'height'>,
+  parentAfter: Pick<Rect, 'width' | 'height'>,
+  horizontal: ConstraintType,
+  vertical: ConstraintType,
+  aspectRatio: number | null = null
+): Rect {
+  const placed = keepLockedRatio(
+    constrainedAxis(child.x, child.width, parentBefore.width, parentAfter.width, horizontal, true),
+    constrainedAxis(child.y, child.height, parentBefore.height, parentAfter.height, vertical, true),
+    horizontal,
+    vertical,
+    aspectRatio
+  )
+  return {
+    x: placed.x.position,
+    y: placed.y.position,
+    width: placed.x.size,
+    height: placed.y.size
+  }
+}
+
 export function scaledChildRect(
   child: Rect,
   parentBefore: Pick<Rect, 'width' | 'height'>,
   parentAfter: Pick<Rect, 'width' | 'height'>,
   roundToPixels = true
 ): Rect {
-  return constrainedChildRect(child, parentBefore, parentAfter, 'SCALE', 'SCALE', roundToPixels)
+  return constrainedChildRect(
+    child,
+    parentBefore,
+    parentAfter,
+    'SCALE',
+    'SCALE',
+    null,
+    roundToPixels
+  )
 }
 
 export function scaleVectorNetworkForResize(
@@ -104,10 +171,10 @@ export function scaleVectorNetworkForResize(
   width: number,
   height: number
 ): VectorNetwork | null {
-  if (!vectorNetwork || originalWidth <= 0 || originalHeight <= 0) return null
+  if (!vectorNetwork || (originalWidth <= 0 && originalHeight <= 0)) return null
 
-  const scaleX = width / originalWidth
-  const scaleY = height / originalHeight
+  const scaleX = originalWidth > 0 ? width / originalWidth : height / originalHeight
+  const scaleY = originalHeight > 0 ? height / originalHeight : scaleX
   if (scaleX === 1 && scaleY === 1) return null
 
   return {
@@ -193,9 +260,9 @@ export function scaledGeometryChanges(
   width: number,
   height: number
 ): Partial<SceneNode> {
-  if (origWidth <= 0 || origHeight <= 0) return {}
-  const sx = width / origWidth
-  const sy = height / origHeight
+  if (origWidth <= 0 && origHeight <= 0) return {}
+  const sx = origWidth > 0 ? width / origWidth : height / origHeight
+  const sy = origHeight > 0 ? height / origHeight : sx
   if (sx === 1 && sy === 1) return {}
 
   const changes: Partial<SceneNode> = {}
@@ -298,6 +365,7 @@ export function computeConstrainedResizeChanges(
             parentAfter,
             child.horizontalConstraint,
             child.verticalConstraint,
+            enforcedAspectRatio(child),
             roundToPixels
           )
       // The reconciliation pass must keep Yoga's settled sizes. Restoring the

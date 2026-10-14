@@ -1,5 +1,7 @@
 import { expect, test } from 'bun:test'
 
+import { inertPopulationWorker } from '#core-tests/helpers/fig/population-worker'
+
 import { createEditor } from '@open-pencil/core/editor'
 
 import {
@@ -10,12 +12,7 @@ import {
 test('new live pages do not require unavailable reader recovery', async () => {
   const editor = createEditor()
   const page = editor.graph.addPage('Unloaded')
-  const worker = {
-    terminate: () => undefined,
-    postMessage: () => undefined,
-    onerror: null,
-    onmessage: null
-  } as Worker
+  const worker = inertPopulationWorker()
   registerFigPopulationWorker(editor.graph, worker)
   editor.graph.updateNode(editor.graph.rootId, { name: 'User edit' })
   try {

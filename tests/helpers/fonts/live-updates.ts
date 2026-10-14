@@ -10,11 +10,7 @@ export async function createLiveFontUpdate(page: Page) {
   return page.evaluateHandle(async () => {
     const store = window.openPencil?.getStore?.()
     if (!store?.renderer) throw new Error('Editor unavailable')
-    const moduleURL = performance
-      .getEntriesByType('resource')
-      .map((entry) => entry.name)
-      .find((url) => url.includes('/packages/core/src/text/fonts.ts'))
-    if (!moduleURL) throw new Error('Font runtime unavailable')
+    const moduleURL = '/packages/core/src/text/fonts.ts'
     const { fontManager } = (await import(/* @vite-ignore */ moduleURL)) as {
       fontManager: FontManager
     }

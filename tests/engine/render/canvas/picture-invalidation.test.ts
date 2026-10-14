@@ -3,7 +3,7 @@ import { expect, mock, test } from 'bun:test'
 import type { SkiaRenderer } from '#core/canvas/renderer'
 import { EffectRasterCache } from '#core/canvas/renderer/effect-raster-cache'
 import { invalidateAllPictures, invalidateNodePicture } from '#core/canvas/renderer/state'
-import { TextPreparationCache } from '#core/canvas/text/preparation-cache'
+import { TextPreparationCache } from '#core/canvas/text/preparation/cache'
 
 function deletable() {
   return { delete: mock() }
@@ -27,6 +27,7 @@ test('full picture invalidation resets tiled font-dependent resources', () => {
     nodePictureCacheGenerations: new Map([['node', 1]]),
     nodePictureCacheDependencies: new Map([['node', []]]),
     effectRasterCache: new EffectRasterCache(),
+    foregroundBlurCache: new EffectRasterCache(),
     subtreePictureCache: new Map([['subtree', { picture: subtreePicture }]]),
     subtreePictureCachePageId: 'page',
     subtreePictureCacheSceneVersion: 1,
@@ -65,13 +66,25 @@ test('node picture invalidation removes pictures that depend on a changed child'
       ['child', []]
     ]),
     effectRasterCache: new EffectRasterCache(),
+    foregroundBlurCache: new EffectRasterCache(),
     subtreePictureCache: new Map()
   } as SkiaRenderer
 
   invalidateNodePicture(renderer, 'child')
 
-  expect(textPreparationCache.deleteNode).toHaveBeenCalledWith('child')
+  expect(textPreparationCache.deleteNode).toHaveBeenCalledWith('child', {
+    keepShaping: false
+  })
   expect(parentPicture.delete).toHaveBeenCalledTimes(1)
   expect(childPicture.delete).toHaveBeenCalledTimes(1)
   expect(renderer.nodePictureCache.size).toBe(0)
+
+  invalidateNodePicture(renderer, 'child', ['width', 'height', 'x'])
+  expect(textPreparationCache.deleteNode).toHaveBeenLastCalledWith('child', {
+    keepShaping: true
+  })
+  invalidateNodePicture(renderer, 'child', ['width', 'text'])
+  expect(textPreparationCache.deleteNode).toHaveBeenLastCalledWith('child', {
+    keepShaping: false
+  })
 })

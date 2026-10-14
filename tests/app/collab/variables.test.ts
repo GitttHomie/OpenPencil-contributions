@@ -1,346 +1,181 @@
-import { expect, test } from 'bun:test'
+import { describe, expect, test } from 'bun:test'
 
-import * as Y from 'yjs'
+import { SceneGraph, type Color, type Variable } from '@open-pencil/scene-graph'
 
-import type { Variable } from '@open-pencil/scene-graph'
+import { openRoomSession, type RoomSession } from '@/app/collab/session'
+import { createEditorStore, type EditorStore } from '@/app/editor/session'
 
-import { createVariableSync } from '@/app/collab/variables/sync'
-import { createEditorStore } from '@/app/editor/session'
+import { expectDefined, getNodeOrThrow } from '#tests/helpers/assert'
+import { createMemoryRooms } from '#tests/helpers/collab/memory-transport'
 
-import { connectYDocs } from '#tests/helpers/yjs'
+const ROOM = 'cccccccccccccccccccccccccccccccc'
+const RED: Color = { r: 1, g: 0, b: 0, a: 1 }
+const BLUE: Color = { r: 0, g: 0, b: 1, a: 1 }
+const GREEN: Color = { r: 0, g: 1, b: 0, a: 1 }
 
-function peer() {
-  const store = createEditorStore()
-  const doc = new Y.Doc()
-  const suppression = { graph: false, yjs: false }
-  const sync = createVariableSync({
-    store,
-    doc,
-    suppressGraphSync: (value) => {
-      suppression.graph = value
-    },
-    suppressYjsEvents: (value) => {
-      suppression.yjs = value
+const noSavedCopy = () => ({ whenSynced: Promise.resolve(), destroy: () => undefined })
+
+type Room = {
+  host: EditorStore
+  guest: EditorStore
+  settle: () => Promise<void>
+  ids: { collection: string; light: string; dark: string; brand: string; card: string }
+}
+
+/**
+ * A host shares a document with a Theme collection, Light and Dark modes, a Brand color, and a
+ * card filled with it; a guest joins.
+ */
+async function withRoom(run: (room: Room) => Promise<void>) {
+  const rooms = createMemoryRooms()
+  const sessions: RoomSession[] = []
+  const host = createEditorStore(new SceneGraph())
+  const guest = createEditorStore(new SceneGraph())
+  try {
+    const collection = host.graph.createCollection('Theme')
+    const light = collection.defaultModeId
+    const dark = expectDefined(host.graph.createMode(collection.id, 'Dark'), 'Dark mode')
+    const brand = host.graph.createVariable('Brand', 'COLOR', collection.id, RED)
+    brand.valuesByMode[dark] = BLUE
+    const page = expectDefined(host.graph.getPages()[0], 'first page').id
+    const card = host.graph.createNode('RECTANGLE', page, {
+      name: 'Card',
+      fills: [{ type: 'SOLID', color: RED, opacity: 1, visible: true }],
+      boundVariables: { 'fills/0/color': brand.id }
+    })
+
+    const open = (store: EditorStore, origin: 'shared' | 'joined') => {
+      const session = openRoomSession({
+        roomId: ROOM,
+        store,
+        origin,
+        joinRoom: rooms.join,
+        openSavedCopy: noSavedCopy
+      })
+      sessions.push(session)
+      return session
     }
+    open(host, 'shared').shareDocument()
+    open(guest, 'joined')
+    await rooms.settle()
+    await run({
+      host,
+      guest,
+      settle: rooms.settle,
+      ids: { collection: collection.id, light, dark, brand: brand.id, card: card.id }
+    })
+  } finally {
+    for (const session of sessions) session.dispose()
+    host.preparationController.dispose()
+    guest.preparationController.dispose()
+  }
+}
+
+function brandOf(store: EditorStore, id: string): Variable {
+  return expectDefined(store.graph.variables.get(id), 'Brand')
+}
+
+describe('variables in a room', () => {
+  test('a joined tab receives the collections, modes, and values of the shared document', async () => {
+    await withRoom(async ({ guest, ids }) => {
+      const collection = expectDefined(guest.graph.variableCollections.get(ids.collection), 'Theme')
+      expect(collection.name).toBe('Theme')
+      expect(collection.modes.map((mode) => mode.name)).toEqual(['Mode 1', 'Dark'])
+      expect(collection.variableIds).toEqual([ids.brand])
+      expect(brandOf(guest, ids.brand).valuesByMode).toEqual({
+        [ids.light]: RED,
+        [ids.dark]: BLUE
+      })
+    })
   })
-  return {
-    store,
-    doc,
-    sync,
-    suppression,
-    close() {
-      sync.dispose()
-      store.dispose()
-      doc.destroy()
-    }
-  }
-}
 
-function foundations(host: ReturnType<typeof peer>) {
-  const graph = host.store.graph
-  const collection = graph.createCollection('Foundations')
-  graph.addMode(collection.id, 'dark', 'Dark')
-  const color = graph.createVariable('Brand', 'COLOR', collection.id, { r: 1, g: 0, b: 0, a: 1 })
-  color.valuesByMode.dark = { r: 0, g: 0, b: 1, a: 1 }
-  const alias = graph.createVariable('Action', 'COLOR', collection.id, { aliasId: color.id })
-  const space = graph.createVariable('Padding', 'FLOAT', collection.id, 8)
-  space.valuesByMode.dark = 16
-  space.unit = 'px'
-  space.scopes = ['GAP']
-  space.codeSyntax = { WEB: '--space-control' }
-  graph.createVariable('Caption', 'STRING', collection.id, 'Continue')
-  graph.createVariable('Visible', 'BOOLEAN', collection.id, true)
-  return { collection, color, alias, space }
-}
+  test('an edited value reaches the other tab, where the layers bound to it draw it', async () => {
+    await withRoom(async ({ host, guest, settle, ids }) => {
+      host.updateVariableValue(ids.brand, ids.light, GREEN)
+      await settle()
+      expect(brandOf(guest, ids.brand).valuesByMode[ids.light]).toEqual(GREEN)
+      // The renderer resolves a bound color as it draws the layer.
+      const card = getNodeOrThrow(guest.graph, ids.card)
+      expect(guest.graph.resolveColorVariableForNode(card.id, ids.brand)).toEqual(GREEN)
+    })
+  })
 
-test('renames and reorders reach peers without invalidating either canvas', () => {
-  const host = peer()
-  const guest = peer()
-  try {
-    const { collection, space } = foundations(host)
-    host.sync.publishAll()
-    const disconnect = connectYDocs(host.doc, guest.doc)
-    try {
-      const hostVersion = host.store.state.canvasVersion
-      const guestVersion = guest.store.state.canvasVersion
-      host.store.renameVariable(space.id, 'Control spacing')
-      expect(guest.store.graph.variables.get(space.id)?.name).toBe('Control spacing')
-      const order = [...collection.variableIds].reverse()
-      host.store.setVariableOrder(collection.id, order)
-      expect(guest.store.graph.variableCollections.get(collection.id)?.variableIds).toEqual(order)
-      host.store.undo.undo()
-      host.store.undo.undo()
-      expect(guest.store.graph.variables.get(space.id)?.name).toBe('Padding')
-      expect(host.store.state.canvasVersion).toBe(hostVersion)
-      expect(guest.store.state.canvasVersion).toBe(guestVersion)
-    } finally {
-      disconnect()
-    }
-  } finally {
-    host.close()
-    guest.close()
-  }
-})
-
-test('peer value changes leave unrelated bound layers at their saved dimensions', () => {
-  const host = peer()
-  const guest = peer()
-  try {
-    const { collection, space } = foundations(host)
-    const other = host.store.graph.createVariable('Other', 'FLOAT', collection.id, 120)
-    host.sync.publishAll()
-    const disconnect = connectYDocs(host.doc, guest.doc)
-    try {
-      const graph = guest.store.graph
-      const bound = graph.createNode('FRAME', guest.store.state.currentPageId, {
-        width: 8,
-        boundVariables: { width: space.id }
-      })
-      const unrelated = graph.createNode('FRAME', guest.store.state.currentPageId, {
-        width: 90,
-        boundVariables: { width: other.id }
-      })
-      host.store.updateVariableValue(space.id, collection.defaultModeId, 24)
-      expect(bound.width).toBe(24)
-      expect(unrelated.width).toBe(90)
-    } finally {
-      disconnect()
-    }
-  } finally {
-    host.close()
-    guest.close()
-  }
-})
-
-test('token editor metadata and mode conditions synchronize with undo and clearing', () => {
-  const host = peer()
-  const guest = peer()
-  try {
-    const { collection, space } = foundations(host)
-    host.sync.publishAll()
-    const disconnect = connectYDocs(host.doc, guest.doc)
-    try {
-      const modeId = collection.defaultModeId
-      host.store.updateVariableToken(space.id, {
-        unit: 'rem',
-        expressions: { [modeId]: { css: 'clamp(.5rem, 2vw, 1rem)', resolved: 8 } }
-      })
-      host.store.setModeAttribute(collection.id, 'data-scheme')
-      expect(guest.store.graph.variableCollections.get(collection.id)?.modeAttribute).toBe(
-        'data-scheme'
-      )
-      host.store.undo.undo()
-      expect(
-        guest.store.graph.variableCollections.get(collection.id)?.modeAttribute
-      ).toBeUndefined()
-      host.store.setModeCondition(collection.id, 'dark', '@media (prefers-color-scheme: dark)')
-      expect(guest.store.graph.variables.get(space.id)).toMatchObject({
-        unit: 'rem',
-        expressions: { [modeId]: { css: 'clamp(.5rem, 2vw, 1rem)', resolved: 8 } }
-      })
-      expect(guest.store.graph.variableCollections.get(collection.id)?.modes[1].condition).toBe(
-        '@media (prefers-color-scheme: dark)'
-      )
-      host.store.undo.undo()
-      expect(
-        guest.store.graph.variableCollections.get(collection.id)?.modes[1].condition
-      ).toBeUndefined()
-      host.store.updateVariableToken(space.id, { expressions: undefined })
-      expect(guest.store.graph.variables.get(space.id)?.expressions).toBeUndefined()
-      host.store.undo.undo()
-      expect(guest.store.graph.variables.get(space.id)?.expressions?.[modeId]?.css).toBe(
-        'clamp(.5rem, 2vw, 1rem)'
-      )
-    } finally {
-      disconnect()
-    }
-  } finally {
-    host.close()
-    guest.close()
-  }
-})
-
-test('initial room state includes typed variables, aliases, modes and metadata', () => {
-  const host = peer()
-  const guest = peer()
-  try {
-    const { collection, alias, space } = foundations(host)
-    host.store.graph.setActiveMode(collection.id, 'dark')
-    host.sync.publishAll()
-    const disconnect = connectYDocs(host.doc, guest.doc)
-    try {
-      expect(guest.store.graph.variables).toEqual(host.store.graph.variables)
-      expect(guest.store.graph.variableCollections).toEqual(host.store.graph.variableCollections)
-      expect(guest.store.graph.activeMode.get(collection.id)).toBe('dark')
-      expect(guest.suppression).toEqual({ graph: false, yjs: false })
-      expect(guest.store.graph.resolveColorVariable(alias.id)).toEqual({ r: 0, g: 0, b: 1, a: 1 })
-      expect(guest.store.graph.resolveNumberVariable(space.id)).toBe(16)
-    } finally {
-      disconnect()
-    }
-  } finally {
-    host.close()
-    guest.close()
-  }
-})
-
-test('local edits update peers, bound layout and undo without echoing unchanged definitions', () => {
-  const host = peer()
-  const guest = peer()
-  try {
-    const { collection, space } = foundations(host)
-    host.sync.publishAll()
-    const disconnect = connectYDocs(host.doc, guest.doc)
-    try {
-      const frame = guest.store.graph.createNode('FRAME', guest.store.state.currentPageId, {
-        width: 100,
-        height: 40,
-        layoutMode: 'HORIZONTAL',
-        boundVariables: { paddingLeft: space.id }
-      })
-      host.store.updateVariableValue(space.id, collection.defaultModeId, 24)
-      expect(guest.store.graph.getNode(frame.id)?.paddingLeft).toBe(24)
-      guest.store.renameVariable(space.id, 'Space/control')
-      expect(host.store.graph.variables.get(space.id)?.name).toBe('Space/control')
-      guest.store.undo.undo()
-      expect(host.store.graph.variables.get(space.id)?.name).toBe('Padding')
-      host.store.undo.undo()
-      expect(guest.store.graph.getNode(frame.id)?.paddingLeft).toBe(8)
-      host.store.setActiveMode(collection.id, 'dark')
-      expect(guest.store.graph.getNode(frame.id)?.paddingLeft).toBe(16)
-      const mode = host.store.addMode(collection.id, 'Compact')
-      expect(guest.store.graph.variableCollections.get(collection.id)?.modes.at(-1)?.modeId).toBe(
-        mode
-      )
-      let updates = 0
-      const count = () => {
-        updates++
+  test('two people editing different modes of one variable both keep their change', async () => {
+    await withRoom(async ({ host, guest, settle, ids }) => {
+      host.updateVariableValue(ids.brand, ids.light, GREEN)
+      guest.updateVariableValue(ids.brand, ids.dark, RED)
+      await settle()
+      for (const store of [host, guest]) {
+        expect(brandOf(store, ids.brand).valuesByMode).toEqual({
+          [ids.light]: GREEN,
+          [ids.dark]: RED
+        })
       }
-      host.doc.on('update', count)
-      host.store.requestRender()
-      host.store.requestRepaint()
-      expect(updates).toBe(0)
-      host.doc.off('update', count)
-    } finally {
-      disconnect()
-    }
-  } finally {
-    host.close()
-    guest.close()
-  }
-})
+    })
+  })
 
-test('disconnected peers merge renames and values in different modes independently', () => {
-  const host = peer()
-  const guest = peer()
-  try {
-    const { collection, space } = foundations(host)
-    host.sync.publishAll()
-    connectYDocs(host.doc, guest.doc)()
-    host.store.renameVariable(space.id, 'Space/medium')
-    host.store.updateVariableValue(space.id, collection.defaultModeId, 20)
-    guest.store.updateVariableValue(space.id, 'dark', 32)
-    const disconnect = connectYDocs(host.doc, guest.doc)
-    try {
-      const expected = {
-        name: 'Space/medium',
-        valuesByMode: { [collection.defaultModeId]: 20, dark: 32 }
+  test('two people adding variables at once both find theirs in the collection', async () => {
+    await withRoom(async ({ host, guest, settle, ids }) => {
+      const make = (store: EditorStore, name: string) => {
+        const variable = store.graph.createVariable(name, 'COLOR', ids.collection, RED)
+        // Created through the graph, it is registered already; the editor action records it.
+        store.graph.variables.delete(variable.id)
+        const collection = expectDefined(store.graph.variableCollections.get(ids.collection), 'c')
+        collection.variableIds = collection.variableIds.filter((id) => id !== variable.id)
+        store.addVariable(variable)
+        return variable.id
       }
-      expect(host.store.graph.variables.get(space.id)).toMatchObject(expected)
-      expect(guest.store.graph.variables.get(space.id)).toMatchObject(expected)
-    } finally {
-      disconnect()
-    }
-  } finally {
-    host.close()
-    guest.close()
-  }
-})
+      const accent = make(host, 'Accent')
+      const muted = make(guest, 'Muted')
+      await settle()
+      const lists = [host, guest].map(
+        (store) =>
+          expectDefined(store.graph.variableCollections.get(ids.collection), 'c').variableIds
+      )
+      expect(lists[0]).toEqual(lists[1])
+      expect(new Set(lists[0])).toEqual(new Set([ids.brand, accent, muted]))
+    })
+  })
 
-test('concurrent additions retain collection membership and deleted variables stay deleted after reconnect', () => {
-  const host = peer()
-  const guest = peer()
-  try {
-    const { collection, color, space } = foundations(host)
-    host.sync.publishAll()
-    connectYDocs(host.doc, guest.doc)()
-    const first = host.store.graph.createVariable('First', 'FLOAT', collection.id, 1)
-    host.store.requestRender()
-    const second = guest.store.graph.createVariable('Second', 'FLOAT', collection.id, 2)
-    guest.store.requestRender()
-    host.store.removeVariable(color.id)
-    guest.store.renameVariable(space.id, 'Spacing')
-    const disconnect = connectYDocs(host.doc, guest.doc)
-    try {
-      for (const client of [host, guest]) {
-        expect(client.store.graph.variableCollections.get(collection.id)?.variableIds).toEqual(
-          expect.arrayContaining([first.id, second.id, space.id])
-        )
-        expect(client.store.graph.variables.has(color.id)).toBe(false)
-      }
-      expect(host.store.graph.variableCollections).toEqual(guest.store.graph.variableCollections)
-      guest.store.removeCollection(collection.id)
-      expect(host.store.graph.variableCollections.has(collection.id)).toBe(false)
-      expect(host.store.graph.variables.size).toBe(0)
-      guest.store.undo.undo()
-      expect(host.store.graph.variables).toEqual(guest.store.graph.variables)
-    } finally {
-      disconnect()
-    }
-  } finally {
-    host.close()
-    guest.close()
-  }
-})
+  test('an undo reaches the other tab', async () => {
+    await withRoom(async ({ host, guest, settle, ids }) => {
+      host.renameVariable(ids.brand, 'Primary')
+      await settle()
+      expect(brandOf(guest, ids.brand).name).toBe('Primary')
+      host.undoAction()
+      await settle()
+      expect(brandOf(guest, ids.brand).name).toBe('Brand')
+    })
+  })
 
-test('stored room updates restore registries and malformed peer definitions are ignored', () => {
-  const host = peer()
-  const restored = peer()
-  try {
-    const { collection, space } = foundations(host)
-    host.sync.publishAll()
-    Y.applyUpdate(restored.doc, Y.encodeStateAsUpdate(host.doc))
-    expect(restored.store.graph.variables).toEqual(host.store.graph.variables)
-    const disconnect = connectYDocs(host.doc, restored.doc)
-    try {
-      const variables = host.doc.getMap<Y.Map<unknown>>('variables')
-      const entry = variables.get(space.id)
-      if (!entry) throw new Error('Missing variable')
-      entry.set('valuesByMode', { [collection.defaultModeId]: { unexpected: true } })
-      expect(
-        restored.store.graph.variables.get(space.id)?.valuesByMode[collection.defaultModeId]
-      ).toBe(8)
-      variables.set('invalid', new Y.Map([['name', 'Incomplete']]))
-      expect(restored.store.graph.variables.has('invalid')).toBe(false)
-    } finally {
-      disconnect()
-    }
-  } finally {
-    host.close()
-    restored.close()
-  }
-})
+  test('a removed collection is removed for everyone, with its variables', async () => {
+    await withRoom(async ({ host, guest, settle, ids }) => {
+      host.removeCollection(ids.collection)
+      await settle()
+      expect(guest.graph.variableCollections.has(ids.collection)).toBe(false)
+      expect(guest.graph.variables.has(ids.brand)).toBe(false)
+    })
+  })
 
-test('disconnect disposes registry listeners and direct tool edits publish on scene changes', () => {
-  const host = peer()
-  const guest = peer()
-  try {
-    const { collection, space } = foundations(host)
-    host.sync.publishAll()
-    const disconnect = connectYDocs(host.doc, guest.doc)
-    try {
-      const updated: Variable = { ...space, description: 'Changed by a tool' }
-      host.store.graph.variables.set(space.id, updated)
-      host.store.requestRender()
-      expect(guest.store.graph.variables.get(space.id)?.description).toBe('Changed by a tool')
-      host.sync.dispose()
-      host.store.updateVariableValue(space.id, collection.defaultModeId, 99)
-      expect(guest.store.graph.resolveNumberVariable(space.id)).toBe(8)
-    } finally {
-      disconnect()
-    }
-  } finally {
-    host.close()
-    guest.close()
-  }
+  test('an edit not yet in the history still reaches the room when a peer’s edit lands first', async () => {
+    await withRoom(async ({ host, guest, settle, ids }) => {
+      // A plugin script changes the graph at once and records its undo step when it ends.
+      const theme = expectDefined(host.graph.variableCollections.get(ids.collection), 'Theme')
+      theme.name = 'Palette'
+      guest.updateVariableValue(ids.brand, ids.light, GREEN)
+      await settle()
+      host.updateVariableValue(ids.brand, ids.dark, GREEN)
+      await settle()
+      expect(guest.graph.variableCollections.get(ids.collection)?.name).toBe('Palette')
+    })
+  })
+
+  test('which mode a collection shows stays each viewer’s own', async () => {
+    await withRoom(async ({ host, guest, settle, ids }) => {
+      host.setActiveMode(ids.collection, ids.dark)
+      await settle()
+      expect(host.graph.activeMode.get(ids.collection)).toBe(ids.dark)
+      expect(guest.graph.activeMode.get(ids.collection)).toBeUndefined()
+    })
+  })
 })

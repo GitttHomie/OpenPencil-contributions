@@ -32,6 +32,21 @@ export interface ComponentCatalog {
 }
 
 const catalogs = new WeakMap<object, ComponentCatalog>()
+const pageLoaders = new WeakMap<object, (pageId: string) => Promise<void>>()
+
+/** Host page loading keeps worker population and document replacement checks in one place. */
+export function registerComponentPageLoader(
+  owner: object,
+  load: (pageId: string) => Promise<void>
+): void {
+  pageLoaders.set(owner, load)
+}
+
+export function getComponentPageLoader(
+  owner: object
+): ((pageId: string) => Promise<void>) | undefined {
+  return pageLoaders.get(owner)
+}
 
 export function registerComponentCatalog(owner: object, catalog: ComponentCatalog): () => void {
   catalogs.set(owner, catalog)

@@ -25,5 +25,15 @@
   "newDesign": "Nowy projekt",
   "noMatchingFiles": "Brak plików pasujących do „{query}”.",
   "saveAsPrompt": "Zapisz jako:",
-  "browserFileAPINotSupported": "Twoja przeglądarka nie obsługuje interfejsu API plików lokalnych. Pliki będą pobierane zamiast zapisywane w bieżącym miejscu."
+  "browserFileAPINotSupported": "Twoja przeglądarka nie obsługuje interfejsu API plików lokalnych. Pliki będą pobierane zamiast zapisywane w bieżącym miejscu.",
+  "cleanupHeading": "Wyczyścić osadzone komponenty?",
+  "cleanupDescription": "Usuń {count} nieużywanych definicji z wewnętrznych stron. Zachowaj wszystkie instancje, potrzebne im definicje i komponenty na zwykłych stronach.",
+  "cleanupKeep": "Zachowaj wszystko",
+  "cleanupRemove": "Usuń nieużywane komponenty",
+  "cleanupIntro": "Wybierz sposób otwarcia „{name}”. Oryginalny plik nie zmieni się, dopóki go nie zapiszesz.",
+  "cleanupInternalHeading": "Usuń wewnętrzne strony i powiązane instancje",
+  "cleanupInternalDescription": "Usuń wewnętrzne strony: {canvases}, osadzone definicje: {components} i powiązane warstwy instancji: {instances} na zwykłych stronach: {pages}.",
+  "cleanupInternalWarning": "Ta opcja zmienia projekty, w tym ukrytą zawartość i instancje z zewnętrznych bibliotek. Usuwa zagnieżdżone powiązane warstwy bez usuwania otaczających przycisków lub ramek. Prawidłowe komponenty na zwykłych stronach pozostają.",
+  "cleanupHiddenInstances": "Ukryj {count} zagnieżdżonych zamienionych instancji, których zamienniki są usuwane, zachowując otaczające komponenty.",
+  "cleanupInternalRemove": "Usuń strony i powiązane instancje"
 }

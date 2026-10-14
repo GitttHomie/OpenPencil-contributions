@@ -8,14 +8,17 @@ import { mcpConnectionSettings } from '@/app/integrations/mcp'
 import { useMCPConnectionForm } from '@/app/integrations/mcp/settings/form'
 import { useMCPConnectionSettings } from '@/app/integrations/mcp/settings/use'
 import { useSettingsFormGuard } from '@/app/settings/navigation/use'
+import SettingsLink from '@/components/settings/layout/SettingsLink.vue'
 import SettingsPage from '@/components/settings/layout/SettingsPage.vue'
 import SettingsSection from '@/components/settings/layout/SettingsSection.vue'
 import AppButton from '@/components/ui/button/AppButton.vue'
 import { AppAlertDialogRoot, AppDialogFooter, AppDialogHeader } from '@/components/ui/dialog'
 import AppPlaceholder from '@/components/ui/feedback/AppPlaceholder.vue'
 import AppActionRow from '@/components/ui/list/AppActionRow.vue'
+import { MCP_CONNECTIONS_DOCS_URL } from '@/constants'
 
 import MCPConnectionEditor from './MCPConnectionEditor.vue'
+import MCPImport from './MCPImport.vue'
 
 const automation = useAutomationMessages()
 const common = useCommonMessages()
@@ -29,15 +32,20 @@ const form = useMCPConnectionForm(settings, automation)
 const { draft, errors: fieldErrors } = form
 const connection = useMCPConnectionSettings(draft, tokenDraft, automation)
 const { tokenStatus, error, saveResult, clearCredential } = connection
+const { environmentDraft, testedTools, testing, testConnection } = connection
 watch(
   () => Boolean(tokenDraft.value.trim() || tokenStatus.value === 'configured'),
   form.setCredentialReady,
   { immediate: true, flush: 'sync' }
 )
 const dirty = computed(
-  () => form.dirty.value || tokenDraft.value.length > 0 || connection.credentialCleared.value
+  () =>
+    form.dirty.value ||
+    tokenDraft.value.length > 0 ||
+    environmentDraft.value.length > 0 ||
+    connection.credentialCleared.value
 )
-const busy = computed(() => connection.busy.value || form.isSubmitting.value)
+const busy = computed(() => connection.busy.value || form.isSubmitting.value || testing.value)
 useSettingsFormGuard({ dirty, busy, cancel }, editing)
 function startAdd() {
   connection.startAdd()
@@ -70,6 +78,9 @@ async function remove() {
     ref="editorElement"
     v-model:draft="draft"
     v-model:token="tokenDraft"
+    v-model:environment="environmentDraft"
+    :tested-tools="testedTools"
+    :testing="testing"
     :token-status="tokenStatus"
     :error="error"
     :save-result="saveResult"
@@ -80,17 +91,23 @@ async function remove() {
     @blur-field="form.blur"
     @remove="deleteOpen = true"
     @clear="clearCredential"
+    @test="testConnection"
   />
   <SettingsPage v-else>
     <div class="flex flex-col gap-6">
       <slot />
       <SettingsSection :aria-busy="busy" data-mcp-connections>
         <template #title>{{ automation.connections }}</template>
-        <template #description>{{ automation.connectionsDescription }}</template>
-        <AppButton class="self-start" variant="outline" :loading="busy" @click="startAdd">
-          <template #leading><icon-lucide-plus class="size-3.5" /></template>
-          {{ automation.addConnection }}
-        </AppButton>
+        <template #description>
+          {{ automation.connectionsDescription }}
+          <SettingsLink :href="MCP_CONNECTIONS_DOCS_URL">{{ common.learnMore }}</SettingsLink>
+        </template>
+        <template #actions>
+          <AppButton variant="outline" :loading="busy" @click="startAdd">
+            <template #leading><icon-lucide-plus class="size-3.5" /></template>
+            {{ automation.addConnection }}
+          </AppButton>
+        </template>
         <div v-if="mcpConnectionSettings.connections.length" class="flex flex-col gap-1.5">
           <AppActionRow
             v-for="item in mcpConnectionSettings.connections"
@@ -100,14 +117,17 @@ async function remove() {
           >
             <template #leading><icon-lucide-plug class="size-3.5" /></template>
             {{ item.name }}
-            <template #description>{{ item.transport.url }}</template>
+            <template #description>{{
+              item.transport.type === 'stdio' ? item.transport.command : item.transport.url
+            }}</template>
             <template #trailing>
               <span class="text-xs">{{ item.enabled ? common.enabled : common.disabled }}</span>
               <icon-lucide-chevron-right class="size-3.5" />
             </template>
           </AppActionRow>
         </div>
-        <AppPlaceholder v-else :label="automation.noConnections" />
+        <AppPlaceholder v-else size="compact" :fill="false" :label="automation.noConnections" />
+        <MCPImport />
       </SettingsSection>
     </div>
   </SettingsPage>

@@ -27,8 +27,6 @@ test('font completion remeasures auto-sized labels and Hug parents without a his
     fontFamily: 'Inter',
     fontWeight: 500,
     textAutoResize: 'WIDTH_AND_HEIGHT',
-    layoutSizingHorizontal: 'HUG',
-    layoutSizingVertical: 'HUG',
     width: 87,
     height: 34
   })

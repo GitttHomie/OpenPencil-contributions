@@ -1,4 +1,9 @@
-import type { Color, SceneGraph, SceneNode } from '@open-pencil/scene-graph'
+import type {
+  Color,
+  ComponentPropertyDefinition,
+  SceneGraph,
+  SceneNode
+} from '@open-pencil/scene-graph'
 
 import type { TreeNode } from './tree'
 
@@ -28,6 +33,13 @@ export interface DesignJSXServices<Artwork> {
   svg(source: SVGSource, size: number): Artwork | null
   /** Vector nodes for the artwork, created under the placement's parent. */
   createArtwork(graph: SceneGraph, artwork: Artwork, placement: ArtworkPlacement): SceneNode
-  /** Lay out the graph once rendered nodes are in place. */
-  layout(graph: SceneGraph): void
+  /** Apply an instance property and invalidate engine-owned text and saved layout measurements. */
+  applyInstanceProperty?: (
+    graph: SceneGraph,
+    instanceId: string,
+    definition: ComponentPropertyDefinition,
+    value: string
+  ) => boolean
+  /** Size and lay out the rendered roots once they are in place. */
+  layout(graph: SceneGraph, rootIds: readonly string[]): void
 }

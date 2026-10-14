@@ -44,7 +44,7 @@ describe('assertAgentReady', () => {
     ).toBe('companion-outdated')
     expect(
       await problem('acp', installed({ '@open-pencil/mcp': '0.12.0' }, 'openpencil-mcp-http'))
-    ).toBe('mcp-outdated')
+    ).toBeNull()
   })
 
   test('only Pi needs the Harness companion', async () => {

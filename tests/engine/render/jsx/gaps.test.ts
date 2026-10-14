@@ -60,11 +60,12 @@ describe('jsx gaps', () => {
 
     const vector = [...g.nodes.values()].find((node) => node.type === 'VECTOR')
     expect(vector?.fills[0]?.color).toMatchObject({ r: 1, g: 0, b: 0 })
+    expect(vector).toMatchObject({ x: 32, y: 24, width: 8, height: 10 })
     expect(vector?.vectorNetwork?.vertices.map(({ x, y }) => ({ x, y }))).toEqual([
-      { x: 32, y: 24 },
-      { x: 40, y: 24 },
-      { x: 40, y: 34 },
-      { x: 32, y: 34 }
+      { x: 0, y: 0 },
+      { x: 8, y: 0 },
+      { x: 8, y: 10 },
+      { x: 0, y: 10 }
     ])
   })
 

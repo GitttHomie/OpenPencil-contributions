@@ -57,6 +57,7 @@ export const variablesMessageDefaults = {
   cssNameInvalid: 'Use letters, digits, hyphens and underscores, starting with a letter or digit.',
   useVariable: 'Use a variable',
   detachVariable: 'Detach variable',
+  removeReference: params('Remove {name}'),
   searchVariables: 'Search variables',
   noMatchingVariables: 'No variables of this type',
   hiddenFromPublishing: 'Hide from publishing',
@@ -102,7 +103,42 @@ export const variablesMessageDefaults = {
   scopeParagraphSpacing: 'Paragraph spacing',
   scopeParagraphIndent: 'Paragraph indent',
   scopeTextContent: 'Text content',
-  scopeFontFamily: 'Font family'
+  scopeFontFamily: 'Font family',
+  exportDesignTokens: 'Export as design tokens',
+  importDesignTokens: 'Import design tokens',
+  libraryCollection: 'Library',
+  libraryCollectionHint: 'Copied from a library. Edits are saved in this file and show in Figma.',
+  addedToLibraryCollection:
+    "Added here. Figma doesn't show variables added to a library's collection.",
+  importTokensDescription:
+    'Choose where each collection and mode goes. Variables with the same name are updated; nothing is deleted.',
+  importNewCollection: 'New collection',
+  importNewMode: 'New mode',
+  importSkipTarget: 'Don’t import',
+  importAddMissing: 'Add tokens that don’t exist yet',
+  importStyles: params('Make text and effect styles ({count})'),
+  importSummary: params('{added} to add · {updated} to update · {skipped} skipped'),
+  importSkippedTitle: 'Skipped',
+  importReasonUnsupportedType: 'its type has no variable or style',
+  importReasonInvalidValue: 'its value can’t be read',
+  importReasonTypeMismatch: 'a variable of another type has this name',
+  importReasonMissingAlias: 'it points at a token that isn’t there',
+  importReasonNotAdded: 'no variable has this name',
+  importReasonMixedTypes: 'its modes have different types',
+  importInvalidFile: params('{file} isn’t a design token file'),
+  importMissingFile: params('{file}, which {from} refers to, wasn’t picked'),
+  importNothing: 'These files hold no design tokens.',
+  importAction: 'Import',
+  formula: 'Formula',
+  addFormula: 'Add formula',
+  editFormula: 'Edit formula',
+  applyFormula: 'Apply formula',
+  insertReference: 'Insert variable',
+  formulaResult: 'Result',
+  numberFormulaHint:
+    'Use +, -, *, / and parentheses. References use {variable/name}. Numbers use stored units (px for lengths).',
+  booleanFormulaHint:
+    'Use AND, OR, NOT, XOR, NAND or NOR, parentheses, and true/false. References use {variable/name}.'
 } as const
 
 export const variablesMessages = i18n('variables', variablesMessageDefaults)

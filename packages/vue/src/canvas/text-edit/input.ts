@@ -16,7 +16,7 @@ type TextEditInputOptions = {
   hitTestInScope: HitTest
   hitTestSectionTitle: (cx: number, cy: number) => SceneNode | null
   hitTestComponentLabel: (cx: number, cy: number) => SceneNode | null
-  hitTestFrameTitle?: (cx: number, cy: number) => SceneNode | null
+  hitTestFrameTitle: (cx: number, cy: number) => SceneNode | null
   getClickCount: () => number
   wasSelectedBeforeClickSequence: (id: string) => boolean
   onEditCanvasLabel?: (kind: CanvasLabelKind, node: SceneNode) => void
@@ -61,7 +61,7 @@ export function createTextEditInput(options: TextEditInputOptions) {
       textEd.setCursorAt(localX, localY, shiftKey)
       setDrag({ type: 'text-select', startX: cx, startY: cy })
     }
-    editor.requestRender()
+    editor.textSelectionChanged()
     return true
   }
 
@@ -73,13 +73,14 @@ export function createTextEditInput(options: TextEditInputOptions) {
   ) {
     editor.select([hit.id])
     editor.startTextEditing(hit.id)
+    // Text the editor refuses, such as path text without its font, stays selected only.
     if (editor.state.editingTextId !== hit.id) return
     const textEd = editor.textEditor
     if (textEd) {
       const abs = editor.graph.getAbsolutePosition(hit.id)
       if (selection === 'word') textEd.selectWordAt(cx - abs.x, cy - abs.y)
       else textEd.setCursorAt(cx - abs.x, cy - abs.y)
-      editor.requestRender()
+      editor.textSelectionChanged()
     }
   }
 
@@ -92,22 +93,21 @@ export function createTextEditInput(options: TextEditInputOptions) {
     return selectionAtScope(editor.graph, hit, containerId)
   }
 
+  /**
+   * Double-clicking the name above a section, frame or component renames it in place and keeps
+   * it selected, as in Figma. A locked layer or a library's read-only component keeps its name.
+   */
   function startLabelRename(cx: number, cy: number): boolean {
     const labels: [CanvasLabelKind, SceneNode | null][] = [
       ['section-title', hitTestSectionTitle(cx, cy)],
       ['component-label', hitTestComponentLabel(cx, cy)],
-      ['frame-title', hitTestFrameTitle?.(cx, cy) ?? null]
+      ['frame-title', hitTestFrameTitle(cx, cy)]
     ]
     for (const [kind, node] of labels) {
       if (!node) continue
-      if (
-        !node.locked &&
-        getNodeEditCapability(editor.graph, node.id).editable &&
-        onEditCanvasLabel
-      ) {
-        editor.select([node.id])
-        onEditCanvasLabel(kind, node)
-      }
+      editor.select([node.id])
+      if (!node.locked && getNodeEditCapability(editor.graph, node.id).editable)
+        onEditCanvasLabel?.(kind, node)
       return true
     }
     return false
@@ -145,8 +145,7 @@ export function createTextEditInput(options: TextEditInputOptions) {
       editor.state.selectedIds.size === 1 ? [...editor.state.selectedIds][0] : undefined
     if (handleContainerDoubleClick(selectedId, cx, cy)) return
 
-    const hit =
-      hitTestSectionTitle(cx, cy) ?? hitTestComponentLabel(cx, cy) ?? hitTestInScope(cx, cy, true)
+    const hit = hitTestInScope(cx, cy, true)
     if (!hit) return
 
     if (hit.type === 'TEXT') {

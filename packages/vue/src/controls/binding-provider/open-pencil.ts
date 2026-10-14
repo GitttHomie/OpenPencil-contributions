@@ -17,6 +17,7 @@ import { resolveEffectiveBindingValue } from './resolution'
 
 export interface OpenPencilBindingProviderOptions<V> {
   type: VariableType
+  accepts?(editor: Editor, variable: Variable): boolean
   bindingTarget?(editor: Editor, target: BindingTarget): BindingTarget
   prepareTargets?(editor: Editor, targets: BindingTarget[]): void
   resolve(editor: Editor, variableId: string, target?: BindingTarget): V | undefined
@@ -34,15 +35,33 @@ export function createOpenPencilBindingProvider<V>(
   revision?: BindingProvider<V>['revision']
 ): BindingProvider<V> {
   const { contains } = useFilter({ sensitivity: 'base' })
-  const variables = () => editor.getVariablesByType(options.type)
-  const interactiveEdits: Array<() => void> = []
+  const variables = () =>
+    editor
+      .getVariablesByType(options.type)
+      .filter((variable) => options.accepts?.(editor, variable) ?? true)
+  const interactiveEdits: Array<{ end: () => void; stopSettling: () => void }> = []
+
+  /**
+   * A picker keeps one batch open while it is used. Undo and redo commit it first and reopen it,
+   * so they act on the picker's changes and later changes still form one step.
+   */
+  function beginBatch(label: string) {
+    editor.undo.beginBatch(label)
+    const stopSettling = editor.undo.onBeforeHistory(() => {
+      editor.undo.commitBatch()
+      editor.undo.beginBatch(label)
+    })
+    interactiveEdits.push({ end: editor.beginInteractiveEdit(), stopSettling })
+  }
 
   function finishBatch(commit: boolean) {
+    const edit = interactiveEdits.pop()
+    edit?.stopSettling()
     try {
       if (commit) editor.undo.commitBatch()
       else editor.undo.rollbackBatch()
     } finally {
-      interactiveEdits.pop()?.()
+      edit?.end()
     }
   }
 
@@ -90,6 +109,7 @@ export function createOpenPencilBindingProvider<V>(
   return {
     revision,
     listVariables: variables,
+    collectionName: (variable) => editor.getCollection(variable.collectionId)?.name,
     filterVariables,
     getBindingId: (target) => {
       target = options.bindingTarget?.(editor, target) ?? target
@@ -115,10 +135,7 @@ export function createOpenPencilBindingProvider<V>(
       ? (variableId, target) => options.prepareEdit?.(editor, variableId, target)
       : undefined,
     runBatch: (label, action) => editor.undo.runBatch(label, action),
-    beginBatch: (label) => {
-      editor.undo.beginBatch(label)
-      interactiveEdits.push(editor.beginInteractiveEdit())
-    },
+    beginBatch,
     commitBatch: () => finishBatch(true),
     rollbackBatch: () => finishBatch(false)
   }

@@ -2,6 +2,7 @@ import * as v from 'valibot'
 
 import { defineTool } from '#core/tools/schema'
 
+import composition from './composition.md?raw'
 import creation from './creation.md?raw'
 import designSystem from './design-system.md?raw'
 import review from './review.md?raw'
@@ -9,7 +10,9 @@ import ux from './ux.md?raw'
 import visual from './visual.md?raw'
 import workflow from './workflow.md?raw'
 
-export const DESIGN_WORKFLOW = workflow.trim()
+/** Compact composition reminder, also delivered on subsequent CLI turns. */
+export const DESIGN_COMPOSITION_GUIDANCE = composition.trim()
+export const DESIGN_WORKFLOW = [workflow.trim(), DESIGN_COMPOSITION_GUIDANCE].join('\n\n')
 
 const topics = {
   ux: { description: 'User tasks, flows, states, content, and accessibility intent.', content: ux },
@@ -18,7 +21,8 @@ const topics = {
     content: visual
   },
   'design-system': {
-    description: 'Real variable bindings, reusable components, instances, and layout.',
+    description:
+      'Atomic composition: bound tokens, nested components, instance overrides, and layout.',
     content: designSystem
   },
   review: {
@@ -38,7 +42,7 @@ export const getDesignGuidance = defineTool({
     'Read bundled OpenPencil design skills. Choose relevant topics for substantial design or review work; omit topics for the workflow and topic catalog. Briefs and PRDs are optional. Does not modify the document.',
   execution: { kind: 'sync', mutation: 'none' },
   capabilities: [],
-  input: v.object({
+  input: v.strictObject({
     topics: v.optional(
       v.pipe(
         v.array(v.picklist(['ux', 'visual', 'design-system', 'review', 'creation'])),
@@ -49,7 +53,7 @@ export const getDesignGuidance = defineTool({
     )
   }),
   execute: (_figma, args) => ({
-    version: '1.1.0',
+    version: '1.2.0',
     workflow: DESIGN_WORKFLOW,
     available: Object.entries(topics).map(([topic, { description }]) => ({ topic, description })),
     guidance: [...new Set(args.topics)].map((topic) => ({

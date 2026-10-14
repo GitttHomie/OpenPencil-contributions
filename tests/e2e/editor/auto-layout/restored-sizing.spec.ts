@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 
-import { createRestoredLayoutScene } from '#tests/helpers/layout-sizing'
+import { addIndependentSizingLayer, createRestoredLayoutScene } from '#tests/helpers/layout-sizing'
 import { propertySection } from '#tests/helpers/properties'
 
 for (const direction of ['Horizontal', 'Vertical']) {
@@ -27,6 +27,9 @@ for (const direction of ['Horizontal', 'Vertical']) {
       await page.getByRole('combobox', { name: axis, exact: true }).click()
       await page.getByRole('option', { name: 'Fill', exact: true }).click()
       await expect(page.getByRole('combobox', { name: axis, exact: true })).toContainText('Fill')
+      await expect(page.locator('[data-slot="toast"][data-tone="default"]').last()).toContainText(
+        'Restored parent'
+      )
     }
     const fill = await scene.read()
     expect(fill[0]).toMatchObject({
@@ -37,6 +40,7 @@ for (const direction of ['Horizontal', 'Vertical']) {
     })
     expect(fill[1]).toMatchObject({ x: 0, y: 0, width: 140, height: 90 })
     await page.mouse.move(10, 10)
+    await expect(page.locator('[data-slot="toast"]')).toHaveCount(0)
     await scene.canvas.waitForRender()
     expect(await scene.canvas.screenshotCanvasRegion(650, 500)).toMatchSnapshot(
       `restored-${direction.toLowerCase()}-fill.png`
@@ -50,3 +54,30 @@ for (const direction of ['Horizontal', 'Vertical']) {
     await expect(propertySection(page, 'Constraints')).toBeVisible()
   })
 }
+
+test('Fill follows an independent layer inside a Hug frame without conversion notices', async ({
+  page
+}) => {
+  const scene = await createRestoredLayoutScene(page)
+  await addIndependentSizingLayer(page, scene.ids)
+  const before = await scene.read()
+  await page.getByRole('combobox', { name: 'Width', exact: true }).click()
+  await page.getByRole('option', { name: 'Fill', exact: true }).click()
+  await expect.poll(async () => (await scene.read()).map(({ width }) => width)).toEqual([232, 200])
+  expect((await scene.read())[0].counterAxisSizing).toBe('HUG')
+  await expect(page.locator('[data-slot="toast"]')).toHaveCount(0)
+  const filled = await scene.read()
+  await page.getByTestId('canvas-element').focus()
+  await page.keyboard.press('Meta+z')
+  await expect.poll(scene.read).toEqual(before)
+  await page.keyboard.press('Meta+Shift+z')
+  await expect.poll(scene.read).toEqual(filled)
+  await scene.select(scene.ids.parent)
+  await page.keyboard.press('Escape')
+  await page.mouse.move(10, 10)
+  await scene.canvas.waitForRender()
+  expect(await scene.canvas.screenshotCanvasRegion(650, 500)).toMatchSnapshot(
+    'independent-hug-fill.png'
+  )
+  scene.canvas.assertNoErrors()
+})

@@ -58,7 +58,7 @@ test('MCP connections keep bearer tokens out of ordinary settings', async ({ pag
   await expect(section.getByLabel('MCP server URL')).toHaveAttribute('aria-invalid', 'true')
 
   await section.getByLabel('MCP server URL').fill('https://example.com/mcp')
-  await section.getByRole('switch', { name: 'Enable for ACP agents' }).click()
+  await section.getByRole('switch', { name: 'Available in chats' }).click()
   await section.getByRole('switch', { name: 'Use bearer authentication' }).click()
   await section.getByLabel('Bearer token').fill('secret-mcp-token')
   await section.getByRole('button', { name: 'Save' }).click()
@@ -134,7 +134,7 @@ test('MCP automation settings filter and persist tool availability', async ({ pa
   await expect(authentication).toHaveAttribute('data-state', 'unchecked')
   await authentication.click()
 
-  await page.getByRole('button', { name: 'Tool access', exact: true }).click()
+  await page.getByTestId('settings-mcp-tool-access').click()
   const search = page.getByRole('searchbox', { name: 'Search tools' })
   await search.fill('create_shape')
   await expect(search).toHaveValue('create_shape')
@@ -147,7 +147,7 @@ test('MCP automation settings filter and persist tool availability', async ({ pa
   await canvas.waitForInit()
   await page.getByTestId('app-settings-trigger').click()
   await page.getByTestId('settings-section-mcp').click()
-  await page.getByRole('button', { name: 'Tool access', exact: true }).click()
+  await page.getByTestId('settings-mcp-tool-access').click()
   await expect(createShape).toHaveAttribute('data-state', 'unchecked')
 
   await page.getByRole('button', { name: 'Restore defaults' }).click()

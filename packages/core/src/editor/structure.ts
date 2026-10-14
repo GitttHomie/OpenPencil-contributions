@@ -1,4 +1,6 @@
-import type { SceneNode } from '@open-pencil/scene-graph'
+import { pick } from 'es-toolkit'
+
+import { createsComponentCycle, TRANSFORM_FIELDS, type SceneNode } from '@open-pencil/scene-graph'
 
 import {
   acceptingParent,
@@ -19,6 +21,7 @@ import {
   outlineStrokeSelected as outlineStrokeSelectedImpl
 } from './structure/flatten'
 import { ungroupSelected as ungroupImpl } from './structure/group'
+import { createLayerTypeActions } from './structure/layer-type'
 import {
   defaultNodeName,
   previewRenamedNodes,
@@ -34,21 +37,26 @@ export function createStructureActions(
 ) {
   const reorderActions = createStructureReorderActions(ctx)
   const stateActions = createStructureStateActions(ctx)
+  const layerTypeActions = createLayerTypeActions(ctx)
 
   function isTopLevel(parentId: string | null): boolean {
     return !parentId || parentId === ctx.graph.rootId || parentId === ctx.state.currentPageId
   }
 
-  /** Moves layers under a new parent; refuses the locked part of an instance. */
+  /**
+   * Moves layers under a new parent; refuses the locked part of an instance, and a layer that
+   * would make a component contain itself, as Figma does.
+   */
   function reparentNodes(nodeIds: string[], newParentId: string): boolean {
     const parent = ctx.graph.getNode(newParentId)
     // Sections only go into pages and other sections.
     const movable = nodeIds.filter(
       (id) =>
-        ctx.graph.getNode(id)?.type !== 'SECTION' ||
-        !parent ||
-        parent.type === 'CANVAS' ||
-        parent.type === 'SECTION'
+        (ctx.graph.getNode(id)?.type !== 'SECTION' ||
+          !parent ||
+          parent.type === 'CANVAS' ||
+          parent.type === 'SECTION') &&
+        !createsComponentCycle(ctx.graph, id, newParentId)
     )
     if (movable.length === 0) return true
     const parents = new Set([newParentId])
@@ -107,11 +115,36 @@ export function createStructureActions(
   function moveToPage(pageId: string) {
     const targetPage = ctx.graph.getNode(pageId)
     if (targetPage?.type !== 'CANVAS') return
-    const ids = [...ctx.state.selectedIds]
-    for (const id of ids) {
-      ctx.graph.reparentNode(id, pageId)
+    // Where each layer was, read before any of them moves: put back in this order, each lands at
+    // its own index again.
+    const origins = [...ctx.state.selectedIds]
+      .flatMap((id) => {
+        const node = ctx.graph.getNode(id)
+        const parent = node?.parentId ? ctx.graph.getNode(node.parentId) : undefined
+        if (!node || !parent || parent.id === pageId) return []
+        const index = parent.childIds.indexOf(id)
+        return [{ id, parentId: parent.id, index, place: pick(node, TRANSFORM_FIELDS) }]
+      })
+      .sort((a, b) => a.index - b.index)
+    if (origins.length === 0) return
+    const parentIds = new Set(origins.map((origin) => origin.parentId))
+    const move = () => {
+      for (const { id } of origins) ctx.graph.reparentNode(id, pageId)
+      for (const parentId of parentIds) ctx.runLayoutForNode(parentId)
     }
+    move()
     ctx.setSelectedIds(new Set())
+    ctx.undo.push({
+      label: 'Move to page',
+      forward: move,
+      inverse: () => {
+        for (const { id, parentId, index, place } of origins) {
+          ctx.graph.reorderChild(id, parentId, index)
+          ctx.graph.updateNode(id, place)
+        }
+        for (const parentId of parentIds) ctx.runLayoutForNode(parentId)
+      }
+    })
   }
 
   function selectedNodes(): SceneNode[] {
@@ -145,8 +178,15 @@ export function createStructureActions(
   function renameNode(id: string, name: string) {
     const node = ctx.graph.getNode(id)
     if (!node) return
-    const trimmedName = name.trim()
-    ctx.graph.updateNode(id, { name: trimmedName || defaultNodeName(node.type) })
+    const previous = node.name
+    const next = name.trim() || defaultNodeName(node.type)
+    if (next === previous) return
+    ctx.graph.updateNode(id, { name: next })
+    ctx.undo.push({
+      label: 'Rename',
+      forward: () => ctx.graph.updateNode(id, { name: next }),
+      inverse: () => ctx.graph.updateNode(id, { name: previous })
+    })
   }
 
   return {
@@ -161,6 +201,7 @@ export function createStructureActions(
     wrapInAutoLayout,
     groupSelected,
     frameSelection,
+    ...layerTypeActions,
     booleanOperationSelected,
     ungroupSelected,
     flattenSelected,

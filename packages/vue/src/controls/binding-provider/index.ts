@@ -15,6 +15,7 @@ export {
   createAndBindNumberVariable,
   useNumberBindingProvider
 } from '#vue/controls/binding-provider/number'
+export { useFontBindingProvider } from '#vue/controls/binding-provider/font'
 export type {
   BindingMutationSource,
   BindingProvider,

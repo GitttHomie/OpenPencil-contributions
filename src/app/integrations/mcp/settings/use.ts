@@ -12,8 +12,10 @@ import {
 } from '@/app/integrations/mcp'
 import type { CredentialStatus } from '@/app/settings/credentials/types'
 
+import { saveMCPEnvironment } from '../environment'
 import { enqueueMCPConnectionMutation } from '../mutations'
 import type { MCPConnectionID } from '../types'
+import { useMCPConnectionTest } from './test'
 
 const connectionServices = {
   status: mcpConnectionCredentialStatus,
@@ -31,8 +33,15 @@ export function useMCPConnectionSettings(
   services = connectionServices
 ) {
   const tokenStatus = ref<CredentialStatus>('missing')
+  const environmentDraft = ref('')
   const credentialCleared = ref(false)
   const error = ref('')
+  const { testedTools, testing, testConnection } = useMCPConnectionTest(
+    draft,
+    tokenDraft,
+    environmentDraft,
+    error
+  )
   const saveResult = ref<SettingsSaveResult | null>(null)
   const pending = ref(0)
   const busy = computed(() => pending.value > 0)
@@ -44,6 +53,7 @@ export function useMCPConnectionSettings(
     disposed = true
     version++
     tokenDraft.value = ''
+    environmentDraft.value = ''
   })
 
   const savedConnection = computed(() =>
@@ -62,6 +72,8 @@ export function useMCPConnectionSettings(
     tokenDraft.value = ''
     tokenStatus.value = 'missing'
     error.value = ''
+    environmentDraft.value = ''
+    testedTools.value = null
   }
 
   async function startEdit(id: string): Promise<boolean> {
@@ -76,6 +88,8 @@ export function useMCPConnectionSettings(
     tokenDraft.value = ''
     tokenStatus.value = 'missing'
     error.value = ''
+    environmentDraft.value = ''
+    testedTools.value = null
 
     try {
       const status = await services.status(connection.id)
@@ -100,7 +114,14 @@ export function useMCPConnectionSettings(
     pending.value++
     const id: MCPConnectionID = draft.value.id ?? `mcp-${crypto.randomUUID()}`
     draft.value.id = id
-    const target = { ...draft.value, id }
+    const target = structuredClone({
+      ...draft.value,
+      args: [...(draft.value.args ?? [])],
+      autoApprove: [...(draft.value.autoApprove ?? [])],
+      id
+    })
+    const environment = environmentDraft.value
+    if (environment.trim()) target.hasEnvironment = true
     const token = tokenDraft.value
     const clearToken = credentialCleared.value
     error.value = ''
@@ -118,6 +139,9 @@ export function useMCPConnectionSettings(
       await enqueueMCPConnectionMutation(id, async () => {
         const connection = services.save({ ...target, enabled: false })
         progress.persisted = true
+        if (target.transportType === 'stdio' && environment.trim()) {
+          await saveMCPEnvironment(id, environment)
+        }
         if (target.authenticationType === 'none' || (clearToken && !token.trim())) {
           await services.setCredential(connection.id, '')
         } else if (token.trim()) await services.setCredential(connection.id, token)
@@ -130,6 +154,7 @@ export function useMCPConnectionSettings(
       if (!current(request)) return 'partial'
 
       if (tokenDraft.value === token) tokenDraft.value = ''
+      if (environmentDraft.value === environment) environmentDraft.value = ''
       saveResult.value = 'saved'
       return 'saved'
     } catch (cause) {
@@ -185,6 +210,10 @@ export function useMCPConnectionSettings(
     busy,
     cancel: startAdd,
     tokenStatus,
+    environmentDraft,
+    testedTools,
+    testing,
+    testConnection,
     credentialCleared,
     error,
     saveResult,

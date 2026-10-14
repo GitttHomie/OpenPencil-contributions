@@ -28,6 +28,7 @@ import { inputValue } from '#vue/shared/dom-events'
 
 const {
   modelValue,
+  formatValue = (value: number) => String(normalizeNumberValue(value)),
   min = -Infinity,
   max = Infinity,
   step = 1,
@@ -62,7 +63,7 @@ const numericValue = computed(() => {
 })
 const displayValue = computed(() => {
   if (binding?.state.value === 'unresolved') return '—'
-  return isMixed.value ? '' : String(normalizeNumberValue(numericValue.value))
+  return isMixed.value ? '' : formatValue(numericValue.value)
 })
 const disabled = computed(() => disabledProp)
 const bound = computed(() =>
@@ -82,6 +83,8 @@ const ariaLabelValue = computed(() => ariaLabel)
 let interactionStartValue = 0
 let interactionStartedMixed = false
 let mutationRequested = false
+// Initial values and keyboard steps are numbers, not user-authored relative expressions.
+let draftIsExpression = false
 let stopMove: (() => void) | undefined
 let stopUp: (() => void) | undefined
 let stopCancel: (() => void) | undefined
@@ -110,6 +113,7 @@ function beginInteraction() {
   interactionStartedMixed = isMixed.value
   workingValue.value = numericValue.value
   mutationRequested = false
+  draftIsExpression = false
   invalidReason.value = null
 }
 
@@ -153,7 +157,7 @@ function finishCommit(value: number) {
 function startEdit() {
   if (editing.value || !canMutate()) return
   beginInteraction()
-  draftValue.value = interactionStartedMixed ? '' : String(interactionStartValue)
+  draftValue.value = interactionStartedMixed ? '' : formatValue(interactionStartValue)
   editing.value = true
   void nextTick(() => {
     inputRef.value?.focus()
@@ -162,7 +166,9 @@ function startEdit() {
 }
 
 function setDraft(value: string) {
-  if (value !== draftValue.value && !requestMutation('edit')) return
+  if (value === draftValue.value) return
+  if (!requestMutation('edit')) return
+  draftIsExpression = true
   draftValue.value = value
   const absoluteNumber = /^\s*(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?\s*$/i.test(value)
   if (absoluteNumber) updateValue(Number(value))
@@ -174,6 +180,10 @@ function onInput(event: Event) {
 
 function commitEdit() {
   if (!editing.value) return
+  if (!draftIsExpression) {
+    finishCommit(workingValue.value)
+    return
+  }
   const expression = draftValue.value
   const result = evaluateNumberExpression(expression, {
     current: interactionStartValue,
@@ -223,7 +233,8 @@ function startScrub(event: PointerEvent) {
 
   const startX = event.clientX
   let lastX = startX
-  let accumulated = numericValue.value
+  const startValue = numericValue.value
+  let accumulated = startValue
   let hasMoved = false
   const target = event.currentTarget instanceof Element ? event.currentTarget : undefined
   scrubTarget = target
@@ -277,13 +288,14 @@ function stepValueFromKeyboard(event: KeyboardEvent) {
   if (!requestMutation('step')) return true
   event.preventDefault()
 
-  const draftResult = editing.value
-    ? evaluateNumberExpression(draftValue.value, {
-        current: interactionStartValue,
-        max,
-        mixed: interactionStartedMixed
-      })
-    : undefined
+  const draftResult =
+    editing.value && draftIsExpression
+      ? evaluateNumberExpression(draftValue.value, {
+          current: interactionStartValue,
+          max,
+          mixed: interactionStartedMixed
+        })
+      : undefined
   const base = draftResult?.ok ? draftResult.value : workingValue.value
   const next = stepNumberValue(
     base,
@@ -294,7 +306,8 @@ function stepValueFromKeyboard(event: KeyboardEvent) {
     max
   )
   updateValue(next)
-  draftValue.value = String(next)
+  draftValue.value = formatValue(next)
+  draftIsExpression = false
 
   if (!editing.value) {
     emit('commit', next, interactionStartValue)
@@ -397,7 +410,8 @@ provideNumberField({
   invalidReason
 })
 
-watch(editing, (value) => emit('editing-change', value))
+// Notify before unmount stops this scope; otherwise consumers can remain in editing mode.
+watch(editing, (value) => emit('editing-change', value), { flush: 'sync' })
 watch(
   () => modelValue,
   (value) => {

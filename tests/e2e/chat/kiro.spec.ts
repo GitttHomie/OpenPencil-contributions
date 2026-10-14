@@ -1,3 +1,4 @@
+import { CanvasHelper } from '#tests/helpers/canvas'
 import { test, expect } from '#tests/helpers/chat/fixture'
 import {
   installKiroPermissionTransport,
@@ -68,4 +69,47 @@ test('Kiro streams grouped reasoning and offers scoped canvas approval', async (
   await expect(permission).toBeHidden()
   await expect(page.getByTestId('chat-run-status')).toHaveText('Run finished')
   await page.screenshot({ path: testInfo.outputPath('kiro-chat.png') })
+})
+
+test('Kiro remembers individual approvals after reload and Settings can reset them', async ({
+  configuredChat: chat,
+  page
+}, testInfo) => {
+  const permission = page.getByTestId('acp-permission-dialog')
+  const canvas = new CanvasHelper(page)
+  async function finishRun() {
+    await expect(permission).toContainText('@open-pencil/update_node')
+    await permission.getByRole('button', { name: 'Allow', exact: true }).click()
+    await expect(permission).toContainText('Run shell command')
+    await permission.getByRole('button', { name: 'Deny', exact: true }).click()
+    await expect(page.getByTestId('chat-run-status')).toHaveText('Run finished')
+  }
+  await installKiroPermissionTransport(page)
+  await chat.submit('Inspect the canvas')
+  await expect(permission).toContainText('@open-pencil/get_selection')
+  await permission.getByRole('button', { name: 'Always allow', exact: true }).click()
+  await finishRun()
+
+  await page.reload()
+  await canvas.waitForInit()
+  await chat.chatTab.click()
+  await installKiroPermissionTransport(page)
+  await chat.submit('Inspect again after restart')
+  // The remembered read is accepted, but the previous one-time edit and shell request still ask.
+  await finishRun()
+
+  await page.keyboard.press(process.platform === 'darwin' ? 'Meta+,' : 'Control+,')
+  await page.getByRole('tab', { name: 'Tool access', exact: true }).click()
+  await page.screenshot({ path: testInfo.outputPath('remembered-approvals-settings.png') })
+  await page.getByRole('button', { name: 'Reset approvals', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Reset approvals', exact: true })).toBeDisabled()
+  await page.getByTestId('app-settings-done').click()
+  await page.reload()
+  await canvas.waitForInit()
+  await chat.chatTab.click()
+  await installKiroPermissionTransport(page)
+  await chat.submit('Inspect after resetting permissions')
+  await expect(permission).toContainText('@open-pencil/get_selection')
+  await permission.getByRole('button', { name: 'Allow', exact: true }).click()
+  await finishRun()
 })

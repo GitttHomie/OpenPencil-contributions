@@ -20,6 +20,10 @@ export function createConversationHistory<TChat extends HistoryChat>(
   store: ConversationStore = createConversationStore()
 ) {
   const current = shallowRef<Conversation | null>(null)
+  const chat = shallowRef<TChat | null>(null)
+  const connectionIds = ref<string[]>([])
+  let disposed = false
+  const isDisposed = () => disposed
   const messages = shallowRef<UIMessage[]>([])
   const conversations = ref<ConversationMeta[]>([])
   const readOnly = ref(false)
@@ -57,8 +61,9 @@ export function createConversationHistory<TChat extends HistoryChat>(
   async function refresh() {
     conversations.value = await store.list()
   }
-  function detach() {
-    return session.detach(flush)
+  async function detach() {
+    await session.detach(flush)
+    chat.value = null
   }
 
   async function activate(conversation: Conversation) {
@@ -68,6 +73,7 @@ export function createConversationHistory<TChat extends HistoryChat>(
     session.restoreInterrupted(conversation.interrupted)
     readOnly.value = conversation.documentId !== chatDocumentId(editor)
     current.value = conversation
+    connectionIds.value = [...(conversation.mcpConnectionIds ?? [])]
     messages.value = restoreMessages(conversation.messages)
     if (conversation.messages.length || conversation.titleSource !== 'fallback') {
       await store.select(conversation.documentId, conversation.id)
@@ -131,6 +137,7 @@ export function createConversationHistory<TChat extends HistoryChat>(
 
   function ensureChat() {
     return serialize(async () => {
+      if (isDisposed()) return null
       if (readOnly.value && owner?.deref() === runtime.getEditor()) return null
       await loadDocument()
       // A restored transcript does not restore an external agent session.
@@ -141,19 +148,27 @@ export function createConversationHistory<TChat extends HistoryChat>(
       )
         return null
       const editor = runtime.getEditor()
-      const next = await runtime.ensureChat(messages.value, current.value?.id)
-      if (runtime.getEditor() !== editor) {
+      const next = await runtime.ensureChat(
+        session.chat?.messages ?? messages.value,
+        current.value?.id
+      )
+      if (isDisposed() || runtime.getEditor() !== editor) {
         await next?.stop()
         await runtime.resetChat()
         return null
       }
-      if (next) session.attach(next, flush)
+      if (next) {
+        session.attach(next, flush)
+        chat.value = next
+      }
       return next
     })
   }
 
   function initialize() {
-    return serialize(loadDocument)
+    return serialize(async () => {
+      if (!disposed) await loadDocument()
+    })
   }
   function newChat() {
     return serialize(async () => {
@@ -194,7 +209,16 @@ export function createConversationHistory<TChat extends HistoryChat>(
     })
   }
 
+  function setMCPConnections(ids: string[]) {
+    if (!current.value || readOnly.value || busy.value) return
+    connectionIds.value = [...ids]
+    current.value = { ...current.value, mcpConnectionIds: [...ids] }
+    void flush().catch(() => undefined) // Persistence retains the visible, retryable error.
+  }
+
   return {
+    chat,
+    connectionIds,
     current,
     messages,
     conversations,
@@ -207,6 +231,17 @@ export function createConversationHistory<TChat extends HistoryChat>(
     newChat,
     open,
     rename,
-    remove
+    remove,
+    setMCPConnections,
+    dispose() {
+      disposed = true
+      return serialize(async () => {
+        try {
+          await session.dispose(flush)
+        } finally {
+          chat.value = null
+        }
+      })
+    }
   }
 }

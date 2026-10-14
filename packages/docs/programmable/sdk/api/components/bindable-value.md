@@ -35,6 +35,10 @@ an unchanged field creates no undo entry. Cancellation rolls back an open provid
 Providers without undo support still receive binding changes, with binding snapshots restored
 where possible.
 
+`useNumberBindingProvider(100)` adapts scene fractions to percentage fields: resolution and editing
+use percentages while variable creation and value edits convert back to scene units. The default
+scale is 1 for ordinary numeric fields.
+
 ## Provider example
 
 ```ts twoslash

@@ -1,6 +1,7 @@
 import { computed, shallowRef } from 'vue'
 
 import { canMakeBooleanSourceNode, hasVisibleStrokeSourceNode } from '@open-pencil/core/canvas'
+import { slotScope } from '@open-pencil/scene-graph'
 
 import { useEditorEvent } from '#vue/editor/events/use'
 import { useSelectionState } from '#vue/editor/selection-state/use'
@@ -39,10 +40,21 @@ export function useSelectionCapabilities() {
     canExportSelection: computed(() => hasSelection.value),
     canGroup: computed(() => selectedCount.value >= 2),
     canFrameSelection: computed(() => hasSelection.value),
-    canUngroup: computed(() => selection.isGroup.value),
+    canUngroup: useSceneComputed(() => {
+      const node = selectedNode.value
+      return (
+        !!node &&
+        !node.locked &&
+        ['GROUP', 'FRAME'].includes(node.type) &&
+        slotScope(editor.graph, node.id).kind !== 'locked' &&
+        !!node.parentId &&
+        slotScope(editor.graph, node.parentId).kind !== 'locked'
+      )
+    }),
     canCreateComponent: computed(() => hasSelection.value),
     canCreateComponentSet: selection.canCreateComponentSet,
     canDetachInstance: computed(() => selection.isInstance.value),
+    canDetachIcon: computed(() => selection.isIcon.value),
     canWrapInAutoLayout: computed(() => hasSelection.value),
     canToggleMask: computed(() => hasSelection.value),
     canBringToFront: computed(() => hasSelection.value),

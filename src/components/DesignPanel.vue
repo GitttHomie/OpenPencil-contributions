@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 
-import { isInComponent } from '@open-pencil/scene-graph'
+import { getNodeEditCapability } from '@open-pencil/core/editor'
+import { isInComponent, readIcon } from '@open-pencil/scene-graph'
 import {
   useI18n,
   useSelectionState,
@@ -11,7 +12,7 @@ import {
 } from '@open-pencil/vue'
 
 import { useEditorStore } from '@/app/editor/active-store'
-import { nodeIcon } from '@/app/editor/icons'
+import { sceneNodeIcon } from '@/app/editor/icons'
 import { openVariablesDialog } from '@/app/editor/tokens/dialog'
 import { openLibraryReview, useLibraryService } from '@/app/libraries'
 import IconButton from '@/components/ui/button/IconButton.vue'
@@ -33,13 +34,15 @@ import ExportSection from './properties/ExportSection.vue'
 import FillSection from './properties/FillSection.vue'
 import FramePresetSelect from './properties/frame-presets/FramePresetSelect.vue'
 import FramePresetsSection from './properties/frame-presets/FramePresetsSection.vue'
+import IconSection from './properties/IconSection.vue'
+import LayerTypeMenu from './properties/LayerTypeMenu.vue'
 import LayoutGridSection from './properties/layout/guides/LayoutGridSection.vue'
 import LayoutSection from './properties/layout/LayoutSection.vue'
 import MaskSection from './properties/MaskSection.vue'
 import PageSection from './properties/PageSection.vue'
 import RetainedPanel from './properties/panel/RetainedPanel.vue'
 import PositionSection from './properties/PositionSection.vue'
-import SelectionTypographySection from './properties/selection/SelectionTypographySection.vue'
+import SelectionColorsSection from './properties/selection/SelectionColorsSection.vue'
 import StrokeSection from './properties/stroke/StrokeSection.vue'
 import TypographySection from './properties/TypographySection.vue'
 import VariablesSection from './properties/VariablesSection.vue'
@@ -57,12 +60,20 @@ const libraryService = useLibraryService()
 const activeTool = computed(() => store.state.activeTool)
 const { selectedNode: node, selectedCount: multiCount } = useSelectionState()
 const { getCommand } = useEditorCommands()
+const createComponent = getCommand('selection.createComponent')
 const goToMainComponent = getCommand('selection.goToMainComponent')
 const detachInstance = getCommand('selection.detachInstance')
 const isComponentType = useSceneComputed(() =>
   node.value ? isInComponent(store.graph, node.value.id) : false
 )
-const selectedIcon = computed(() => (node.value ? nodeIcon(node.value) : undefined))
+const selectedIcon = computed(() => (node.value ? sceneNodeIcon(node.value) : undefined))
+const allText = useSceneComputed(() => {
+  const nodes = store.getSelectedNodes()
+  return nodes.length > 0 && nodes.every((node) => node.type === 'TEXT')
+})
+const canAddVariant = computed(
+  () => !!node.value && getNodeEditCapability(store.graph, node.value.id).editable
+)
 function openSelectedInstanceReview() {
   const instance = node.value
   if (instance?.type !== 'INSTANCE' || !instance.componentId) return
@@ -76,9 +87,11 @@ function openSelectedInstanceReview() {
     initialInstanceId: instance.id
   })
 }
-const supportsLayoutGuides = computed(() => {
-  const type = node.value?.type
-  return type === 'FRAME' || type === 'COMPONENT' || type === 'COMPONENT_SET' || type === 'INSTANCE'
+const LAYOUT_GUIDE_TYPES = new Set(['FRAME', 'COMPONENT', 'COMPONENT_SET', 'INSTANCE'])
+// Figma offers layout guides while every selected layer is a frame.
+const supportsLayoutGuides = useSceneComputed(() => {
+  const nodes = store.getSelectedNodes()
+  return nodes.length > 0 && nodes.every((selected) => LAYOUT_GUIDE_TYPES.has(selected.type))
 })
 const { panels } = useI18n()
 </script>
@@ -103,7 +116,7 @@ const { panels } = useI18n()
         <icon-lucide-layers-3 class="size-3.5" aria-hidden="true" />
       </template>
       <span role="heading" aria-level="2">
-        {{ panels.layersCount({ count: String(multiCount) }) }}
+        {{ panels.selectedCount({ count: String(multiCount) }) }}
       </span>
       <template #actions>
         <BooleanOperationsControl />
@@ -113,11 +126,13 @@ const { panels } = useI18n()
     <PositionSection :show-size="false" />
     <ConstraintsSection />
     <LayoutSection />
-    <SelectionTypographySection />
     <AppearanceSection />
+    <TypographySection v-if="allText" />
     <FillSection />
     <StrokeSection />
     <EffectsSection />
+    <SelectionColorsSection />
+    <LayoutGridSection v-if="supportsLayoutGuides" />
     <ExportSection />
   </div>
 
@@ -130,14 +145,38 @@ const { panels } = useI18n()
     >
       <PanelHeader :component="isComponentType">
         <template #icon>
-          <Tip :label="node.type">
+          <LayerTypeMenu
+            v-if="node.type === 'FRAME' || node.type === 'GROUP' || node.type === 'SECTION'"
+            :node="node"
+            :icon="selectedIcon"
+          />
+          <Tip v-else :label="node.type">
             <span role="img" :aria-label="node.type" class="contents">
               <component :is="selectedIcon" class="size-3.5" />
             </span>
           </Tip>
         </template>
-        <span role="heading" aria-level="2">{{ node.name }}</span>
+        <span role="heading" aria-level="2" class="min-w-0">
+          {{ node.name }}
+        </span>
         <template #actions>
+          <IconButton
+            v-if="node.type === 'COMPONENT' || node.type === 'COMPONENT_SET'"
+            :label="panels.addVariant"
+            data-test-id="add-variant"
+            :disabled="!canAddVariant"
+            @click="store.addVariant(node.id)"
+          >
+            <icon-lucide-diamond-plus class="size-3.5" />
+          </IconButton>
+          <IconButton
+            v-if="node.type === 'FRAME'"
+            :label="createComponent.label"
+            :disabled="!createComponent.enabled.value"
+            @click="createComponent.run()"
+          >
+            <icon-lucide-diamond-plus class="size-3.5" />
+          </IconButton>
           <InstanceUpdateAction
             v-if="node.type === 'INSTANCE'"
             :node="node"
@@ -171,8 +210,10 @@ const { panels } = useI18n()
       <SlotAuthoringSection />
       <BehaviourPanel v-if="node.type === 'COMPONENT' || node.type === 'COMPONENT_SET'" />
 
-      <FramePresetSelect v-if="node.type === 'FRAME'" />
+      <!-- Presets size artboards; an icon is a glyph. -->
+      <FramePresetSelect v-if="node.type === 'FRAME' && !readIcon(node)" />
 
+      <IconSection />
       <PositionSection />
       <ConstraintsSection />
       <LayoutSection />
@@ -181,8 +222,9 @@ const { panels } = useI18n()
       <TypographySection v-if="node.type === 'TEXT'" />
       <FillSection />
       <StrokeSection />
-      <LayoutGridSection v-if="supportsLayoutGuides" />
       <EffectsSection />
+      <SelectionColorsSection />
+      <LayoutGridSection v-if="supportsLayoutGuides" />
 
       <ExportSection />
     </div>

@@ -24,21 +24,79 @@ export async function dismissWideGamutBanner(page: Page) {
   if (await banner.isVisible()) await banner.locator('[data-slot="banner-dismiss"]').click()
 }
 
-/** Focus the demo's paint and effects page, where blends and masks live. */
+/** A fixed scene exercises paint, blur, blending and alpha masks independently of the demo. */
 export async function focusPaintEffects(page: Page) {
-  await page.evaluate(async () => {
-    const store = window.openPencil?.getStore?.()
-    if (!store) throw new Error('Editor unavailable')
-    const paintPage = store.graph.getPages().find((candidate) => candidate.name.startsWith('03'))
-    if (!paintPage) throw new Error('Demo paint page unavailable')
-    store.setDocumentColorSpace('display-p3')
-    if (store.state.currentPageId !== paintPage.id) await store.switchPage(paintPage.id)
-  })
   await page.evaluate(() => {
     const store = window.openPencil?.getStore?.()
     if (!store) throw new Error('Editor unavailable')
-    const subject = store.graph.getChildren(store.state.currentPageId)[0]
-    if (!subject) throw new Error('Demo paint page is empty')
+    let subject = store.graph
+      .getChildren(store.state.currentPageId)
+      .find((node) => node.name === 'P3 paint fixture')
+    if (!subject) {
+      const paint = (r: number, g: number, b: number) => [
+        {
+          type: 'SOLID' as const,
+          color: { r, g, b, a: 1 },
+          visible: true,
+          opacity: 1
+        }
+      ]
+      subject = store.graph.createNode('FRAME', store.state.currentPageId, {
+        name: 'P3 paint fixture',
+        width: 480,
+        height: 280,
+        fills: paint(0.95, 0.95, 0.98),
+        clipsContent: true,
+        cornerRadius: 20
+      })
+      store.graph.createNode('ELLIPSE', subject.id, {
+        x: 40,
+        y: 40,
+        width: 180,
+        height: 180,
+        fills: paint(1, 0.2, 0.1)
+      })
+      store.graph.createNode('ELLIPSE', subject.id, {
+        x: 140,
+        y: 60,
+        width: 180,
+        height: 180,
+        fills: paint(0.1, 0.4, 1),
+        blendMode: 'MULTIPLY',
+        opacity: 0.7,
+        effects: [
+          {
+            type: 'FOREGROUND_BLUR',
+            visible: true,
+            radius: 12,
+            spread: 0,
+            offset: { x: 0, y: 0 },
+            color: { r: 0, g: 0, b: 0, a: 1 }
+          }
+        ]
+      })
+      const masked = store.graph.createNode('FRAME', subject.id, {
+        x: 320,
+        y: 80,
+        width: 120,
+        height: 120,
+        fills: []
+      })
+      store.graph.createNode('ELLIPSE', masked.id, {
+        width: 100,
+        height: 120,
+        isMask: true,
+        fills: paint(0, 0, 0)
+      })
+      store.graph.createNode('RECTANGLE', masked.id, {
+        x: -10,
+        y: -10,
+        width: 140,
+        height: 140,
+        fills: paint(0.1, 0.9, 0.25)
+      })
+    }
+    store.setDocumentColorSpace('display-p3')
     store.select([subject.id])
     store.zoomToSelection()
     store.clearSelection()

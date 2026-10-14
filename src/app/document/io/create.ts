@@ -29,10 +29,7 @@ export function createDocumentIOActions(
     state,
     getFilePath: sourceState.getFilePath,
     getFileHandle: sourceState.getFileHandle,
-    setSavedVersion: (version) => {
-      sourceState.setSavedVersion(version)
-      sourceActions.markDocumentSaved()
-    },
+    markDocumentSaved: () => sourceActions.markDocumentSaved(),
     preparationController
   })
   const { startWatchingFile, stopWatchingFile } = createFileWatcher({
@@ -43,10 +40,8 @@ export function createDocumentIOActions(
       void reloadFromDisk()
     }
   })
-  const { setViewportSize, fitCurrentPageToViewport } = createDocumentViewportActions(
-    editor,
-    viewportSize
-  )
+  const { setViewportSize, getViewportSize, fitCurrentPageToViewport } =
+    createDocumentViewportActions(editor, viewportSize)
   const sourceActions = createDocumentSourceActions({
     editor,
     state,
@@ -59,6 +54,7 @@ export function createDocumentIOActions(
     editor,
     state,
     setDocumentSource: sourceActions.setDocumentSource,
+    markDocumentChanged: sourceActions.markDocumentChanged,
     fitCurrentPageToViewport,
     preparationController
   })
@@ -73,6 +69,7 @@ export function createDocumentIOActions(
   return {
     downloadBlob,
     setViewportSize,
+    getViewportSize,
     fitCurrentPageToViewport,
     getDocumentFilePath: sourceState.getFilePath,
     getSourceIdentity: sourceState.getSourceIdentity,
@@ -90,12 +87,15 @@ export function createDocumentIOActions(
     setStorageDocumentSource: sourceActions.setStorageDocumentSource,
     setPlannedFilePath: sourceActions.setPlannedFilePath,
     saveFigFileToPath: sourceActions.saveFigFileToPath,
+    saveFigFileToStorage: sourceActions.saveFigFileToStorage,
     startWatchingCurrentFile: sourceActions.startWatchingCurrentFile,
     disposeDocumentIO: sourceActions.disposeDocumentIO,
     openFigFile,
     openDOMFile,
     importDOMText,
     hasUnsavedChanges: sourceActions.hasUnsavedChanges,
+    markDocumentChanged: sourceActions.markDocumentChanged,
+    markDocumentSaved: () => sourceActions.markDocumentSaved(),
     saveFigFile: sourceActions.saveFigFile,
     saveFigFileAs: sourceActions.saveFigFileAs
   }

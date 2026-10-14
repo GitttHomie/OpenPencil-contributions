@@ -1,5 +1,6 @@
 import { afterEach, expect, test, vi } from 'bun:test'
 
+import { acpLaunchOptions } from '@/app/ai/acp/launch'
 import { spawnACPProcess } from '@/app/ai/acp/process'
 
 import { clearTauriMocks, mockTauriIPC } from '#tests/helpers/tauri/mocks'
@@ -12,6 +13,10 @@ afterEach(async () => {
 })
 
 test('configured agents use the native launcher and retain bidirectional streaming and cleanup', async () => {
+  const launch = acpLaunchOptions('codex', {
+    codexProvider: 'team',
+    awsRegion: 'us-east-1'
+  })
   let event: ((message: unknown) => void) | undefined
   const commands: string[] = []
   const closed = vi.fn()
@@ -20,8 +25,11 @@ test('configured agents use the native launcher and retain bidirectional streami
     if (command === 'agent_process_spawn') {
       expect(args).toMatchObject({
         command: 'codex-acp',
-        args: ['-c', 'model_provider="team"'],
-        env: {}
+        args: [],
+        env: {
+          CODEX_CONFIG: '{"model_provider":"team","model_providers.team.aws.region":"us-east-1"}',
+          MODEL_PROVIDER: 'team'
+        }
       })
       event = (args as { events: { onmessage: (message: unknown) => void } }).events.onmessage
       return 72
@@ -32,7 +40,7 @@ test('configured agents use the native launcher and retain bidirectional streami
   })
   const process = await spawnACPProcess({
     command: 'codex-acp',
-    args: ['-c', 'model_provider="team"'],
+    ...launch,
     logId: 'configured',
     destroying: () => false,
     onUnexpectedClose: closed

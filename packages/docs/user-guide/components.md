@@ -41,7 +41,15 @@ Deleting an in-use value requires a replacement and is rejected if the reassignm
 
 ## Component Properties
 
-Components and component sets support reusable text, boolean visibility, instance-swap, and slot properties. Link a property to a descendant field, then select an instance to edit its assigned value without detaching it. Properties and assignments are preserved when saving and reopening `.fig` files.
+Components and component sets support reusable text, boolean visibility, instance-swap, and slot properties. Select an instance to edit its values without detaching it. Properties and their values are preserved when saving and reopening `.fig` files.
+
+To link a layer of a main component to a property, use **Expose as component property**. Create a property from the layer's current value or pick an existing compatible one. Linked controls show the property's value and cannot be edited at object level. Editing linked text on the main component's canvas focuses its default-value control; editing that text in an instance updates the instance's property value.
+
+Select the main component to see **Component properties**. Expand a property to change its default or inspect and unlink the layers it drives. Rename or delete it from the card header, and drag properties to reorder them. **Create property…** adds a text, boolean, or instance-swap property.
+
+To show selected properties of a nested instance, choose **Create property… → Expose nested property**, select the nested component, and turn on the switches for the attributes or variant choices you want to expose. These properties can be reordered among the parent component's own attributes. Their cards identify the nested component and property; deleting a card removes its exposure without deleting the nested component's property. Imported whole-instance exposure is also supported.
+
+Content and visibility assignments recalculate Hug sizes and Fill space, whether made in the inspector, through AI tools, or with JSX and scripts. Instances inherit the main component's sizing unless you override it. A Fixed main component can contain Fill layers while an instance fills another auto-layout frame: set the surrounding frame's size and the instance to Fill, and its contents resize with it without changing the main component.
 
 Manage shared and variant-specific attributes from the component set. An attribute applies to the variants with objects bound to it. Corresponding objects at the same named structural path are grouped into a collapsed binding row; expand it to see the source variant and select or unlink one object. Same-named sibling objects remain separate.
 
@@ -52,6 +60,8 @@ Under **Variant defaults**, give individual variants a different default or rese
 A slot is a frame of a main component whose content each instance can change. Select a frame inside a main component and choose **Create slot** from the context menu or the Slots section, or select other layers to wrap them in a new slot frame. Slot settings set a description, the components it prefers, and how many items it holds; an instance outside those limits shows a warning. In an instance, add, reorder, and remove a slot's items, or reset it to the component's content.
 
 ## Behaviours and Preview
+
+Preview controls are hidden in standard builds. The preview workflow below is available only when the experimental preview flag is enabled.
 
 A behaviour makes a main component or component set work like a real control, after [Reka UI](https://reka-ui.com)'s primitives: Button, Text field, Textarea, Number field, Toggle, Switch, Checkbox, Radio, Radio group, Toggle group, Slider, Progress, Tabs, Collapsible, or Accordion. Select the component and use **+** in the **Behaviour** section to choose one.
 
@@ -118,7 +128,7 @@ Click **Expose** beside an attribute to **Create property…** or choose an exis
 
 Once linked, the button shows the property name. Open it to select another compatible property, create another property, or **Unbind** this attribute. Unbinding preserves the definition and its instance assignments so it can be reused.
 
-Select the main component to manage **Component properties**. Use **Create property…** to create an unbound String, Boolean, or Instance swap property with a name and initial default, then link it from a child layer. Each definition starts with its type icon and visible type label (String, Boolean, or Instance swap), name input, and Delete button on one row. Use the chevron to collapse the default and connected objects while keeping this header visible. Cards remember their expanded state when switching selections during the session; new properties start expanded. Separators divide the header, default value, and connected objects. The value appears below: a **Default value** label with a switch for booleans or an input for strings. Connected objects follow as node icon, object name, and Unbind icon. The node icon identifies the object type. Click its name to select it or its unlink icon to disconnect it. Unused definitions show **No connected objects** and remain available in the link menu. Delete removes the definition and its connections without deleting the objects. These actions support Undo/Redo.
+Select the main component to manage **Component properties**. Use **Create property…** to create an unbound String, Boolean, or Instance swap property with a name and initial default, then link it from a child layer. Each definition starts with its type icon and visible type label (String, Boolean, or Instance swap), name input, and Delete button on one row. Use the chevron to collapse the default and connected objects while keeping this header visible. Cards remember their expanded state when switching selections during the session; properties start collapsed. Separators divide the header, default value, and connected objects. The value appears below: a **Default value** label with a switch for booleans or an input for strings. Connected objects follow as node icon, object name, and Unbind icon. The node icon identifies the object type. Click its name to select it or its unlink icon to disconnect it. Unused definitions show **No connected objects** and remain available in the link menu. Delete removes the definition and its connections without deleting the objects. These actions support Undo/Redo.
 
 Changing a default updates connected source layers and instances that inherit their values; explicit instance assignments remain unchanged. In a component set, new definitions belong to the set and can be shared by compatible layers across variants.
 
@@ -142,13 +152,9 @@ Right-click an instance and select **Go to main component**. The editor navigate
 
 ## Live Sync
 
-When you edit a component, all its instances update automatically. Synced properties include:
+When you edit a component, all its instances update automatically, as in Figma: every property an instance does not override follows the component. That covers size, fills, strokes and their weight, alignment, caps, joins, and dashes, effects, opacity, blend mode, corner radii and smoothing, layout settings and grids, clipping, shared styles, and text, from its font and size to letter spacing, line height, case, decoration, alignment, and styled ranges.
 
-- Width and height
-- Fills, strokes, and effects
-- Opacity and corner radii
-- Layout properties (auto layout settings)
-- Clips content setting
+A layer inside an instance also takes its position, rotation, flips, constraints, and mask from the component. Move or rotate a layer in the component and it moves in every instance. When an instance has a different size than its component, the layer is placed by its constraints, so a layer pinned to the right keeps its distance from the right edge. Inside auto layout, the layout places it.
 
 Sync triggers automatically after node updates, moves, and resizes within a component.
 
@@ -158,7 +164,9 @@ Instances can override specific properties without breaking the sync link. When 
 
 ### Overridable Properties
 
-Child-level overrides support: name, text, font size, font weight, font family, plus all visual and layout properties (fills, strokes, effects, opacity, corner radii, size).
+A layer inside an instance can override its name, text, styled ranges, and font, every visual and text property listed above, its size, and whether it is visible or locked. Its position, rotation, flips, constraints, and mask cannot be overridden: they always come from the component. Scripts that set its position, rotation, constraints, or mask get Figma's error. Slot content is the instance's own and stays editable.
+
+Overrides in a `.fig` file come back as overrides when you open it, and are saved the way Figma writes them.
 
 ### New Children
 

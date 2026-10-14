@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
-import { TypographyControlsRoot, useI18n } from '@open-pencil/vue'
+import { MIXED, TypographyControlsRoot, useI18n, type MixedValue } from '@open-pencil/vue'
 
 import { typographyFontLoader } from '@/app/editor/fonts/selection'
 import FontPicker from '@/components/font-picker/FontPicker.vue'
@@ -10,6 +10,7 @@ import NumberField from '@/components/inputs/NumberField.vue'
 import SharedStyleField from '@/components/properties/shared-style/SharedStyleField.vue'
 import LineHeightField from '@/components/properties/typography/LineHeightField.vue'
 import VariableNumberField from '@/components/properties/VariableNumberField.vue'
+import { BindingPill } from '@/components/ui/binding'
 import Tip from '@/components/ui/overlay/Tip.vue'
 import PanelFieldGroup from '@/components/ui/panel/PanelFieldGroup.vue'
 import PanelGrid from '@/components/ui/panel/PanelGrid.vue'
@@ -17,6 +18,7 @@ import PanelSection from '@/components/ui/panel/PanelSection.vue'
 import AppSelect from '@/components/ui/select/AppSelect.vue'
 import AppSwitch from '@/components/ui/toggle/AppSwitch.vue'
 
+import FontVariableField from './typography/FontVariableField.vue'
 import TextAlignmentFields from './typography/TextAlignmentFields.vue'
 import TextFormattingField from './typography/TextFormattingField.vue'
 
@@ -27,6 +29,23 @@ const textCaseOptions = computed(() => [
   { value: 'LOWER', label: panels.value.textCaseLower },
   { value: 'TITLE', label: panels.value.textCaseTitle }
 ])
+const listOptions = computed(() => [
+  { value: 'NONE', label: panels.value.listNone },
+  { value: 'UNORDERED', label: panels.value.listBulleted },
+  { value: 'ORDERED', label: panels.value.listNumbered }
+])
+const paragraphFields = computed(
+  () =>
+    [
+      { key: 'listSpacing', label: panels.value.listSpacing, property: 'list-spacing' },
+      {
+        key: 'paragraphSpacing',
+        label: panels.value.paragraphSpacing,
+        property: 'paragraph-spacing'
+      },
+      { key: 'paragraphIndent', label: panels.value.paragraphIndent, property: 'paragraph-indent' }
+    ] as const
+)
 const truncationOptions = computed(() => [
   { value: 'DISABLED', label: panels.value.truncationDisabled },
   { value: 'ENDING', label: panels.value.truncationEnding }
@@ -37,67 +56,105 @@ const commonFeatures = computed(() => [
   { tag: 'KERN', label: panels.value.kerning }
 ])
 
-function featureEnabled(features: Array<{ tag: string; enabled: boolean }>, tag: string) {
-  return features.find((feature) => feature.tag === tag)?.enabled ?? true
+/** Empty when the text layers differ, so selects and segmented controls show no choice. */
+function picked<T>(value: MixedValue<T>): T | '' {
+  return value === MIXED ? '' : value
 }
 </script>
 
 <template>
   <TypographyControlsRoot v-slot="ctx" :font-loader="typographyFontLoader">
-    <PanelSection v-if="ctx.node.value" :label="panels.typography">
+    <PanelSection v-if="ctx.node.value" :label="panels.typography" data-test-id="typography">
       <SharedStyleField kind="text" :label="panels.textStyle" />
 
-      <div class="mb-field-group flex min-w-0 items-center gap-1.5">
-        <FontPicker
-          class="min-w-0 flex-1"
-          :model-value="ctx.node.value.fontFamily"
-          :label="panels.fontFamily"
-          @select="ctx.actions.setFamily"
-        />
-        <FontSettingsPopover />
-        <Tip
-          v-if="ctx.hasMissingFonts.value"
-          :label="
-            'Missing font' +
-            (ctx.missingFonts.value.length > 1 ? 's' : '') +
-            ': ' +
-            ctx.missingFonts.value.join(', ')
-          "
-        >
-          <icon-lucide-alert-triangle
-            role="img"
-            :aria-label="
+      <PanelFieldGroup :label="panels.fontFamily" class="mb-field-group pt-field-group">
+        <div class="flex min-w-0 items-center gap-1.5">
+          <FontVariableField
+            v-slot="binding"
+            :nodes="ctx.nodes.value"
+            field="fontFamily"
+            :value="picked(ctx.merged('fontFamily'))"
+          >
+            <FontPicker
+              class="min-w-0 flex-1"
+              :model-value="picked(ctx.merged('fontFamily'))"
+              :label="panels.fontFamily"
+              :ui="binding.ui"
+              :placeholder="panels.mixed"
+              @select="ctx.actions.setFamily"
+            >
+              <template v-if="binding.bound" #value>
+                <BindingPill
+                  class="min-w-0 flex-1"
+                  :label="binding.label"
+                  :value="binding.value"
+                  :tooltip="binding.tooltip"
+                  :unresolved="binding.unresolved"
+                />
+              </template>
+            </FontPicker>
+          </FontVariableField>
+          <FontSettingsPopover />
+          <Tip
+            v-if="ctx.hasMissingFonts.value"
+            :label="
               'Missing font' +
               (ctx.missingFonts.value.length > 1 ? 's' : '') +
               ': ' +
               ctx.missingFonts.value.join(', ')
             "
-            class="size-3.5 shrink-0 text-[var(--color-warning-action)]"
-          />
-        </Tip>
-      </div>
+          >
+            <icon-lucide-alert-triangle
+              role="img"
+              :aria-label="
+                'Missing font' +
+                (ctx.missingFonts.value.length > 1 ? 's' : '') +
+                ': ' +
+                ctx.missingFonts.value.join(', ')
+              "
+              class="size-3.5 shrink-0 text-warning-action"
+            />
+          </Tip>
+        </div>
+      </PanelFieldGroup>
 
       <PanelGrid :columns="2" class="mb-field-group">
         <PanelFieldGroup :label="panels.fontWeight">
-          <AppSelect
-            :label="panels.fontWeight"
-            :model-value="ctx.node.value.fontWeight"
-            :options="ctx.weights"
-            :disabled="
-              ctx.weights.length <= 1 &&
-              ctx.weights.every((weight) => weight.value === ctx.node.value?.fontWeight)
-            "
-            :placeholder="String(ctx.node.value.fontWeight)"
-            @update:model-value="ctx.actions.setWeight(+$event)"
-          />
+          <FontVariableField
+            v-slot="binding"
+            :nodes="ctx.nodes.value"
+            field="fontWeight"
+            :value="picked(ctx.merged('fontWeight'))"
+          >
+            <AppSelect
+              :label="panels.fontWeight"
+              :ui="binding.ui"
+              :model-value="picked(ctx.merged('fontWeight'))"
+              :options="ctx.weights"
+              :disabled="ctx.weights.length < 2"
+              :placeholder="panels.mixed"
+              @update:model-value="ctx.actions.setWeight(+$event)"
+            >
+              <template v-if="binding.bound" #value>
+                <BindingPill
+                  class="min-w-0 flex-1"
+                  :label="binding.label"
+                  :value="binding.value"
+                  :tooltip="binding.tooltip"
+                  :unresolved="binding.unresolved"
+                />
+              </template>
+            </AppSelect>
+          </FontVariableField>
         </PanelFieldGroup>
         <PanelFieldGroup :label="panels.fontSize">
           <VariableNumberField
-            :model-value="ctx.node.value.fontSize"
+            :model-value="ctx.merged('fontSize')"
             :aria-label="panels.fontSize"
             :min="1"
             :max="1000"
             :node-id="ctx.node.value.id"
+            :node-ids="ctx.nodes.value.map((text) => text.id)"
             binding-path="fontSize"
             @update:model-value="ctx.actions.updateProp('fontSize', $event)"
             @commit="(v: number, p: number) => ctx.actions.commitProp('fontSize', v, p)"
@@ -107,18 +164,15 @@ function featureEnabled(features: Array<{ tag: string; enabled: boolean }>, tag:
 
       <PanelGrid :columns="2" class="mb-field-group">
         <PanelFieldGroup :label="panels.lineHeight">
-          <LineHeightField
-            :node="ctx.node.value"
-            @update="ctx.actions.updateProp('lineHeight', $event)"
-            @commit="(v, p) => ctx.actions.commitProp('lineHeight', v, p)"
-          />
+          <LineHeightField :nodes="ctx.nodes.value" />
         </PanelFieldGroup>
         <PanelFieldGroup :label="panels.letterSpacing">
           <VariableNumberField
             suffix="px"
-            :model-value="ctx.node.value.letterSpacing"
+            :model-value="ctx.merged('letterSpacing')"
             :aria-label="panels.letterSpacing"
             :node-id="ctx.node.value.id"
+            :node-ids="ctx.nodes.value.map((text) => text.id)"
             binding-path="letterSpacing"
             @update:model-value="ctx.actions.updateProp('letterSpacing', $event)"
             @commit="(v: number, p: number) => ctx.actions.commitProp('letterSpacing', v, p)"
@@ -134,7 +188,8 @@ function featureEnabled(features: Array<{ tag: string; enabled: boolean }>, tag:
         <PanelFieldGroup :label="panels.direction" class="mb-field-group">
           <AppSelect
             :label="panels.direction"
-            :model-value="ctx.node.value.textDirection"
+            :model-value="picked(ctx.merged('textDirection'))"
+            :placeholder="panels.mixed"
             :options="[
               { value: 'AUTO', label: panels.auto },
               { value: 'LTR', label: 'LTR' },
@@ -145,10 +200,10 @@ function featureEnabled(features: Array<{ tag: string; enabled: boolean }>, tag:
         </PanelFieldGroup>
 
         <TextAlignmentFields
-          :horizontal="ctx.node.value.textAlignHorizontal"
-          :vertical="ctx.node.value.textAlignVertical"
-          @horizontal="ctx.actions.align"
-          @vertical="ctx.actions.setVerticalAlign"
+          :horizontal="ctx.merged('textAlignHorizontal')"
+          :vertical="ctx.merged('textAlignVertical')"
+          @horizontal="ctx.actions.align($event)"
+          @vertical="ctx.actions.setVerticalAlign($event)"
         />
       </div>
 
@@ -166,7 +221,8 @@ function featureEnabled(features: Array<{ tag: string; enabled: boolean }>, tag:
           <PanelFieldGroup :label="panels.textCase">
             <AppSelect
               :label="panels.textCase"
-              :model-value="ctx.node.value.textCase"
+              :model-value="picked(ctx.merged('textCase'))"
+              :placeholder="panels.mixed"
               :options="textCaseOptions"
               @update:model-value="
                 ctx.actions.setTextCase($event as 'ORIGINAL' | 'UPPER' | 'LOWER' | 'TITLE')
@@ -176,7 +232,8 @@ function featureEnabled(features: Array<{ tag: string; enabled: boolean }>, tag:
           <PanelFieldGroup :label="panels.truncation">
             <AppSelect
               :label="panels.truncation"
-              :model-value="ctx.node.value.textTruncation"
+              :model-value="picked(ctx.merged('textTruncation'))"
+              :placeholder="panels.mixed"
               :options="truncationOptions"
               @update:model-value="ctx.actions.setTruncation($event as 'DISABLED' | 'ENDING')"
             />
@@ -184,12 +241,12 @@ function featureEnabled(features: Array<{ tag: string; enabled: boolean }>, tag:
         </PanelGrid>
 
         <PanelFieldGroup
-          v-if="ctx.node.value.textTruncation === 'ENDING'"
+          v-if="ctx.merged('textTruncation') === 'ENDING'"
           :label="panels.maxLines"
           class="mb-field-group"
         >
           <NumberField
-            :model-value="ctx.node.value.maxLines ?? 1"
+            :model-value="ctx.merged('maxLines') ?? 1"
             :aria-label="panels.maxLines"
             :min="1"
             :step="1"
@@ -205,6 +262,74 @@ function featureEnabled(features: Array<{ tag: string; enabled: boolean }>, tag:
         </PanelFieldGroup>
       </div>
 
+      <div class="border-t border-border pt-field-group">
+        <PanelFieldGroup
+          :label="panels.listsAndParagraphs"
+          class="mb-3"
+          data-property="lists-and-paragraphs"
+        >
+          <div class="flex flex-col gap-1.5">
+            <div class="flex items-center gap-1.5">
+              <SegmentedControl
+                class="flex-1"
+                :model-value="ctx.listType.value ?? ''"
+                :options="listOptions"
+                :label="panels.listStyle"
+                data-property="list-style"
+                @change="ctx.actions.setListType($event as 'NONE' | 'ORDERED' | 'UNORDERED')"
+              >
+                <template #option="{ option }">
+                  <icon-lucide-list v-if="option.value === 'UNORDERED'" class="size-3.5" />
+                  <icon-lucide-list-ordered
+                    v-else-if="option.value === 'ORDERED'"
+                    class="size-3.5"
+                  />
+                  <icon-lucide-minus v-else class="size-3.5" />
+                </template>
+              </SegmentedControl>
+              <IconButton
+                :label="panels.hangingLists"
+                :active="ctx.merged('hangingList') === true"
+                data-property="hanging-lists"
+                @click="ctx.actions.setHangingList(ctx.merged('hangingList') !== true)"
+              >
+                <icon-lucide-list-indent-decrease class="size-3.5" />
+              </IconButton>
+            </div>
+            <PanelGrid :columns="3">
+              <Tip v-for="field in paragraphFields" :key="field.key" :label="field.label">
+                <NumberField
+                  :model-value="ctx.paragraphSpacing(field.key)"
+                  :aria-label="field.label"
+                  :min="0"
+                  :disabled="field.key === 'listSpacing' && ctx.listType.value === 'NONE'"
+                  :data-property="field.property"
+                  @update:model-value="
+                    ctx.actions.previewParagraphSpacing(field.key, Math.max(0, $event))
+                  "
+                  @commit="
+                    (value: number) =>
+                      ctx.actions.setParagraphSpacing(field.key, Math.max(0, value))
+                  "
+                >
+                  <template #icon>
+                    <icon-lucide-between-vertical-start
+                      v-if="field.key === 'listSpacing'"
+                      class="size-3"
+                    />
+                    <icon-lucide-pilcrow
+                      v-else-if="field.key === 'paragraphSpacing'"
+                      class="size-3"
+                    />
+                    <icon-lucide-arrow-right-to-line v-else class="size-3" />
+                  </template>
+                </NumberField>
+              </Tip>
+            </PanelGrid>
+          </div>
+        </PanelFieldGroup>
+      </div>
+
       <div class="grid gap-2.5 border-t border-border pt-field-group">
         <label
           v-for="feature in commonFeatures"
@@ -213,7 +338,7 @@ function featureEnabled(features: Array<{ tag: string; enabled: boolean }>, tag:
         >
           <span>{{ feature.label }}</span>
           <AppSwitch
-            :model-value="featureEnabled(ctx.node.value.fontFeatures, feature.tag)"
+            :model-value="ctx.fontFeature(feature.tag) === true"
             :label="feature.label"
             :data-property="`font-feature-${feature.tag.toLowerCase()}`"
             @update:model-value="ctx.actions.setFontFeature(feature.tag, $event)"

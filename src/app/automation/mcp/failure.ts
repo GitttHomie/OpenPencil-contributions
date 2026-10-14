@@ -1,16 +1,4 @@
-import { APP_VERSION } from '@/app/runtime/version'
-
-/**
- * Name of the entry point installed by `@open-pencil/mcp`.
- *
- * Kept here rather than in the spawner so Settings can render the install
- * instruction without importing the spawning code.
- */
-export const MCP_PACKAGE_NAME = '@open-pencil/mcp'
-
-/** Exact package spec a user should install to match this app. */
-export const MCP_INSTALL_TARGET = `${MCP_PACKAGE_NAME}@${APP_VERSION}`
-
+export const MCP_EXECUTABLE = 'openpencil-mcp-http'
 /**
  * Why the local MCP server is unavailable.
  *
@@ -19,6 +7,7 @@ export const MCP_INSTALL_TARGET = `${MCP_PACKAGE_NAME}@${APP_VERSION}`
  */
 export type MCPFailureCode =
   | 'not-installed'
+  | 'outdated'
   | 'permission-denied'
   | 'exited'
   | 'timeout'
@@ -29,12 +18,33 @@ export type MCPFailureCode =
 
 export interface MCPFailure {
   code: MCPFailureCode
-  /** Technical detail such as captured stderr or an HTTP status. Never translated. */
+  /**
+   * Technical detail such as captured stderr or an HTTP status, or the running server's version
+   * for `outdated`. Never translated.
+   */
   detail?: string
 }
 
 /** Maximum diagnostic detail length retained for display. */
 export const MCP_FAILURE_DETAIL_LIMIT = 400
+
+/**
+ * A restart replaces stale or disconnected helper processes with the bundled helper.
+ * Missing resources or refused commands need the app reinstalled with its permissions.
+ */
+const RESTART_FIXES: ReadonlySet<MCPFailureCode> = new Set([
+  'outdated',
+  'exited',
+  'timeout',
+  'rejected',
+  'malformed',
+  'unreachable',
+  'unknown'
+])
+
+export function restartFixesMCPFailure(failure: MCPFailure): boolean {
+  return RESTART_FIXES.has(failure.code)
+}
 
 export function mcpFailure(code: MCPFailureCode, detail?: string): MCPFailure {
   const trimmed = detail?.trim()

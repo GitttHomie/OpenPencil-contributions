@@ -2,7 +2,7 @@ import { describe, expect, mock, test } from 'bun:test'
 
 import type { Canvas } from 'canvaskit-wasm'
 
-import { SceneGraph } from '@open-pencil/scene-graph'
+import { SceneGraph, createDefaultNode } from '@open-pencil/scene-graph'
 import type { SceneNode } from '@open-pencil/scene-graph'
 
 import { drawGuides } from '#core/canvas/guides/draw'
@@ -10,16 +10,10 @@ import { drawGuides } from '#core/canvas/guides/draw'
 import { createMockCanvas, createMockRenderer, mockCalls } from '../effects/helpers'
 
 function graphWithGuides(guides: SceneNode['guides']): SceneGraph {
-  const page = {
-    id: 'page',
-    type: 'CANVAS',
-    childIds: [],
-    guides
-  } as SceneNode
-  return {
-    rootId: 'root',
-    getNode: (id: string) => (id === 'page' ? page : null)
-  } as SceneGraph
+  const graph = new SceneGraph()
+  const page = createDefaultNode(() => 'page', 'CANVAS', { guides })
+  graph.nodes = new Map([['page', page]])
+  return graph
 }
 
 describe('page guide rendering', () => {
@@ -74,7 +68,7 @@ describe('page guide rendering', () => {
       y: 100,
       guides: []
     } as SceneNode
-    const page = { id: 'page', parentId: null, childIds: ['frame'], guides: [] } as SceneNode
+    const page = createDefaultNode(() => 'page', 'CANVAS', { childIds: ['frame'] })
     const nodes = new Map([
       ['page', page],
       ['frame', frame],

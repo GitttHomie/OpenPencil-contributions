@@ -39,6 +39,7 @@ const emit = defineEmits<{
   select: [id: string]
   create: []
   rename: [id: string, title: string]
+  saveTrace: [id: string]
   delete: [id: string]
 }>()
 const { ai } = useI18n()
@@ -103,6 +104,7 @@ function closeMenu(event: Event) {
 <template>
   <div :class="styles.root()">
     <div :class="styles.header()">
+      <slot name="actions" />
       <PopoverRoot v-model:open="open">
         <PopoverTrigger :class="styles.trigger()" :disabled="disabled" :aria-label="ai.chatHistory">
           <span :class="styles.title()">{{ selected?.title || ai.newChat }}</span>
@@ -181,6 +183,9 @@ function closeMenu(event: Event) {
             @close-auto-focus="closeMenu"
           >
             <DropdownMenuItem :class="item" @select="rename">{{ ai.renameChat }}</DropdownMenuItem>
+            <DropdownMenuItem :class="item" @select="selectedId && emit('saveTrace', selectedId)">{{
+              ai.saveChatTrace
+            }}</DropdownMenuItem>
             <DropdownMenuItem :class="item" @select="confirmDelete">{{
               ai.deleteChat
             }}</DropdownMenuItem>

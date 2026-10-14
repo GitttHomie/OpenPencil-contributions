@@ -1,5 +1,5 @@
 import { arrowCapOverflow } from './arrow-caps'
-import type { Effect, Stroke, StrokeCap, VectorNetwork } from './index'
+import type { Effect, Stroke, StrokeCap, StrokeJoin, VectorNetwork } from './index'
 import type { Rect, Vector } from './primitives'
 
 export function degToRad(degrees: number): number {
@@ -82,6 +82,7 @@ function createBoundsAccumulator(): BoundsAccumulator {
 }
 
 function includePoint(bounds: BoundsAccumulator, x: number, y: number): void {
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return
   bounds.minX = Math.min(bounds.minX, x)
   bounds.minY = Math.min(bounds.minY, y)
   bounds.maxX = Math.max(bounds.maxX, x)
@@ -108,6 +109,17 @@ export function computeBounds(items: Iterable<Rect>): Rect {
   const bounds = createBoundsAccumulator()
   for (const item of items) includeRect(bounds, item)
   return boundsToRect(bounds)
+}
+
+/** Non-finite imported geometry cannot be transformed or included in a drawing's bounds. */
+export function hasFiniteGeometry(rect: Rect & { rotation?: number }): boolean {
+  return (
+    Number.isFinite(rect.x) &&
+    Number.isFinite(rect.y) &&
+    Number.isFinite(rect.width) &&
+    Number.isFinite(rect.height) &&
+    Number.isFinite(rect.rotation ?? 0)
+  )
 }
 
 export function polygonVertices(node: {
@@ -138,10 +150,17 @@ export function polygonVertices(node: {
   })
 }
 
+/** A layer's stroke join and miter limit, for the tips mitered path corners reach. */
+export interface StrokeCorners {
+  strokeJoin?: StrokeJoin
+  strokeMiterLimit?: number
+}
+
 export function strokeOverflow(
   strokes?: Stroke[],
   fallbackCap?: StrokeCap,
-  network?: VectorNetwork | null
+  network?: VectorNetwork | null,
+  corners?: StrokeCorners
 ): number {
   let overflow = 0
   for (const stroke of strokes ?? []) {
@@ -149,9 +168,50 @@ export function strokeOverflow(
     let extra = 0
     if (stroke.align === 'OUTSIDE') extra = stroke.weight
     else if (stroke.align === 'CENTER') extra = stroke.weight / 2
-    overflow = Math.max(overflow, extra)
+    const miter = network
+      ? miterRatio(network, stroke.join ?? corners?.strokeJoin, corners?.strokeMiterLimit)
+      : 1
+    overflow = Math.max(overflow, extra * miter)
   }
   return Math.max(overflow, arrowCapOverflow(strokes, fallbackCap, network))
+}
+
+/** The direction a segment leaves `vertex` in, along its handle when it has one. */
+function leaving(network: VectorNetwork, index: number, vertex: number): Vector {
+  const segment = network.segments[index]
+  const atStart = segment.start === vertex
+  const handle = atStart ? segment.tangentStart : segment.tangentEnd
+  if (handle.x !== 0 || handle.y !== 0) return handle
+  const from = network.vertices[vertex]
+  const to = network.vertices[atStart ? segment.end : segment.start]
+  return { x: to.x - from.x, y: to.y - from.y }
+}
+
+/**
+ * How far past half the stroke the sharpest mitered corner reaches, as a multiple: a corner of
+ * angle θ mitres out to 1/sin(θ/2), unless that passes the miter limit and it bevels instead.
+ * Corners are the vertices exactly two segments meet at, as the stroke joins them.
+ */
+function miterRatio(network: VectorNetwork, join: StrokeJoin | undefined, limit = 4): number {
+  const meeting = new Map<number, number[]>()
+  for (const [index, segment] of network.segments.entries()) {
+    for (const vertex of new Set([segment.start, segment.end])) {
+      meeting.set(vertex, [...(meeting.get(vertex) ?? []), index])
+    }
+  }
+  let ratio = 1
+  for (const [vertex, indices] of meeting) {
+    if (indices.length !== 2) continue
+    if ((network.vertices[vertex].strokeJoin ?? join ?? 'MITER') !== 'MITER') continue
+    const a = leaving(network, indices[0], vertex)
+    const b = leaving(network, indices[1], vertex)
+    const lengths = Math.hypot(a.x, a.y) * Math.hypot(b.x, b.y)
+    if (lengths === 0) continue
+    const angle = Math.acos(Math.max(-1, Math.min(1, (a.x * b.x + a.y * b.y) / lengths)))
+    const miter = 1 / Math.sin(angle / 2)
+    if (miter <= limit) ratio = Math.max(ratio, miter)
+  }
+  return ratio
 }
 
 export function effectOverflow(effects?: Effect[]) {
@@ -192,16 +252,18 @@ export function computeAbsoluteBounds(
 }
 
 export function computeVisualBounds(
-  nodes: Iterable<{
-    id: string
-    width: number
-    height: number
-    rotation?: number
-    strokes?: Stroke[]
-    strokeCap?: StrokeCap
-    vectorNetwork?: VectorNetwork | null
-    effects?: Effect[]
-  }>,
+  nodes: Iterable<
+    {
+      id: string
+      width: number
+      height: number
+      rotation?: number
+      strokes?: Stroke[]
+      strokeCap?: StrokeCap
+      vectorNetwork?: VectorNetwork | null
+      effects?: Effect[]
+    } & StrokeCorners
+  >,
   getAbsolutePosition: (id: string) => Vector
 ): Rect {
   const bounds = createBoundsAccumulator()
@@ -209,7 +271,7 @@ export function computeVisualBounds(
   for (const n of nodes) {
     const abs = getAbsolutePosition(n.id)
     const bbox = rotatedBBox(abs.x, abs.y, n.width, n.height, n.rotation ?? 0)
-    const stroke = strokeOverflow(n.strokes, n.strokeCap, n.vectorNetwork)
+    const stroke = strokeOverflow(n.strokes, n.strokeCap, n.vectorNetwork, n)
     const effects = effectOverflow(n.effects)
     includePoint(bounds, bbox.left - stroke - effects.left, bbox.top - stroke - effects.top)
     includePoint(bounds, bbox.right + stroke + effects.right, bbox.bottom + stroke + effects.bottom)
@@ -370,6 +432,15 @@ function collectDescendantVisualBounds(
 ): VisualBounds | null {
   const node = getNode(nodeId)
   if (!node?.visible) return null
+  if (
+    !hasFiniteGeometry({
+      ...getAbsolutePosition(node.id),
+      width: node.width,
+      height: node.height,
+      rotation: node.rotation
+    })
+  )
+    return null
 
   const own = nodeVisualBounds(node, getAbsolutePosition)
   let bounds = clip ? intersectVisualBounds(own, clip) : own

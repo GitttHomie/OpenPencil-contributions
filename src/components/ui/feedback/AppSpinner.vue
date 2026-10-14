@@ -19,7 +19,7 @@ const styles = computed(() => {
 
 <template>
   <span data-slot="spinner" aria-hidden="true" :class="styles.root">
-    <icon-lucide-circle :class="styles.track" />
-    <icon-lucide-loader-circle :class="styles.arc" />
+    <span :class="styles.track" />
+    <span :class="styles.arc" />
   </span>
 </template>

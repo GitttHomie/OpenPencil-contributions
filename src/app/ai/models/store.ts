@@ -101,6 +101,7 @@ const profileSchema = v.object({
   acpLaunch: v.optional(v.unknown()),
   acpOptions: v.optional(v.unknown()),
   acpIntegration: v.optional(v.unknown()),
+  imageSupport: v.optional(v.picklist(['advertised', 'verified', 'unsupported'])),
   capabilities: v.fallback(
     v.pipe(
       v.array(v.unknown()),
@@ -300,7 +301,8 @@ function supportsModelRole(
   if (role === 'design') return isDesignModelProfile(profile)
   if (role === 'fast') return isDesignModelProfile(profile) && providerID !== 'harness:pi'
   if (role === 'review' && providerID?.startsWith('acp:')) return true
-  if (providerID?.startsWith('acp:') || providerID === 'harness:pi') return false
+  if (providerID === 'harness:pi') return false
+  if (role === 'vision' && profile.imageSupport === 'unsupported') return false
   return role !== 'vision' || profile.capabilities.includes('vision')
 }
 
@@ -319,9 +321,10 @@ export function resolveAIModelRole(role: AIModelRole): ResolvedAIModelRole | nul
   const profile = modelProfile(profileId)
   if (!profile) return null
   if (role === 'design' && !isDesignModelProfile(profile)) return null
-  if (role === 'vision' && !profile.capabilities.includes('vision')) return null
   const connection = modelConnection(profile.connectionId)
-  return connection ? { requestedRole: role, profile, connection } : null
+  return connection && supportsModelRole(profile, connection.providerID, role)
+    ? { requestedRole: role, profile, connection }
+    : null
 }
 
 function connectionMatchesDraft(
@@ -382,6 +385,7 @@ function draftForProfile(
       : undefined,
     acpLaunch: profile.acpLaunch ? { ...profile.acpLaunch } : undefined,
     harnessPermissionMode: profile.harnessPermissionMode ?? 'allow-edits',
+    imageSupport: profile.imageSupport,
     capabilities: [...profile.capabilities]
   }
 }
@@ -456,6 +460,7 @@ export function saveModelProfileDraft(draft: AIModelProfileDraft): AIModelProfil
     maxOutputTokens: normalizedMaxOutputTokens(draft.maxOutputTokens),
     thinkingLevel: draft.thinkingLevel,
     ...agentSettings,
+    imageSupport: draft.imageSupport,
     capabilities: [...new Set(draft.capabilities)]
   }
   const index = aiModelSettings.value.models.findIndex((model) => model.id === profile.id)
@@ -598,6 +603,7 @@ export function modelSettingsSnapshot(): AIModelSettings {
     connections: settings.connections.map((connection) => ({ ...connection })),
     models: settings.models.map((profile) => ({
       ...profile,
+      imageSupport: profile.imageSupport,
       capabilities: [...profile.capabilities]
     })),
     assignments: { ...settings.assignments }

@@ -8,10 +8,10 @@ import {
 
 import { getNodeEditCapability } from '#core/editor/capabilities'
 import { prepareSlotEdits } from '#core/editor/components/slots/index'
+import { snapshotSubtree } from '#core/editor/history/subtree'
 import type { EditorContext } from '#core/editor/types'
 
 import { type DeletedEntry, restoreDeletedEntries } from './history'
-import { snapshotSubtree } from './subtree-history'
 
 export function deleteNodes(
   ctx: EditorContext,

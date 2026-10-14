@@ -8,7 +8,6 @@ tests/engine/app/ai/attachment/image.test.ts
 tests/engine/app/ai/catalog.test.ts
 tests/engine/app/ai/context.test.ts
 tests/engine/app/ai/failure.test.ts
-tests/engine/app/ai/harness/transport.test.ts
 tests/engine/app/ai/markdown.test.ts
 tests/engine/app/ai/model-roles.test.ts
 tests/engine/app/ai/model-settings.test.ts
@@ -37,7 +36,6 @@ tests/engine/app/clipboard/references.test.ts
 tests/engine/app/clipboard/styles.test.ts
 tests/engine/app/clipboard/variables.test.ts
 tests/engine/app/code/sandbox.test.ts
-tests/engine/app/demo.test.ts
 tests/engine/app/demo/viewport.test.ts
 tests/engine/app/diagnostics/events.test.ts
 tests/engine/app/diagnostics/recorder.test.ts
@@ -71,7 +69,6 @@ tests/engine/app/integrations/mcp-connections.test.ts
 tests/engine/app/integrations/pi-mcp.test.ts
 tests/engine/app/integrations/storage/cancellation.test.ts
 tests/engine/app/integrations/storage/cors.test.ts
-tests/engine/app/integrations/storage/list-objects.test.ts
 tests/engine/app/integrations/storage/namespace.test.ts
 tests/engine/app/integrations/storage/region.test.ts
 tests/engine/app/integrations/storage/registry.test.ts

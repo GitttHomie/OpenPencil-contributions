@@ -83,16 +83,15 @@ function typeLabel(type: string) {
     :label="manage ? panels.componentProperties : panels.exposeComponentProperty"
     :ui="{ title: 'text-component' }"
   >
-    <AppButton
-      v-if="manage && context.node.id !== context.owner.id"
-      size="xs"
-      variant="soft"
-      @click="selectSet()"
+    <template v-if="manage && context.node.id !== context.owner.id" #actions>
+      <IconButton :label="panels.manageComponentSet" @click="selectSet()">
+        <icon-lucide-component class="size-3.5" />
+      </IconButton>
+    </template>
+    <div
+      v-if="manage && context.node.id === context.owner.id"
+      class="flex flex-col gap-field-group"
     >
-      <icon-lucide-component class="size-3.5" />
-      {{ panels.manageComponentSet }}
-    </AppButton>
-    <div v-else-if="manage" class="flex flex-col gap-field-group">
       <CreatePropertyDefinition
         :key="context.node.id"
         :disabled="!context.editable"
@@ -231,7 +230,7 @@ function typeLabel(type: string) {
         </template>
       </ReorderList>
     </div>
-    <div v-else class="flex flex-col gap-field-group">
+    <div v-else-if="!manage" class="flex flex-col gap-field-group">
       <ExposePropertyField
         v-for="field in context.fields"
         :key="`${context.node.id}:${field}`"

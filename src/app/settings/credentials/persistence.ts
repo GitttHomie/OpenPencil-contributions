@@ -3,6 +3,7 @@ import { AI_PROVIDERS } from '@open-pencil/core/constants'
 import { aiModelSettings, modelConnectionCredentialRef } from '@/app/ai/models'
 import { VECTORIZE_CREDENTIAL_REFS } from '@/app/editor/vectorize/credentials'
 import { mcpConnectionSettings, mcpConnectionCredentialRef } from '@/app/integrations/mcp'
+import { mcpEnvironmentRef } from '@/app/integrations/mcp/environment'
 import { storageCredentialRefs, storageProviderRegistry } from '@/app/integrations/storage'
 import {
   PEXELS_CREDENTIAL,
@@ -34,9 +35,12 @@ export function appCredentialRefs(): CredentialRef[] {
     PEXELS_CREDENTIAL,
     UNSPLASH_CREDENTIAL,
     ...VECTORIZE_CREDENTIAL_REFS,
-    ...mcpConnectionSettings.value.connections.map((connection) =>
-      mcpConnectionCredentialRef(connection.id)
-    ),
+    ...mcpConnectionSettings.value.connections.flatMap((connection) => [
+      mcpConnectionCredentialRef(connection.id),
+      ...(connection.transport.type === 'stdio' && connection.transport.environment
+        ? [mcpEnvironmentRef(connection.id)]
+        : [])
+    ]),
     ...storageCredentials
   ])
 }

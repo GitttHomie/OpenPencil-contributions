@@ -13,7 +13,9 @@ import { createDocumentSourceState } from '@/app/document/io/source-state'
 import type { DocumentSourceAccess } from '@/app/document/io/types'
 import { createDocumentRecovery } from '@/app/document/recovery'
 import { recoveryEnabled } from '@/app/document/recovery/preferences'
-import type { StorageDocumentBinding } from '@/app/integrations/storage/types'
+import type { StorageDocumentBinding, StorageProviderID } from '@/app/integrations/storage/types'
+import { createCanvasId } from '@/app/storage/id'
+import { trackDocumentFormat } from '@/app/telemetry'
 
 type DocumentSourceState = EditorState & {
   documentName: string
@@ -69,6 +71,7 @@ export function createDocumentSourceActions({
 
   const recovery = createDocumentRecovery({
     state,
+    version: changes.capture,
     isEnabled: () => recoveryEnabled.value,
     buildFigFile: buildRecoveryFigFile,
     hasWritableSource: () => !!getFileHandle() || !!getFilePath() || !!getStorageBinding()
@@ -76,6 +79,7 @@ export function createDocumentSourceActions({
 
   const { saveFigFile, saveFigFileAs, writeFile } = createSaveActions({
     state,
+    version: changes.capture,
     buildFigFile,
     getFilePath,
     setFilePath,
@@ -97,6 +101,7 @@ export function createDocumentSourceActions({
 
   const autosave = createAutosave({
     state,
+    version: changes.capture,
     getSavedVersion,
     hasWritableSource: () => !!getFileHandle() || !!getFilePath() || !!getStorageBinding(),
     saveCurrentDocument: async (version) => {
@@ -105,6 +110,11 @@ export function createDocumentSourceActions({
       if (await writeFile(data, version)) changes.markSaved(revision)
     }
   })
+
+  function markDocumentSaved() {
+    changes.markSaved()
+    setSavedVersion(changes.capture())
+  }
 
   function setDocumentSource(
     fileName: string,
@@ -119,9 +129,9 @@ export function createDocumentSourceActions({
     setFilePath(isFig ? (path ?? null) : null)
     setDownloadName(figDownloadName(fileName, sourceFormat))
     setSourceIdentity({ handle: handle ?? null, path: path ?? null })
-    setSavedVersion(state.sceneVersion)
-    changes.markSaved()
-    void recovery.markProtectedVersion(state.sceneVersion)
+    markDocumentSaved()
+    void recovery.markProtectedVersion(changes.capture())
+    trackDocumentFormat('document_opened', sourceFormat)
     if (isFig && (handle || path)) {
       void startWatchingFile()
     }
@@ -136,9 +146,8 @@ export function createDocumentSourceActions({
     setStorageBinding(binding)
     state.documentName = documentName
     state.autosaveEnabled = true
-    setSavedVersion(state.sceneVersion)
-    changes.markSaved()
-    void recovery.markProtectedVersion(state.sceneVersion)
+    markDocumentSaved()
+    void recovery.markProtectedVersion(changes.capture())
   }
 
   function setPlannedFilePath(path: string) {
@@ -151,8 +160,15 @@ export function createDocumentSourceActions({
     state.documentName = documentNameFromFigPath(downloadName)
   }
 
-  /** Save to a new path; when the write fails, the document keeps the source it had. */
-  async function saveFigFileToPath(path: string): Promise<boolean> {
+  let retargeting = false
+
+  /**
+   * Save to a new target; when the write fails, the document keeps the source it had. A second
+   * retarget while one is in flight is refused, so a failure never restores another save's target.
+   */
+  async function saveToNewTarget(planTarget: () => void): Promise<boolean> {
+    if (retargeting) return false
+    retargeting = true
     const previous = {
       filePath: getFilePath(),
       fileHandle: getFileHandle(),
@@ -168,16 +184,39 @@ export function createDocumentSourceActions({
       state.documentName = previous.documentName
       if (previous.filePath || previous.fileHandle) void startWatchingFile()
     }
-    setPlannedFilePath(path)
+    planTarget()
     try {
       const saved = await saveAndTrack(saveFigFile)
-      if (saved) void startWatchingFile()
-      else restore()
+      if (!saved) restore()
       return saved
     } catch (error) {
       restore()
       throw error
+    } finally {
+      retargeting = false
     }
+  }
+
+  async function saveFigFileToPath(path: string): Promise<boolean> {
+    const saved = await saveToNewTarget(() => setPlannedFilePath(path))
+    if (saved) void startWatchingFile()
+    return saved
+  }
+
+  /** Upload the document to storage as a new stored document and keep editing it there. */
+  async function saveFigFileToStorage(providerId: StorageProviderID): Promise<boolean> {
+    const saved = await saveToNewTarget(() => {
+      stopWatchingFile()
+      setFileHandle(null)
+      setFilePath(null)
+      setDownloadName(`${state.documentName}.fig`)
+      setStorageBinding({ providerId, documentId: createCanvasId() })
+    })
+    if (saved) {
+      setSourceIdentity({ handle: null, path: null })
+      state.autosaveEnabled = true
+    }
+    return saved
   }
 
   function startWatchingCurrentFile() {
@@ -196,17 +235,19 @@ export function createDocumentSourceActions({
     setStorageDocumentSource,
     setPlannedFilePath,
     saveFigFileToPath,
+    saveFigFileToStorage,
     startWatchingCurrentFile,
     disposeDocumentIO,
     saveFigFile: () => saveAndTrack(saveFigFile),
     saveFigFileAs: () => saveAndTrack(saveFigFileAs),
     hasUnsavedChanges: changes.hasUnsavedChanges,
-    markDocumentSaved: changes.markSaved,
+    markDocumentSaved,
+    markDocumentChanged: changes.markChanged,
     getStorageBinding,
     getRecoveryId: () => recovery.getRecoveryId(),
-    adoptRecoverySnapshot: (id: string, version: number) => {
+    adoptRecoverySnapshot: (id: string) => {
       changes.markChanged()
-      return recovery.adoptRecoverySnapshot(id, version)
+      return recovery.adoptRecoverySnapshot(id)
     },
     persistRecoveryNow: () => recovery.persistNow(),
     discardRecovery: () => recovery.discardRecovery()

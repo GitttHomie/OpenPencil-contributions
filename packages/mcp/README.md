@@ -2,6 +2,8 @@
 
 Model Context Protocol server for [OpenPencil](https://openpencil.dev). It lets MCP clients such as Claude Code, Cursor, and Windsurf inspect and edit designs through the running app, reusing the same tool definitions as the built-in AI chat.
 
+The desktop app already includes the HTTP helper and its runtime. It starts and stops that helper with the app; canvas setup requires no global npm installation. Install this package separately only for standalone server use or the optional stdio bridge.
+
 ```sh
 npm install -g @open-pencil/mcp
 openpencil-mcp        # stdio transport for MCP clients

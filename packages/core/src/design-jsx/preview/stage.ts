@@ -15,6 +15,7 @@ export interface StagedJSXPreview {
   graph: SceneGraph
   pageId: string
   nodeIds: string[]
+  renderedIds: string[]
   /** Existing page child to replace visually, without changing the source graph. */
   replaceId?: string
   /** Page insertion slot when the preview adds new top-level nodes. */
@@ -66,6 +67,7 @@ export async function stageJSXPreview(
   return {
     graph,
     pageId,
+    renderedIds: results.map((result) => result.id),
     nodeIds: owner && graph.getNode(owner) ? [owner] : results.map((result) => result.id),
     replaceId: owner,
     insertIndex: placement.insertIndex

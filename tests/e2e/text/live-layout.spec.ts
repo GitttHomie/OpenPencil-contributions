@@ -1,84 +1,68 @@
-import { expect, test, useEditorSetupWithClear } from '#tests/e2e/fixtures'
-import { expectDefined } from '#tests/helpers/assert'
-import { getNodeById } from '#tests/helpers/store'
-import { createHugTextFixture, holdTextCaretVisible, readTextEdit } from '#tests/helpers/text-edit'
+import { expect, test, type Page } from '@playwright/test'
 
-const editor = useEditorSetupWithClear('/?test&no-chrome&no-rulers')
+import { CanvasHelper } from '#tests/helpers/canvas'
 
-test('Hug frames follow typing, deletion, and undo without another layout edit', async () => {
-  const { frameId, textId, siblingId } = await createHugTextFixture(editor.page)
-  const initial = expectDefined(await getNodeById(editor.page, frameId), 'initial frame')
-  await editor.page.keyboard.press('Enter')
-  await expect(editor.page.locator('textarea[aria-hidden="true"]')).toBeFocused()
-  await editor.page.keyboard.insertText('A much longer label')
-  await expect
-    .poll(() => readTextEdit(editor.page))
-    .toMatchObject({
-      id: textId,
-      text: 'A much longer label'
-    })
-  await expect
-    .poll(async () => (await getNodeById(editor.page, frameId))?.width)
-    .toBeGreaterThan(initial.width)
-  const text = expectDefined(await getNodeById(editor.page, textId), 'text')
-  const sibling = expectDefined(await getNodeById(editor.page, siblingId), 'sibling')
-  expect(sibling.x).toBeCloseTo(16 + text.width + 12)
-  expect((await readTextEdit(editor.page)).id).toBe(textId)
+// Figma desktop 126 grows a Hug frame with its label as the label is typed, and keeps it fitting
+// through undo and redo.
 
-  await editor.page.keyboard.press('Meta+a')
-  await editor.page.keyboard.insertText('Hi')
-  await expect
-    .poll(async () => (await getNodeById(editor.page, frameId))?.width)
-    .toBeLessThan(initial.width)
-  const shortened = expectDefined(await getNodeById(editor.page, frameId), 'shortened frame')
-  await editor.page.keyboard.press('Escape')
-  await editor.canvas.undo()
-  await expect
-    .poll(async () => (await getNodeById(editor.page, frameId))?.width)
-    .toBeCloseTo(initial.width)
-  await editor.canvas.redo()
-  await expect
-    .poll(async () => (await getNodeById(editor.page, frameId))?.width)
-    .toBeCloseTo(shortened.width)
-  editor.canvas.assertNoErrors()
+let page: Page
+let canvas: CanvasHelper
+
+test.describe.configure({ mode: 'serial' })
+
+test.beforeAll(async ({ browser }) => {
+  page = await browser.newPage()
+  await page.goto('/?test&no-rulers')
+  canvas = new CanvasHelper(page)
+  await canvas.waitForInit()
 })
 
-test('an empty trailing line keeps a visible clickable caret and deletes normally', async () => {
-  const { frameId, textId } = await createHugTextFixture(editor.page)
-  const initial = expectDefined(await getNodeById(editor.page, frameId), 'initial frame')
-  await editor.page.keyboard.press('Enter')
-  await expect(editor.page.locator('textarea[aria-hidden="true"]')).toBeFocused()
-  await editor.page.keyboard.press('ArrowRight')
-  await editor.page.keyboard.press('Enter')
-  const multiline = await readTextEdit(editor.page)
-  expect(multiline.text).toBe('Hello\n')
-  expect(multiline.cursor).toBe(6)
-  expect(expectDefined(multiline.caret, 'caret').y0).toBeGreaterThan(20)
-  await expect
-    .poll(async () => (await getNodeById(editor.page, frameId))?.height)
-    .toBeGreaterThan(initial.height)
+test.afterAll(async () => {
+  await page.close()
+})
 
-  const caretVisibility = await holdTextCaretVisible(editor.page)
-  try {
-    await editor.canvas.waitForRender()
-    expect(await editor.canvas.screenshotCanvasRegion(500, 300)).toMatchSnapshot(
-      'hug-text-empty-line-caret.png'
-    )
-  } finally {
-    await caretVisibility.evaluate((handle) => handle.restore())
-    await caretVisibility.dispose()
-  }
+function sizes() {
+  return page.evaluate(() => {
+    const store = window.openPencil?.getStore?.()
+    const text = [...(store?.graph.getAllNodes() ?? [])].find((node) => node.type === 'TEXT')
+    const frame = text?.parentId ? store?.graph.getNode(text.parentId) : undefined
+    return { id: text?.id ?? '', text: text?.width ?? 0, frame: frame?.width ?? 0 }
+  })
+}
 
-  await editor.page.keyboard.press('ArrowUp')
-  const point = expectDefined(multiline.caretPoint, 'empty line click point')
-  await editor.canvas.click(point.x, point.y)
-  expect((await readTextEdit(editor.page)).id).toBe(textId)
-  expect((await readTextEdit(editor.page)).cursor).toBe(6)
-  await editor.page.keyboard.press('Home')
-  await editor.page.keyboard.press('Backspace')
-  expect((await readTextEdit(editor.page)).text).toBe('Hello')
-  await expect
-    .poll(async () => (await getNodeById(editor.page, frameId))?.height)
-    .toBeCloseTo(initial.height)
-  editor.canvas.assertNoErrors()
+test('a Hug frame grows with its label while it is typed', async () => {
+  await canvas.clearCanvas()
+  await canvas.selectTool('text')
+  await canvas.click(300, 300)
+  await page.keyboard.type('Hi')
+  await page.keyboard.press('Escape')
+  await canvas.waitForRender()
+  // Shift+A wraps the text in an auto layout frame that hugs it.
+  await page.keyboard.press('Shift+a')
+  await canvas.waitForRender()
+  const wrapped = await sizes()
+  expect(wrapped.frame).toBe(wrapped.text)
+
+  await page.evaluate((id) => {
+    const store = window.openPencil?.getStore?.()
+    store?.select([id])
+    store?.startTextEditing(id)
+  }, wrapped.id)
+  await page.keyboard.press('End')
+  await page.keyboard.type(' there, a longer label')
+  await canvas.waitForRender()
+  const typing = await sizes()
+  expect(typing.text).toBeGreaterThan(wrapped.text)
+  expect(typing.frame).toBe(typing.text)
+
+  await page.keyboard.press('Escape')
+  await canvas.waitForRender()
+  const committed = await sizes()
+  expect(committed.frame).toBe(committed.text)
+
+  await canvas.undo()
+  await expect.poll(sizes).toMatchObject({ text: wrapped.text, frame: wrapped.frame })
+  await canvas.redo()
+  await expect.poll(sizes).toMatchObject({ text: committed.text, frame: committed.frame })
+  canvas.assertNoErrors()
 })

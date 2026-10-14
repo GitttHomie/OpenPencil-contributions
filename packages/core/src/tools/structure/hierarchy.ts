@@ -1,23 +1,37 @@
 import * as v from 'valibot'
 
+import { toolNumber } from '#core/tools/input'
 import { defineTool, nodeSummary, requireNodes } from '#core/tools/schema'
 
 export const reparentNode = defineTool({
   name: 'reparent_node',
 
-  description: 'Move a node into a different parent.',
+  description:
+    'Move a node to a parent, or reorder it within its current parent. Set index for its final zero-based position; omit it to move to the end.',
   execution: { kind: 'sync', mutation: 'document' },
-  input: v.object({
+  input: v.strictObject({
     id: v.pipe(v.string(), v.description('Node ID to move')),
-    parent_id: v.pipe(v.string(), v.description('New parent node ID'))
+    parent_id: v.pipe(v.string(), v.description('Destination parent node ID')),
+    index: v.optional(
+      toolNumber(
+        v.pipe(
+          v.number(),
+          v.integer(),
+          v.minValue(0),
+          v.description('Final zero-based child index')
+        )
+      )
+    )
   }),
-  execute: (figma, { id, parent_id }) => {
+  execute: (figma, { id, parent_id, index }) => {
     const node = figma.getNodeById(id)
     const parent = figma.getNodeById(parent_id)
     if (!node) return { error: `Node "${id}" not found` }
     if (!parent) return { error: `Parent "${parent_id}" not found` }
-    parent.appendChild(node)
-    return { id, parent_id }
+    if (index !== undefined) parent.insertChild(index, node)
+    else if (node.parent?.id === parent_id) parent.insertChild(parent.children.length - 1, node)
+    else parent.appendChild(node)
+    return { id, parent_id, index: parent.children.findIndex((child) => child.id === id) }
   }
 })
 
@@ -25,8 +39,9 @@ export const groupNodes = defineTool({
   name: 'group_nodes',
 
   description: 'Group selected nodes.',
+  exposure: { ai: false, mcp: false, webmcp: false },
   execution: { kind: 'sync', mutation: 'document' },
-  input: v.object({
+  input: v.strictObject({
     ids: v.pipe(v.array(v.string()), v.minLength(2), v.description('Node IDs to group'))
   }),
   execute: (figma, { ids }) => {
@@ -43,7 +58,7 @@ export const ungroupNode = defineTool({
 
   description: 'Ungroup a group node.',
   execution: { kind: 'sync', mutation: 'document' },
-  input: v.object({
+  input: v.strictObject({
     id: v.pipe(v.string(), v.description('Group node ID'))
   }),
   execute: (figma, { id }) => {
@@ -59,7 +74,7 @@ export const flattenNodes = defineTool({
 
   description: 'Flatten nodes into a single vector.',
   execution: { kind: 'sync', mutation: 'document' },
-  input: v.object({
+  input: v.strictObject({
     ids: v.pipe(v.array(v.string()), v.minLength(1), v.description('Node IDs to flatten'))
   }),
   execute: (figma, { ids }) => {
@@ -73,7 +88,7 @@ export const nodeToComponent = defineTool({
 
   description: 'Convert one or more frames/groups into components.',
   execution: { kind: 'sync', mutation: 'document' },
-  input: v.object({
+  input: v.strictObject({
     ids: v.pipe(v.array(v.string()), v.minLength(1), v.description('Node IDs to convert'))
   }),
   execute: (figma, { ids }) => {

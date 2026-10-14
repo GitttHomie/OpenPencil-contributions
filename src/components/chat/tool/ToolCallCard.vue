@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { CollapsibleContent, CollapsibleRoot, CollapsibleTrigger } from 'reka-ui'
-import { computed, ref } from 'vue'
+import { computed, inject, ref } from 'vue'
 
-import { useI18n } from '@open-pencil/vue'
+import { useI18n, useAutomationMessages } from '@open-pencil/vue'
 
 import { acpToolPresentation } from '@/app/ai/acp/adapters/registry'
+import { projectChatMedia } from '@/app/ai/chat/media'
 import {
   displayedToolOutput,
+  displayedToolInput,
   toolDisplayName,
   toolErrorText,
   toolHasInput,
@@ -18,19 +20,29 @@ import {
   type ToolCallPart
 } from '@/app/ai/chat/tool-calls/display'
 import { readToolChange } from '@/app/ai/tools/changes/store'
+import { getActiveEditorStore } from '@/app/editor/active-store'
+import { placeMCPImage } from '@/app/integrations/mcp/images'
+import ChatImagePreview from '@/components/chat/ChatImagePreview.vue'
+import { CHAT_NODES_LIVE } from '@/components/chat/tool/context'
 import { toolCallState } from '@/components/chat/tool/state'
 import ToolChangeView from '@/components/chat/tool/ToolChangeView.vue'
 import ToolNodeChips from '@/components/chat/tool/ToolNodeChips.vue'
 import { loadCodeViewer } from '@/components/code-editor/lazy'
 import CodeViewer from '@/components/code-editor/LazyCodeViewer.vue'
+import AppButton from '@/components/ui/button/AppButton.vue'
 import AppAlert from '@/components/ui/feedback/AppAlert.vue'
 import AppSpinner from '@/components/ui/feedback/AppSpinner.vue'
 import SegmentedControl from '@/components/ui/select/SegmentedControl.vue'
 import { chatToolTheme } from '@/theme/chat/tool'
 import { collapsibleContentMotion } from '@/theme/collapsible/collapsible'
 
-const { part } = defineProps<{ part: ToolCallPart }>()
+/** `undone`: the user undid the call's edit, by Undo or the chat's Revert. */
+const { part, undone = false } = defineProps<{ part: ToolCallPart; undone?: boolean }>()
 const { ai } = useI18n()
+const automation = useAutomationMessages()
+const live = inject(CHAT_NODES_LIVE, ref(true))
+const placing = ref(false)
+const placementFailed = ref(false)
 const ui = chatToolTheme()
 
 const state = computed(() => toolCallState(part))
@@ -48,6 +60,10 @@ const image = computed(() => toolImage(part))
 const nodeIds = computed(() => (state.value === 'pending' ? [] : toolNodeIds(part)))
 const hasInput = computed(() => toolHasInput(part))
 const output = computed(() => displayedToolOutput(part))
+const input = computed(() => displayedToolInput(part))
+const images = computed(
+  () => projectChatMedia(shownView.value === 'input' ? part.input : part.output).images
+)
 // Error results such as `diff_apply`'s mismatch report stay inspectable next to the alert.
 const hasOutput = computed(() => output.value !== undefined)
 // Streaming source is worth watching; other pending calls have nothing to show yet.
@@ -85,10 +101,27 @@ const stateLabel = computed(() => {
 function json(value: unknown): string {
   return JSON.stringify(value, null, 2) ?? ''
 }
+async function placeImage() {
+  if (!image.value || !live.value || placing.value) return
+  placing.value = true
+  placementFailed.value = false
+  try {
+    await placeMCPImage(getActiveEditorStore(), image.value, name.value)
+  } catch {
+    placementFailed.value = true
+  } finally {
+    placing.value = false
+  }
+}
 </script>
 
 <template>
-  <CollapsibleRoot :class="ui.root()" :data-tool-state="state" data-slot="chat-tool-call">
+  <CollapsibleRoot
+    :class="ui.root()"
+    :data-tool-state="state"
+    :data-undone="undone"
+    data-slot="chat-tool-call"
+  >
     <!-- Start loading CodeMirror on hover, so it is ready by the time the call opens. -->
     <CollapsibleTrigger
       :class="ui.trigger()"
@@ -103,6 +136,10 @@ function json(value: unknown): string {
       </span>
       <span :class="ui.name()">{{ name }}</span>
       <span :class="ui.summary()">{{ summary }}</span>
+      <span v-if="undone" :class="ui.undone()" data-slot="chat-tool-undone">
+        <icon-lucide-undo-2 :class="ui.undoneIcon()" aria-hidden="true" />
+        {{ ai.toolUndone }}
+      </span>
       <icon-lucide-chevron-down v-if="expandable" :class="ui.chevron()" aria-hidden="true" />
     </CollapsibleTrigger>
     <p v-if="description" class="px-3 pb-2 text-xs text-muted">{{ description }}</p>
@@ -127,23 +164,36 @@ function json(value: unknown): string {
           />
           <CodeViewer
             v-else-if="hasInput"
-            :code="json(part.input)"
+            :code="json(input)"
             language="json"
             :label="ai.toolInput"
           />
         </template>
-        <img
-          v-else-if="shownView === 'output' && image"
-          :src="image"
-          :alt="summary || name"
-          :class="ui.image()"
-        />
+        <template v-else-if="shownView === 'output' && image">
+          <CodeViewer :code="json(output)" language="json" :label="ai.toolOutput" />
+          <AppButton v-if="live" size="sm" :loading="placing" @click="placeImage">{{
+            automation.placeImage
+          }}</AppButton>
+          <AppAlert
+            v-if="placementFailed"
+            tone="error"
+            :heading="automation.imagePlacementFailed"
+          />
+        </template>
         <CodeViewer
           v-else-if="shownView === 'output'"
           :code="json(output)"
           language="json"
           :label="ai.toolOutput"
         />
+        <template v-if="shownView === 'input' || shownView === 'output'">
+          <ChatImagePreview
+            v-for="preview in images"
+            :key="preview.url"
+            :image="preview"
+            :label="summary || name"
+          />
+        </template>
       </div>
     </CollapsibleContent>
   </CollapsibleRoot>

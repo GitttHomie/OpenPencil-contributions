@@ -11,7 +11,7 @@ import SettingsSection from '@/components/settings/layout/SettingsSection.vue'
 import AppButton from '@/components/ui/button/AppButton.vue'
 import AppAlert from '@/components/ui/feedback/AppAlert.vue'
 
-const { ai, common } = useI18n()
+const { ai, common, automation } = useI18n()
 const { providerId } = defineProps<{ providerId: AIProviderID }>()
 const {
   agents,
@@ -21,7 +21,6 @@ const {
   error,
   npmAvailable,
   canvasBridgeAvailable,
-  canvasBridgeOutdated,
   setupCanvasBridge,
   busy,
   refresh,
@@ -54,42 +53,29 @@ const selectedAgents = computed(() =>
             ? ai.localAgentsLookupFailed
             : error === 'npm'
               ? ai.localAgentsNpmRequired
-              : error === 'canvas-install'
-                ? ai.localAgentsCanvasInstallFailed
-                : error === 'canvas-start'
-                  ? ai.localAgentsCanvasStartFailed
-                  : ai.localAgentsInstallFailed
+              : error === 'canvas-start'
+                ? ai.localAgentsCanvasStartFailed
+                : ai.localAgentsInstallFailed
         "
       />
       <AppAlert
-        v-if="
-          agents.length &&
-          (!canvasBridgeAvailable || canvasBridgeOutdated || error === 'canvas-start')
+        v-if="agents.length && (!canvasBridgeAvailable || error === 'canvas-start')"
+        :heading="
+          canvasBridgeAvailable ? ai.localAgentsCanvasRequired : automation.mcpFailureNotInstalled
         "
-        :heading="canvasBridgeOutdated ? ai.aiSetupAgentUpdateMCP : ai.localAgentsCanvasRequired"
-        :description="ai.localAgentsCanvasHint"
+        :description="
+          canvasBridgeAvailable ? ai.localAgentsCanvasHint : automation.mcpFailureNotInstalledHint
+        "
       >
-        <template #actions>
+        <template v-if="canvasBridgeAvailable" #actions>
           <AppButton
             size="xs"
             variant="outline"
-            :disabled="busy || ((!canvasBridgeAvailable || canvasBridgeOutdated) && !npmAvailable)"
+            :disabled="busy"
             :loading="installing === 'canvas'"
             @click="setupCanvasBridge"
-            >{{
-              canvasBridgeOutdated
-                ? ai.aiSetupAgentUpdateMCP
-                : canvasBridgeAvailable
-                  ? common.connect
-                  : ai.localAgentsCanvasInstall
-            }}</AppButton
+            >{{ common.connect }}</AppButton
           >
-          <p
-            v-if="(!canvasBridgeAvailable || canvasBridgeOutdated) && !npmAvailable"
-            class="text-[11px] text-muted"
-          >
-            {{ ai.localAgentsNpmRequired }}
-          </p>
         </template>
       </AppAlert>
       <SettingsGroup v-if="agents.length">

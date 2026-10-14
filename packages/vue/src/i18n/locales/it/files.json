@@ -25,5 +25,15 @@
   "newDesign": "Nuovo design",
   "noMatchingFiles": "Nessun file corrisponde a «{query}».",
   "saveAsPrompt": "Salva con nome:",
-  "browserFileAPINotSupported": "Il browser non supporta l’API dei file locali. I file verranno scaricati anziché salvati nella posizione corrente."
+  "browserFileAPINotSupported": "Il browser non supporta l’API dei file locali. I file verranno scaricati anziché salvati nella posizione corrente.",
+  "cleanupHeading": "Pulire i componenti incorporati?",
+  "cleanupDescription": "Rimuovi {count} definizioni inutilizzate dalle pagine interne. Conserva tutte le istanze, le definizioni necessarie e i componenti delle pagine normali.",
+  "cleanupKeep": "Mantieni tutto",
+  "cleanupRemove": "Rimuovi componenti inutilizzati",
+  "cleanupIntro": "Scegli come aprire «{name}». Il file originale rimane invariato fino al salvataggio.",
+  "cleanupInternalHeading": "Rimuovi pagine interne e istanze collegate",
+  "cleanupInternalDescription": "Rimuovi {canvases} pagine interne, {components} definizioni incorporate e {instances} livelli di istanze collegate su {pages} pagine normali.",
+  "cleanupInternalWarning": "Questa operazione modifica i progetti, inclusi i contenuti nascosti e le istanze di librerie esterne. I livelli collegati annidati vengono rimossi senza eliminare i pulsanti o le cornici che li contengono. I componenti validi sulle pagine normali rimangono.",
+  "cleanupHiddenInstances": "Nascondi {count} istanze annidate scambiate le cui sostituzioni vengono rimosse, conservando i componenti che le contengono.",
+  "cleanupInternalRemove": "Rimuovi pagine e istanze collegate"
 }

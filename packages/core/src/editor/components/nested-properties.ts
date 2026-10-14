@@ -23,8 +23,11 @@ export interface NestedComponentProperty {
   definition: ComponentPropertyDefinition
 }
 
-function exposedProperties(node: SceneNode): string[] {
-  return readPluginData(node.pluginData, OPEN_PENCIL_PLUGIN_DATA.exposedComponentProperties) ?? []
+function exposedProperties(node: SceneNode, definitions: ComponentPropertyDefinition[]): string[] {
+  return (
+    readPluginData(node.pluginData, OPEN_PENCIL_PLUGIN_DATA.exposedComponentProperties) ??
+    (node.isExposedInstance ? definitions.map((definition) => definition.id) : [])
+  )
 }
 
 function exposureSource(graph: SceneGraph, node: SceneNode): SceneNode {
@@ -71,9 +74,10 @@ export function nestedComponentProperties(
       const source = sourceId ? graph.getNode(sourceId) : undefined
       if (source?.type !== 'INSTANCE') continue
       const original = exposureSource(graph, source)
-      const exposed = new Set(exposedProperties(original))
+      const properties = definitions(child.id)
+      const exposed = new Set(exposedProperties(original, properties))
       if (!exposed.size) continue
-      for (const definition of definitions(child.id)) {
+      for (const definition of properties) {
         if (!exposed.has(definition.id) || definition.type === 'SLOT') continue
         result.push({
           id: nestedPropertyId(original.id, definition.id),
@@ -105,7 +109,9 @@ export function createNestedPropertyActions(ctx: EditorContext, definitions: Def
               ? `${variant.name} / ${node.name}`
               : node.name,
           properties,
-          exposed: exposedProperties(node).filter((id) => properties.some((item) => item.id === id))
+          exposed: exposedProperties(node, properties).filter((id) =>
+            properties.some((item) => item.id === id)
+          )
         }
       })
   }
@@ -129,26 +135,35 @@ export function createNestedPropertyActions(ctx: EditorContext, definitions: Def
         .map((item) => item.id)
     )
     if (propertyIds.some((id) => !available.has(id))) return false
-    const before = exposedProperties(context.node)
+    const before = readPluginData(
+      context.node.pluginData,
+      OPEN_PENCIL_PLUGIN_DATA.exposedComponentProperties
+    )
+    const wasExposed = context.node.isExposedInstance
     const after = [...new Set(propertyIds)]
-    if (before.length === after.length && before.every((id, index) => id === after[index]))
+    if (
+      !wasExposed &&
+      before?.length === after.length &&
+      before.every((id, index) => id === after[index])
+    )
       return true
-    const apply = (ids: string[]) => {
+    const apply = (ids: string[] | undefined, isExposedInstance: boolean) => {
       const node = ctx.graph.getNode(nodeId)
       if (!node) return
       ctx.graph.updateNode(nodeId, {
+        isExposedInstance,
         pluginData: withPluginData(
           node.pluginData,
           OPEN_PENCIL_PLUGIN_DATA.exposedComponentProperties,
-          ids.length ? ids : undefined
+          ids
         )
       })
       ctx.requestRender()
     }
     ctx.undo.execute({
       label: 'Expose nested component properties',
-      forward: () => apply(after),
-      inverse: () => apply(before)
+      forward: () => apply(after, false),
+      inverse: () => apply(before, wasExposed)
     })
     return true
   }

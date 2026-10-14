@@ -9,6 +9,7 @@ import {
 } from '@open-pencil/vue'
 import type { BindingTarget, NumberBindingPath } from '@open-pencil/vue'
 
+import { formatNumber } from '@/app/i18n/number'
 import NumberField from '@/components/inputs/NumberField.vue'
 import VariableBindingPicker from '@/components/properties/binding/VariableBindingPicker.vue'
 import { BindingPill, useBindingFieldUI } from '@/components/ui/binding'
@@ -27,6 +28,7 @@ const {
   nodeId,
   nodeIds,
   editProperties = false,
+  displayScale = 1,
   bindingPath,
   bindingPaths
 } = defineProps<{
@@ -42,6 +44,7 @@ const {
   nodeId: string
   nodeIds?: readonly string[]
   editProperties?: boolean
+  displayScale?: number
   bindingPath: NumberBindingPath
   bindingPaths?: readonly NumberBindingPath[]
 }>()
@@ -53,7 +56,7 @@ const emit = defineEmits<{
 }>()
 
 const { panels, common } = useI18n()
-const provider = useNumberBindingProvider()
+const provider = useNumberBindingProvider(displayScale)
 const attrs = useAttrs()
 const targets = computed<BindingTarget[]>(() =>
   (nodeIds ?? [nodeId]).flatMap((id) =>
@@ -85,6 +88,12 @@ function bindingTooltip(name: string, resolvedValue: unknown) {
   return `${name} · ${resolvedValue}${suffix ?? ''}`
 }
 
+function displayBoundValue(value: unknown): string | undefined {
+  if (typeof value !== 'number') return undefined
+  const display = formatNumber(displayScale === 100 ? Math.round(value) : value)
+  return `${display}${suffix ?? ''}`
+}
+
 defineOptions({ inheritAttrs: false })
 </script>
 
@@ -106,7 +115,7 @@ defineOptions({ inheritAttrs: false })
       :min="min"
       :max="max"
       :step="step"
-      :ui="{ root: bindingStyles.root }"
+      :ui="{ root: bindingStyles.root, display: bindingStyles.content }"
       :data-property="attrs['data-property'] ?? bindingPath"
       :aria-label="accessibleLabel"
       @update:model-value="update"
@@ -123,6 +132,7 @@ defineOptions({ inheritAttrs: false })
         <BindingPill
           :unresolved="binding.unresolved"
           :label="binding.variable?.name ?? binding.bindingId ?? panels.unresolvedVariable"
+          :value="binding.mixedValues ? panels.mixed : displayBoundValue(binding.resolvedValue)"
           :tooltip="
             binding.state === 'unresolved'
               ? panels.unresolvedVariable
@@ -133,22 +143,23 @@ defineOptions({ inheritAttrs: false })
         />
       </template>
       <template #suffix>
-        <Tip
-          v-if="binding.mixedBindings"
-          :label="binding.unresolved ? panels.unresolvedVariable : panels.mixedBindings"
-        >
-          <span
-            data-slot="mixed-bindings"
-            :aria-label="binding.unresolved ? panels.unresolvedVariable : panels.mixedBindings"
-            class="inline-flex shrink-0 items-center"
+        <span :class="bindingStyles.actions">
+          <Tip
+            v-if="binding.mixedBindings"
+            :label="binding.unresolved ? panels.unresolvedVariable : panels.mixedBindings"
           >
-            <icon-lucide-unlink class="size-3 text-muted" />
-          </span>
-        </Tip>
-        <Tip v-else-if="binding.mixedValues" :label="panels.mixedValues">
-          <span class="text-[10px] text-muted">{{ panels.mixed }}</span>
-        </Tip>
-        <span :class="$slots['after-variable'] ? '' : 'pr-1'" class="flex items-center">
+            <span
+              data-slot="mixed-bindings"
+              :aria-label="binding.unresolved ? panels.unresolvedVariable : panels.mixedBindings"
+              class="inline-flex shrink-0 items-center"
+            >
+              <icon-lucide-unlink class="size-3 text-muted" />
+            </span>
+          </Tip>
+          <Tip v-else-if="binding.mixedValues" :label="panels.mixedValues">
+            <span class="text-[10px] text-muted">{{ panels.mixed }}</span>
+          </Tip>
+          <slot name="value-actions" />
           <VariableBindingPicker
             :trigger-label="panels.applyVariable"
             :search-placeholder="common.search"
@@ -163,7 +174,6 @@ defineOptions({ inheritAttrs: false })
             :create-submit-label="panels.create"
           />
         </span>
-        <slot name="after-variable" />
       </template>
     </NumberField>
   </BindableValueRoot>

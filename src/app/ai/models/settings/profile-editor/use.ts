@@ -58,6 +58,7 @@ export function useModelProfileEditor({ profileId, keyInput, labels: ai }: Profi
 
   const {
     connectionTestStatus,
+    imageTestStatus,
     connectionTestReason,
     hasExistingKey,
     resetConnectionTest,
@@ -166,6 +167,7 @@ export function useModelProfileEditor({ profileId, keyInput, labels: ai }: Profi
     toolsEnabled,
     visionEnabled,
     connectionTestStatus,
+    imageTestStatus,
     connectionTestReason,
     saveError,
     resetConnectionTest,

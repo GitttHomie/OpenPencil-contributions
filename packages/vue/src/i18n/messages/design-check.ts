@@ -70,6 +70,8 @@ export const designCheckMessageDefaults = {
   detailStrokeColor: params('Stroke: {variable}'),
   bindVariable: params('Bind to {variable}'),
   bindAll: params('Bind all {count}'),
+  fixConvertToFrame: 'Convert to frame',
+  fixDeleteLayer: 'Delete layer',
   fixRoundPixels: 'Round to whole pixels',
   fixUseValue: params('Change to {value}'),
   fixFullRadius: 'Use full radius',

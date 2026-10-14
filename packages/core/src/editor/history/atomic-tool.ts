@@ -1,5 +1,3 @@
-import { isEqual } from 'es-toolkit'
-
 import {
   captureGraphCheckpoint,
   type SceneGraph,
@@ -11,38 +9,21 @@ import type { Editor } from '#core/editor/create'
 import type { FigmaAPI } from '#core/figma-api/index'
 import { isAtomicTool, type ToolDef } from '#core/tools/schema'
 
-// Capture property changes across pages. Component synchronization remains editor-owned.
-const MAX_TRANSACTION_NODES = 10_000
+import { diffFields, type FieldChanges } from './diff'
 
-type MutationEditor = Pick<Editor, 'graph' | 'runLayoutForNode' | 'requestRender' | 'pushUndoEntry'>
-type Changes<T> = {
-  id: string
-  before: Partial<T>
-  after: Partial<T>
-  absent: Record<'before' | 'after', (keyof T)[]>
-}
+type MutationEditor = Pick<Editor, 'graph' | 'runLayoutForNode' | 'requestRender' | 'pushUndoStep'>
 
-function changes<T extends object>(before: Map<string, T>, after: Map<string, T>): Changes<T>[] {
-  const result: Changes<T>[] = []
+function changes<T extends object>(
+  before: Map<string, T>,
+  after: Map<string, T>
+): FieldChanges<T>[] {
+  const result: FieldChanges<T>[] = []
   for (const [id, previous] of before) {
     const current = after.get(id)
     if (!current) throw new Error('Atomic tools must not remove nodes or variables')
-    const inverse: Partial<T> = {}
-    const forward: Partial<T> = {}
-    const absent: Changes<T>['absent'] = { before: [], after: [] }
-    const keys = new Set([...Object.keys(previous), ...Object.keys(current)] as (keyof T)[])
-    for (const key of keys) {
-      const existed = Object.hasOwn(previous, key)
-      const exists = Object.hasOwn(current, key)
-      if (existed === exists && isEqual(previous[key], current[key])) continue
-      inverse[key] = structuredClone(previous[key])
-      forward[key] = structuredClone(current[key])
-      if (!existed) absent.before.push(key)
-      if (!exists) absent.after.push(key)
-    }
-    if (Object.keys(forward).length) result.push({ id, before: inverse, after: forward, absent })
+    const change = diffFields(id, previous, current)
+    if (change) result.push(change)
   }
-  if (before.size !== after.size) throw new Error('Atomic tools must not create nodes or variables')
   return result
 }
 
@@ -64,16 +45,13 @@ export function executeAtomicTool(
     throw new Error('The target document is no longer open')
   }
   const graph = figma.graph
-  if (graph.nodes.size + graph.variables.size > MAX_TRANSACTION_NODES) {
-    throw new Error('Document too large for atomic agent editing (maximum 10000 nodes)')
-  }
-  const checkpoint = captureGraphCheckpoint(graph)
+  const checkpoint = captureGraphCheckpoint(graph, { incremental: true })
   const { nodes, variables } = checkpoint
   const pageId = figma.currentPageId
 
   const replay = (
-    nodeChanges: Changes<SceneNode>[],
-    variableChanges: Changes<Variable>[],
+    nodeChanges: FieldChanges<SceneNode>[],
+    variableChanges: FieldChanges<Variable>[],
     direction: 'before' | 'after'
   ) => {
     if (editor.graph !== graph) throw new Error('The target document has been replaced')
@@ -118,12 +96,13 @@ export function executeAtomicTool(
       changes(nodes, graph.nodes).map((change) => change.id)
     )
     const nodeChanges = changes(nodes, graph.nodes)
+    checkpoint.assertPropertiesOnly()
     const contentChanged =
       variableChanges.length > 0 ||
       nodeChanges.some((change) => Object.keys(change.after).some((key) => key !== 'source'))
     if (!contentChanged && nodeChanges.length) replay(nodeChanges, [], 'before')
     if (contentChanged) {
-      editor.pushUndoEntry({
+      editor.pushUndoStep({
         label: `${options.label ?? 'Agent'}: ${def.name}`,
         inverse: () => replay(nodeChanges, variableChanges, 'before'),
         forward: () => replay(nodeChanges, variableChanges, 'after')
@@ -135,6 +114,8 @@ export function executeAtomicTool(
     checkpoint.restore()
     editor.requestRender()
     throw error
+  } finally {
+    checkpoint.dispose()
   }
 }
 
@@ -147,9 +128,7 @@ function layout(
 ): void {
   const scopes = new Set(allPages ? graph.getPages().map((page) => page.id) : [pageId])
   for (const id of changedIds) {
-    let node = graph.getNode(id)
-    while (node && node.type !== 'CANVAS')
-      node = node.parentId ? graph.getNode(node.parentId) : undefined
+    const node = graph.closest(id, (candidate) => candidate.type === 'CANVAS')
     if (node) scopes.add(node.id)
   }
   for (const id of scopes) editor.runLayoutForNode(id)

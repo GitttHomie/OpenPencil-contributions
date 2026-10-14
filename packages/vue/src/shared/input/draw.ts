@@ -1,19 +1,50 @@
 import { DEFAULT_TEXT_HEIGHT, DEFAULT_TEXT_WIDTH } from '@open-pencil/core/constants'
 import type { Editor } from '@open-pencil/core/editor'
-import type { SceneNode } from '@open-pencil/scene-graph'
+import type { NodeType, SceneNode } from '@open-pencil/scene-graph'
+import { getWorldMatrix } from '@open-pencil/scene-graph/coordinate'
+import Matrix from '@open-pencil/scene-graph/matrix'
 
 import { computeAutoLayoutIndicatorForFrame } from '#vue/shared/input/auto-layout'
+import { findDrawParent } from '#vue/shared/input/drop-target'
 import { TOOL_TO_NODE } from '#vue/shared/input/types'
 import type { DragDraw, DragState } from '#vue/shared/input/types'
 
-function attachDraw(editor: Editor, nodeId: string, parent: SceneNode, x: number, y: number) {
-  if (parent.layoutMode !== 'NONE') {
-    computeAutoLayoutIndicatorForFrame(parent, x, y, editor, new Set([nodeId]))
-    const index = editor.state.layoutInsertIndicator?.index ?? parent.childIds.length
-    editor.reorderInAutoLayout(nodeId, parent.id, index)
-  } else {
-    editor.reorderChildWithUndo(nodeId, parent.id, parent.childIds.length)
+/** Maps canvas points into the axes of the parent a layer is drawn in. */
+function parentSpace(editor: Editor, parentId: string): DragDraw['toLocal'] {
+  const parent = editor.graph.getNode(parentId)
+  if (!parent || parent.type === 'CANVAS') return (x, y) => ({ x, y })
+  const toLocal = Matrix.invert(getWorldMatrix(parent, editor.graph)) ?? Matrix.identity()
+  return (x, y) => {
+    const [lx, ly] = Matrix.mapPoints(toLocal, [x, y])
+    return { x: lx, y: ly }
   }
+}
+
+function startDraw(
+  type: NodeType,
+  label: string,
+  cx: number,
+  cy: number,
+  editor: Editor,
+  setDrag: (d: DragState) => void
+) {
+  editor.undo.beginBatch(label)
+  const parentId = findDrawParent(cx, cy, type, editor)
+  const parent = editor.graph.getNode(parentId)
+  // Flow children join only after release, so layout cannot fight the drawing gesture.
+  const deferred = parent && parent.layoutMode !== 'NONE' ? parent : null
+  const drawingParent = deferred ? editor.state.currentPageId : parentId
+  const toLocal = parentSpace(editor, drawingParent)
+  const snap = editor.state.snappingPreferences.pixelGrid ? Math.round : (value: number) => value
+  const local = toLocal(cx, cy)
+  const start = { x: snap(local.x), y: snap(local.y) }
+  const nodeId = editor.createShape(type, start.x, start.y, 0, 0, drawingParent)
+  if (type === 'TEXT') editor.graph.updateNode(nodeId, { text: '' })
+  editor.select([nodeId])
+  editor.setDropTarget(parentId === editor.state.currentPageId ? null : parentId)
+  setDrag(
+    createDraw(editor, nodeId, start.x, start.y, toLocal, type === 'LINE', snap, deferred, cx, cy)
+  )
 }
 
 export function startTextDraw(
@@ -22,11 +53,7 @@ export function startTextDraw(
   editor: Editor,
   setDrag: (d: DragState) => void
 ) {
-  editor.undo.beginBatch('Create text')
-  const nodeId = editor.createShape('TEXT', cx, cy, 0, 0)
-  editor.graph.updateNode(nodeId, { text: '' })
-  editor.select([nodeId])
-  setDrag(createDraw(editor, nodeId, cx, cy))
+  startDraw('TEXT', 'Create text', cx, cy, editor, setDrag)
 }
 
 export function startShapeDraw(
@@ -38,21 +65,25 @@ export function startShapeDraw(
   const nodeType = TOOL_TO_NODE[editor.state.activeTool]
   if (!nodeType) return
 
-  editor.undo.beginBatch('Create shape')
-  const nodeId = editor.createShape(nodeType, cx, cy, 0, 0)
-  editor.select([nodeId])
-  setDrag(createDraw(editor, nodeId, cx, cy))
+  startDraw(nodeType, 'Create shape', cx, cy, editor, setDrag)
 }
 
 const LINE_ANGLE_STEP = 45
 
+/** A line from the start point to the cursor: its length, no height, and the angle as rotation. */
+function lineGeometry(d: DragDraw, dx: number, dy: number, shiftKey: boolean): Partial<SceneNode> {
+  let angle = (Math.atan2(dy, dx) * 180) / Math.PI
+  // Shift snaps the angle to steps of 45°.
+  if (shiftKey) angle = Math.round(angle / LINE_ANGLE_STEP) * LINE_ANGLE_STEP
+  return { x: d.startX, y: d.startY, width: Math.hypot(dx, dy), height: 0, rotation: angle }
+}
+
 export function handleDrawMove(d: DragDraw, cx: number, cy: number, shiftKey: boolean) {
-  let w = cx - d.startX
-  let h = cy - d.startY
+  const point = d.toLocal(cx, cy)
+  let w = d.snap(point.x) - d.startX
+  let h = d.snap(point.y) - d.startY
   if (d.line) {
-    let angle = (Math.atan2(h, w) * 180) / Math.PI
-    if (shiftKey) angle = Math.round(angle / LINE_ANGLE_STEP) * LINE_ANGLE_STEP
-    d.update({ x: d.startX, y: d.startY, width: Math.hypot(w, h), height: 0, rotation: angle })
+    d.update(lineGeometry(d, w, h, shiftKey))
     return
   }
 
@@ -70,49 +101,50 @@ export function handleDrawMove(d: DragDraw, cx: number, cy: number, shiftKey: bo
   })
 }
 
-function committedDimensions(node: SceneNode | undefined): Partial<SceneNode> | undefined {
-  if (node?.type === 'TEXT') {
-    const isPointText = node.width < 2 && node.height < 2
-    return {
-      width: isPointText ? DEFAULT_TEXT_WIDTH : node.width,
-      height: isPointText ? DEFAULT_TEXT_HEIGHT : node.height,
-      textAutoResize: isPointText ? 'WIDTH_AND_HEIGHT' : 'NONE'
-    }
-  } else if (node?.type === 'LINE' && node.width < 2) {
-    return { width: 100, height: 0, rotation: 0 }
-  } else if (node && node.width < 2 && node.height < 2) {
-    return { width: 100, height: 100 }
+/** Gives a layer made by a click its default size; returns whether it was only clicked. */
+function settleDrawnSize(preview: ReturnType<Editor['beginNodePreview']>, node: SceneNode) {
+  const clicked = node.width < 2 && node.height < 2
+  if (node.type === 'TEXT') {
+    preview.update(node.id, {
+      width: clicked ? DEFAULT_TEXT_WIDTH : node.width,
+      height: clicked ? DEFAULT_TEXT_HEIGHT : node.height,
+      textAutoResize: clicked ? 'WIDTH_AND_HEIGHT' : 'NONE'
+    })
+  } else if (node.type === 'LINE' && node.width < 2) {
+    preview.update(node.id, { width: 100, height: 0, rotation: 0 })
+    return true
+  } else if (clicked) {
+    preview.update(node.id, { width: 100, height: 100 })
   }
-  return undefined
+  return clicked
 }
 
-function createDraw(editor: Editor, nodeId: string, startX: number, startY: number): DragDraw {
+function attachFlowDraw(editor: Editor, id: string, parent: SceneNode, x: number, y: number) {
+  computeAutoLayoutIndicatorForFrame(parent, x, y, editor, new Set([id]))
+  const index = editor.state.layoutInsertIndicator?.index ?? parent.childIds.length
+  editor.reorderInAutoLayout(id, parent.id, index)
+}
+
+function createDraw(
+  editor: Editor,
+  nodeId: string,
+  startX: number,
+  startY: number,
+  toLocal: DragDraw['toLocal'],
+  line: boolean,
+  snap: DragDraw['snap'],
+  deferred: SceneNode | null,
+  canvasX: number,
+  canvasY: number
+): DragDraw {
   const graph = editor.graph
-  const start = editor.snapGeometry({ x: startX, y: startY })
-  // Keep the draft in page coordinates until release, so layout cannot fight drawing.
-  let parent = graph.hitTestFrame(startX, startY, new Set([nodeId]), editor.state.currentPageId)
-  while (
-    parent &&
-    (parent.locked || ['GROUP', 'BOOLEAN_OPERATION', 'COMPONENT_SET'].includes(parent.type))
-  ) {
-    parent = parent.parentId ? (graph.getNode(parent.parentId) ?? null) : null
-  }
-  if (parent) parent = graph.getNode(editor.acceptingParent(parent.id)) ?? null
-  if (graph.getNode(nodeId)?.type === 'SECTION') {
-    while (parent && parent.type !== 'SECTION' && parent.type !== 'CANVAS') {
-      parent = parent.parentId ? (graph.getNode(parent.parentId) ?? null) : null
-    }
-  }
   const preview = editor.beginNodePreview('Draw dimensions')
   let finished = false
-  editor.setDropTarget(parent?.id ?? null)
 
   function cancel() {
     if (finished) return
     finished = true
     preview.cancel()
-    editor.setDropTarget(null)
-    editor.setLayoutInsertIndicator(null)
     // Never replay an old document's creation undo against a replacement graph.
     if (editor.graph === graph) editor.undo.rollbackBatch()
   }
@@ -125,14 +157,17 @@ function createDraw(editor: Editor, nodeId: string, startX: number, startY: numb
     }
     finished = true
     const node = graph.getNode(nodeId)
-    const clicked = Boolean(node && node.width < 2 && node.height < 2)
     try {
-      const dimensions = committedDimensions(node)
-      if (dimensions) preview.update(nodeId, dimensions)
+      const clicked = node ? settleDrawnSize(preview, node) : false
       preview.commit()
-      if (node && parent) attachDraw(editor, nodeId, parent, startX, startY)
-      if (node?.type === 'FRAME' && !clicked) editor.adoptCoveredLayers(node.id)
-      if (node?.type === 'SECTION') editor.adoptNodesIntoSection(node.id)
+      // Drawn into auto layout, the layer joins the flow at the end.
+      if (node && deferred) attachFlowDraw(editor, node.id, deferred, canvasX, canvasY)
+      const parent = graph.getNode(node?.parentId ?? '')
+      if (parent && parent.layoutMode !== 'NONE') editor.runLayoutForNode(parent.id)
+      // A frame made by a click, not drawn over anything, takes nothing in.
+      if (node?.type === 'SECTION' || (node?.type === 'FRAME' && !clicked)) {
+        editor.adoptCoveredLayers(node.id)
+      }
       editor.undo.commitBatch()
     } catch (error) {
       preview.cancel()
@@ -147,7 +182,7 @@ function createDraw(editor: Editor, nodeId: string, startX: number, startY: numb
 
   // Creation itself is already an edit: avoid rebuilding the backing on the first held frame.
   try {
-    preview.update(nodeId, start)
+    preview.update(nodeId, { x: startX, y: startY })
   } catch (error) {
     cancel()
     throw error
@@ -155,9 +190,11 @@ function createDraw(editor: Editor, nodeId: string, startX: number, startY: numb
 
   return {
     type: 'draw',
-    line: graph.getNode(nodeId)?.type === 'LINE',
-    startX: start.x,
-    startY: start.y,
+    startX,
+    startY,
+    toLocal,
+    line,
+    snap,
     nodeId,
     update: (changes) => {
       if (!finished) preview.update(nodeId, editor.snapGeometry(changes))

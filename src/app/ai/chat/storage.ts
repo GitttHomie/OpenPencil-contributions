@@ -1,3 +1,4 @@
+import { isEqual } from 'es-toolkit'
 import { computed, ref, watch } from 'vue'
 
 import { IS_TAURI } from '@open-pencil/core/constants'
@@ -12,8 +13,10 @@ import {
   designModelProfile,
   designProviderDefinition,
   designProviderID,
-  modelConnectionCredentialRef
+  modelConnectionCredentialRef,
+  modelCredentialRevision
 } from '@/app/ai/models'
+import { mcpConnectionSettings } from '@/app/integrations/mcp'
 import { appCredentialServices, browserCredentialsRemembered } from '@/app/settings/credentials/app'
 import {
   refreshMediaCredentials,
@@ -66,7 +69,9 @@ function designCredentialReference(): CredentialRef | null {
 
 export async function refreshAIProviderStatus(): Promise<void> {
   const reference = designCredentialReference()
-  apiKeyStatus.value = reference ? await refreshStatus(reference) : 'missing'
+  const status = reference ? await refreshStatus(reference) : 'missing'
+  // A connection chosen while the lookup ran owns the status now.
+  if (isEqual(designCredentialReference(), reference)) apiKeyStatus.value = status
 }
 
 // Startup checks metadata only. Secret migration/resolution belongs to explicit provider use.
@@ -97,6 +102,7 @@ export async function setAPIKey(key: string): Promise<void> {
 export { browserCredentialsRemembered }
 
 export function registerAIChatEffects(markTransportDirty: () => void) {
+  watch(mcpConnectionSettings, markTransportDirty, { deep: true })
   watch(
     () => designModelConnection.value?.id,
     () => {
@@ -115,4 +121,9 @@ export function registerAIChatEffects(markTransportDirty: () => void) {
     markTransportDirty()
   })
   watch(credentialRevision, markTransportDirty)
+  // A key saved in Settings; the chat reads it when it builds its transport.
+  watch(modelCredentialRevision, () => {
+    void refreshAIProviderStatus()
+    markTransportDirty()
+  })
 }

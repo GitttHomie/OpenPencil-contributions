@@ -17,7 +17,7 @@ import SetupInstallItem from './SetupInstallItem.vue'
 
 const { setup } = defineProps<{ setup: PiSetupState }>()
 const emit = defineEmits<{ check: []; installCompanion: []; installBridge: [] }>()
-const { ai, common } = useI18n()
+const { ai, common, automation } = useI18n()
 const styles = tv(theme)()
 const { copy, copied, text } = useClipboard({ copiedDuring: 1500 })
 
@@ -33,22 +33,24 @@ watch(
 
 const busy = computed(() => setup.installingCompanion || setup.installingBridge)
 const companionReady = computed(() => setup.companion && !setup.companionOutdated)
-const bridgeReady = computed(() => setup.bridge && !setup.bridgeOutdated)
+const bridgeReady = computed(() => setup.bridge)
+const installable = computed(
+  () => setup.companionInstallable ?? (setup.npm && !setup.companionNeedsAdmin)
+)
 const needsNpm = computed(
-  () => checked.value && !setup.npm && (!companionReady.value || !bridgeReady.value)
+  () => checked.value && !setup.npm && !installable.value && !companionReady.value
 )
 /** Manual commands are for where one-click installation cannot help. */
 const manualCommands = computed(() => {
-  const manual = !setup.npm || setup.error === 'harness-install' || setup.error === 'canvas-install'
+  const manual = !installable.value || setup.error === 'harness-install'
   if (!manual) return []
-  return [
-    ...(companionReady.value ? [] : [setup.companionCommand]),
-    ...(bridgeReady.value ? [] : [setup.bridgeCommand])
-  ]
+  return companionReady.value ? [] : [setup.companionCommand]
 })
 const errorMessage = computed(() => {
+  if (checked.value && !setup.bridge) return automation.value.mcpFailureNotInstalledHint
+  if (setup.companionNeedsAdmin && !companionReady.value) return ai.value.aiSetupAgentNeedsAdmin
   if (setup.error === 'npm' || needsNpm.value) return ai.value.aiSetupAgentNeedsNpm
-  if (setup.error === 'harness-install' || setup.error === 'canvas-install') {
+  if (setup.error === 'harness-install') {
     return ai.value.aiSetupAgentInstallFailed
   }
   if (setup.error === 'canvas-start') return ai.value.aiSetupAgentMCPStartFailed
@@ -68,7 +70,7 @@ function actionLabel(
   outdated: boolean,
   labels: { install: string; update: string }
 ): string | undefined {
-  if (ready || !setup.npm) return undefined
+  if (ready || !installable.value) return undefined
   if (installing) return ai.value.aiSetupAgentInstalling
   return outdated ? labels.update : labels.install
 }
@@ -102,17 +104,12 @@ function copiedLabel(value: string): string {
     </SetupInstallItem>
     <SetupInstallItem
       :ready="bridgeReady"
-      :action="
-        actionLabel(bridgeReady, setup.installingBridge, setup.bridgeOutdated, {
-          install: ai.aiSetupAgentInstallMCP,
-          update: ai.aiSetupAgentUpdateMCP
-        })
-      "
+      :action="setup.bridge ? common.connect : undefined"
       :loading="setup.installingBridge"
       :disabled="busy"
       @action="emit('installBridge')"
     >
-      {{ ai.aiSetupAgentMCP }} · {{ state(setup.bridge, setup.bridgeOutdated) }}
+      {{ ai.aiSetupAgentMCP }} · {{ state(setup.bridge, false) }}
     </SetupInstallItem>
     <SetupInstallItem :ready="Boolean(setup.defaultModel)">
       {{

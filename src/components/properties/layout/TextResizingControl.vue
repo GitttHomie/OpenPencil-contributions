@@ -2,25 +2,17 @@
 import { computed } from 'vue'
 
 import type { SceneNode } from '@open-pencil/scene-graph'
-import { useI18n, useSelectionLayout } from '@open-pencil/vue'
+import { useI18n, useSelectionLayout, textResizeMode, type TextResizeMode } from '@open-pencil/vue'
 
 import Tip from '@/components/ui/overlay/Tip.vue'
 import PanelFieldGroup from '@/components/ui/panel/PanelFieldGroup.vue'
 import SegmentedControl from '@/components/ui/select/SegmentedControl.vue'
 
-type TextResizeMode = 'AUTO_WIDTH' | 'AUTO_HEIGHT' | 'FIXED'
-
 const { nodes, updateAllWithUndo } = useSelectionLayout()
 const { panels } = useI18n()
 
-function modeFor(node: SceneNode | null): TextResizeMode {
-  if (node?.textAutoResize === 'WIDTH_AND_HEIGHT') return 'AUTO_WIDTH'
-  if (node?.textAutoResize === 'HEIGHT' || node?.textAutoResize === 'TRUNCATE') return 'AUTO_HEIGHT'
-  return 'FIXED'
-}
-
 const mode = computed(() => {
-  const modes = nodes.value.map(modeFor)
+  const modes = nodes.value.map(textResizeMode)
   return modes.every((value) => value === modes[0]) ? modes[0] : ''
 })
 

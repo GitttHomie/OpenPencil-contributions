@@ -9,11 +9,12 @@ import {
 import { reconcileVariableLayouts } from '#core/layout/variables'
 
 import type { EditorContext } from './types'
+import { loadBoundFonts } from './typography/bound-fonts'
 
 export function createVariableBindingActions(ctx: EditorContext) {
   /** A binding change reaches only the layer it is on and the layers inside it. */
   function refreshBindings(nodeId: string) {
-    reconcileVariableLayouts(ctx.graph, { subtrees: [nodeId] })
+    loadBoundFonts(ctx, reconcileVariableLayouts(ctx.graph, { subtrees: [nodeId] }))
     ctx.requestRender()
   }
 
@@ -23,6 +24,9 @@ export function createVariableBindingActions(ctx: EditorContext) {
     const previous = {
       boundVariables: { ...node.boundVariables },
       variableBindingScales: { ...node.variableBindingScales },
+      fontFamily: node.fontFamily,
+      fontWeight: node.fontWeight,
+      textStyleId: node.textStyleId,
       ...(isNumericVariableBindingField(path) ? { [path]: node[path as keyof SceneNode] } : {})
     }
     const owner = variableBindingOwner(ctx.graph, node)

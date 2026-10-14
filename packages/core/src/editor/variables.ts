@@ -15,23 +15,39 @@ import { reconcileVariableLayouts } from '#core/layout/variables'
 import { randomHex } from '#core/random'
 
 import type { EditorContext } from './types'
+import { loadBoundFonts } from './typography/bound-fonts'
 
 /** What a variable means as a design token beyond its values: how CSS and code read it. */
 export type VariableTokenFields = Pick<
   Variable,
-  'unit' | 'expressions' | 'scopes' | 'codeSyntax' | 'description' | 'hiddenFromPublishing'
+  | 'unit'
+  | 'expressions'
+  | 'scopes'
+  | 'codeSyntax'
+  | 'description'
+  | 'hiddenFromPublishing'
+  | 'fontFamilyVariableId'
 >
 
 /** Every token field, unset ones included, so restoring it also clears what was added. */
 function tokenFields(variable: Variable): VariableTokenFields {
-  const { unit, expressions, scopes, codeSyntax, description, hiddenFromPublishing } = variable
+  const {
+    unit,
+    expressions,
+    scopes,
+    codeSyntax,
+    description,
+    hiddenFromPublishing,
+    fontFamilyVariableId
+  } = variable
   return structuredClone({
     unit,
     expressions,
     scopes,
     codeSyntax,
     description,
-    hiddenFromPublishing
+    hiddenFromPublishing,
+    fontFamilyVariableId
   })
 }
 
@@ -65,10 +81,11 @@ export function createVariableActions(ctx: EditorContext) {
    * Re-resolves the layers a change to what variables resolve to can reach: those bound to the
    * changed variables or to variables aliasing them. Every other variable change, such as adding,
    * renaming, reordering, or a token field, changes nothing the canvas draws, so it only refreshes
-   * the views and leaves the canvas's recorded pictures in place.
+   * the views and leaves the canvas's recorded pictures in place. Records written into the graph
+   * without an editor action, such as a collaborator's, take effect through it.
    */
   function refreshVariables(scope: BindingScope) {
-    reconcileVariableLayouts(ctx.graph, scope)
+    loadBoundFonts(ctx, reconcileVariableLayouts(ctx.graph, scope))
     ctx.requestRender()
   }
 
@@ -540,6 +557,8 @@ export function createVariableActions(ctx: EditorContext) {
   }
 
   return {
+    reconcileVariableBindings: refreshVariables,
+    refreshVariables,
     updateVariableToken,
     setModeCondition,
     duplicateVariable,

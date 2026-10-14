@@ -2,12 +2,20 @@ import type { SceneGraph, SceneNode } from './'
 import type { NodeCloneMode } from './copy'
 import {
   clearInstanceOverrides,
+  cloneInstanceOverrideState,
   getInstanceOverride,
   hasInstanceOverride as hasNodeInstanceOverride,
   setInstanceOverride
 } from './instance-overrides'
+import { keepOwnContentSize } from './instances/content-size'
+import {
+  createInstanceSyncContext,
+  groupCopyRemovals,
+  removeLeftoverCopies
+} from './instances/copies'
 import { canCreateInstance } from './instances/cycles'
-import { INSTANCE_SYNC_FIELDS, INSTANCE_SYNC_PROPS } from './instances/fields'
+import { INSTANCE_OVERRIDE_FIELDS, INSTANCE_SYNC_PROPS } from './instances/fields'
+import { instanceMainComponent } from './instances/main-component'
 import {
   bindingProtection,
   cloneChildrenWithMapping,
@@ -24,6 +32,8 @@ import { detachOwnedSlotContent, restoreOwnedSlotContent } from './slots/frames'
 
 export type { NodeCloneMode } from './copy'
 export {
+  INSTANCE_FOLLOWED_FIELDS,
+  INSTANCE_OVERRIDE_FIELDS,
   INSTANCE_SYNC_FIELDS,
   INSTANCE_SYNC_PROPS,
   INSTANCE_SYNC_TEXT_PROPS
@@ -52,11 +62,11 @@ export function createInstance(
 
   const props: Partial<SceneNode> = {
     ...copyInstanceComponentProps(component),
-    name: defaultInstanceName(graph, component),
-    componentId
+    name: defaultInstanceName(graph, component)
   }
 
-  const instance = graph.createNode('INSTANCE', parentId, { ...props, ...overrides })
+  // The component checked above is the one the instance shows, whatever `overrides` holds.
+  const instance = graph.createNode('INSTANCE', parentId, { ...props, ...overrides, componentId })
 
   cloneChildrenWithMapping(graph, component.id, instance.id)
 
@@ -114,17 +124,22 @@ function instanceSyncSource(graph: SceneGraph, instance: SceneNode, component: S
   return { source, protectedField }
 }
 
+export interface SwapInstanceOptions {
+  keepName?: boolean
+}
+
 export function swapInstanceComponent(
   graph: SceneGraph,
   instanceId: string,
-  componentId: string
+  componentId: string,
+  { keepName = false }: SwapInstanceOptions = {}
 ): void {
   const instance = graph.nodes.get(instanceId)
   const component = graph.nodes.get(componentId)
   if (!instance || component?.type !== 'COMPONENT' || instance.type !== 'INSTANCE') return
   if (instance.parentId && !canCreateInstance(graph, componentId, instance.parentId)) return
 
-  const previousComponent = instance.componentId ? graph.nodes.get(instance.componentId) : undefined
+  const previousComponent = instanceMainComponent(graph, instance)
   recordNestedSwap(graph, instance, componentId)
   const updates: Partial<SceneNode> = { componentId }
   const { source, protectedField } = instanceSyncSource(graph, instance, component)
@@ -135,9 +150,10 @@ export function swapInstanceComponent(
   }
 
   if (
-    !previousComponent ||
-    instance.name === previousComponent.name ||
-    instance.name === defaultInstanceName(graph, previousComponent)
+    !keepName &&
+    (!previousComponent ||
+      instance.name === previousComponent.name ||
+      instance.name === defaultInstanceName(graph, previousComponent))
   ) {
     updates.name = defaultInstanceName(graph, component)
   }
@@ -153,6 +169,31 @@ export function swapInstanceComponent(
 const syncingComponentsByGraph = new WeakMap<SceneGraph, Set<string>>()
 
 export function syncInstances(graph: SceneGraph, componentId: string): void {
+  syncInstancesOf(graph, componentId, getInstances(graph, componentId))
+}
+
+/**
+ * Syncs each component's instances, in order, as one edit: the copies they remove stay
+ * restorable together for as long as undo keeps that edit.
+ */
+export function syncInstancesTogether(graph: SceneGraph, componentIds: Iterable<string>): void {
+  groupCopyRemovals(graph, () => {
+    for (const id of componentIds) syncInstances(graph, id)
+  })
+}
+
+/** Syncs one instance from its component, as `syncInstances` does for every instance. */
+export function syncInstance(graph: SceneGraph, instanceId: string): void {
+  const instance = graph.nodes.get(instanceId)
+  if (instance?.type !== 'INSTANCE' || !instance.componentId) return
+  syncInstancesOf(graph, instance.componentId, [instance])
+}
+
+function syncInstancesOf(
+  graph: SceneGraph,
+  componentId: string,
+  instances: Iterable<SceneNode>
+): void {
   const component = graph.nodes.get(componentId)
   if (component?.type !== 'COMPONENT') return
   let syncing = syncingComponentsByGraph.get(graph)
@@ -163,18 +204,24 @@ export function syncInstances(graph: SceneGraph, componentId: string): void {
   if (syncing.has(componentId)) return
   syncing.add(componentId)
   try {
-    for (const instance of getInstances(graph, componentId)) {
-      const { source, protectedField } = instanceSyncSource(graph, instance, component)
-      const updates: Partial<SceneNode> = {}
-      syncBindingFields(instance, source, updates, protectedField)
-      for (const key of INSTANCE_SYNC_PROPS) {
-        if (key === 'boundVariables') continue
-        if (isProtectedSyncField(instance, key, protectedField)) continue
-        copyProp(updates, source, key)
+    groupCopyRemovals(graph, (removals) => {
+      for (const instance of instances) {
+        const { source, protectedField } = instanceSyncSource(graph, instance, component)
+        const updates: Partial<SceneNode> = {}
+        syncBindingFields(instance, source, updates, protectedField)
+        for (const key of INSTANCE_SYNC_PROPS) {
+          if (key === 'boundVariables') continue
+          if (isProtectedSyncField(instance, key, protectedField)) continue
+          copyProp(updates, source, key)
+        }
+        // An instance that hugs its layers sizes to what it shows, not to the component.
+        keepOwnContentSize(graph, updates, instance, source)
+        updateSyncedProps(graph, instance, updates)
+        const context = createInstanceSyncContext(instance.id, instance.instanceOverrides)
+        syncChildren(graph, component.id, instance.id, instance.instanceOverrides, context)
+        removeLeftoverCopies(graph, context, removals)
       }
-      updateSyncedProps(graph, instance, updates)
-      syncChildren(graph, component.id, instance.id, instance.instanceOverrides)
-    }
+    })
   } finally {
     syncing.delete(componentId)
   }
@@ -236,12 +283,12 @@ export function recordInstanceOverride(
   if (!instance) return
 
   const relevant = [...fields].filter((field) =>
-    (INSTANCE_SYNC_FIELDS as readonly string[]).includes(field)
+    (INSTANCE_OVERRIDE_FIELDS as readonly string[]).includes(field)
   )
 
   if (relevant.length === 0) return
 
-  for (const field of relevant)
-    setInstanceOverride(instance.instanceOverrides, instance.id, nodeId, field)
-  graph.updateNode(instance.id, { instanceOverrides: instance.instanceOverrides })
+  const overrides = cloneInstanceOverrideState(instance.instanceOverrides)
+  for (const field of relevant) setInstanceOverride(overrides, instance.id, nodeId, field)
+  graph.updateNode(instance.id, { instanceOverrides: overrides })
 }

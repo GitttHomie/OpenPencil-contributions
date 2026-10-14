@@ -5,11 +5,11 @@ import { TOOL_CHANGE_ID_FIELD } from '@open-pencil/core/constants'
 import { FigmaAPI } from '@open-pencil/core/figma-api'
 
 import { createACPCanvasActivity } from '@/app/ai/acp/canvas/activity'
-import { createCanvasSession } from '@/app/ai/acp/canvas/session'
+import { createCanvasSession, canvasSessionPage } from '@/app/ai/acp/canvas/session'
 import { changePreviewSize } from '@/app/ai/chat/preferences'
 import { recordTurn, revertTurn, turnEdits, clearTurns } from '@/app/ai/chat/turns'
 import { readToolChange, clearToolChanges } from '@/app/ai/tools/changes/store'
-import { resetRunTracking, runUndoEntries } from '@/app/ai/tools/run'
+import { currentRun, resetRunTracking, runUndoEntries } from '@/app/ai/tools/run'
 import { createAutomationToolHandler } from '@/app/automation/bridge/tool-handlers'
 import { createEditorStore } from '@/app/editor/session/create'
 
@@ -19,6 +19,27 @@ afterEach(() => {
   clearTurns()
   clearToolChanges()
   changePreviewSize.value = previousSize
+})
+
+test('a CLI check continues on its original page after the user navigates elsewhere', async () => {
+  const store = createEditorStore()
+  store.preparationController.acknowledgePresentation(Number.MAX_SAFE_INTEGER)
+  const session = createCanvasSession(store)
+  try {
+    const original = store.state.currentPageId
+    session.start()
+    session.finish()
+    const other = store.graph.addPage('Other')
+    await store.switchPage(other.id)
+    session.start(true)
+    expect(canvasSessionPage(session.id)).toBe(original)
+    session.finish()
+    session.start()
+    expect(canvasSessionPage(session.id)).toBe(other.id)
+  } finally {
+    session.dispose()
+    store.dispose()
+  }
 })
 
 test('CLI canvas edits have before/after previews, run baselines and guarded turn undo', async () => {
@@ -73,7 +94,7 @@ test('CLI canvas edits have before/after previews, run baselines and guarded tur
       session.id
     )
     expect(JSON.stringify(baseline)).toContain('200')
-    recordTurn('reply', store, runUndoEntries(store))
+    recordTurn('reply', store, currentRun(store).undoCalls)
     expect(turnEdits('reply')?.revertable).toBe(true)
     store.pushUndoEntry({
       label: 'User edit',

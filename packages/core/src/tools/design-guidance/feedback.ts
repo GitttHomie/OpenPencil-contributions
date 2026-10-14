@@ -1,7 +1,12 @@
-import type { SceneGraph, SceneNode } from '@open-pencil/scene-graph'
+import { isInComponent, type SceneGraph, type SceneNode } from '@open-pencil/scene-graph'
 
 export interface DesignFeedback {
-  code: 'unbound-spacing' | 'component-name-collision' | 'canvas-overlap'
+  code:
+    | 'unbound-spacing'
+    | 'component-name-collision'
+    | 'canvas-overlap'
+    | 'component-overlap'
+    | 'component-overflow'
   nodeIds: string[]
   message: string
 }
@@ -15,6 +20,8 @@ const SPACING_FIELDS = [
 ] as const
 const MAX_FINDINGS = 3
 const MAX_NODE_IDS = 4
+const MAX_DEFINITION_COMPARISONS = 10_000
+const BOUNDS_TOLERANCE = 0.01
 
 /** Inspect authored nodes, leaving instance internals to their main components. */
 function authoredNodes(graph: SceneGraph, rootIds: string[]): SceneNode[] {
@@ -26,7 +33,7 @@ function authoredNodes(graph: SceneGraph, rootIds: string[]): SceneNode[] {
     if (!id || seen.has(id)) continue
     seen.add(id)
     const node = graph.getNode(id)
-    if (!node || node.type === 'INSTANCE') continue
+    if (!node || !node.visible || node.type === 'INSTANCE') continue
     nodes.push(node)
     pending.push(...node.childIds)
   }
@@ -105,6 +112,83 @@ function unrotatedOverlap(node: SceneNode, other: SceneNode): boolean {
   )
 }
 
+function isDefinitionContainer(graph: SceneGraph, node: SceneNode): boolean {
+  return (
+    node.type === 'COMPONENT_SET' ||
+    ((node.type === 'FRAME' || node.type === 'SECTION') && !isInComponent(graph, node.id))
+  )
+}
+
+function collectDefinitionContainers(graph: SceneGraph, nodes: SceneNode[]): Set<string> {
+  const definitionContainers = new Set<string>()
+  // Include layout rows around definitions, so overflow through an intermediate wrapper
+  // cannot hide the same problem. Stop at component content and the authored root.
+  const authoredIds = new Set(nodes.map((node) => node.id))
+  for (const node of nodes.toReversed()) {
+    if (
+      node.type !== 'COMPONENT' &&
+      node.type !== 'COMPONENT_SET' &&
+      !definitionContainers.has(node.id)
+    )
+      continue
+    const parent = graph.getNode(node.parentId ?? '')
+    if (parent && authoredIds.has(parent.id) && isDefinitionContainer(graph, parent))
+      definitionContainers.add(parent.id)
+  }
+  return definitionContainers
+}
+
+/** Check definition containers, not intentional overlays inside a component or instance. */
+function definitionLayoutFeedback(graph: SceneGraph, nodes: SceneNode[]): DesignFeedback[] {
+  const findings: DesignFeedback[] = []
+  let comparisons = 0
+  const definitionContainers = collectDefinitionContainers(graph, nodes)
+  for (const parent of nodes) {
+    if (!isDefinitionContainer(graph, parent)) continue
+    const definitions = graph
+      .getChildren(parent.id)
+      .filter(
+        (node) =>
+          node.visible &&
+          node.rotation === 0 &&
+          node.width > 0 &&
+          node.height > 0 &&
+          (node.type === 'COMPONENT' ||
+            node.type === 'COMPONENT_SET' ||
+            definitionContainers.has(node.id))
+      )
+      .sort((left, right) => left.x - right.x)
+    for (const [index, node] of definitions.entries()) {
+      if (
+        node.x < -BOUNDS_TOLERANCE ||
+        node.y < -BOUNDS_TOLERANCE ||
+        node.x + node.width > parent.width + BOUNDS_TOLERANCE ||
+        node.y + node.height > parent.height + BOUNDS_TOLERANCE
+      ) {
+        findings.push({
+          code: 'component-overflow',
+          nodeIds: [node.id, parent.id],
+          message: `${definitionContainers.has(node.id) ? 'Definition container' : 'Definition'} "${node.name}" extends outside "${parent.name}". Inspect the container's bounds and sizing; use Hug or resize the container to enclose its definitions unless this overflow is intentional.`
+        })
+        if (findings.length === MAX_FINDINGS) return findings
+      }
+      for (let next = index + 1; next < definitions.length; next++) {
+        const other = definitions[next]
+        if (other.x >= node.x + node.width) break
+        if (++comparisons > MAX_DEFINITION_COMPARISONS) return findings
+        if (!unrotatedOverlap(node, other)) continue
+        findings.push({
+          code: 'component-overlap',
+          nodeIds: [node.id, other.id, parent.id],
+          message: `Definitions "${node.name}" and "${other.name}" overlap inside "${parent.name}". Inspect their bounds and arrange these existing definitions with auto-layout or explicit positions; do not recreate or detach their instances.`
+        })
+        if (findings.length === MAX_FINDINGS) return findings
+      }
+    }
+  }
+  return findings
+}
+
 function placementFeedback(graph: SceneGraph, rootIds: string[]): DesignFeedback[] {
   const findings: DesignFeedback[] = []
   const pairs = new Set<string>()
@@ -135,6 +219,7 @@ export function designFeedback(graph: SceneGraph, rootIds: string[]): DesignFeed
   return [
     ...spacingFeedback(nodes),
     ...componentFeedback(graph, nodes),
+    ...definitionLayoutFeedback(graph, nodes),
     ...placementFeedback(graph, rootIds)
   ]
 }

@@ -5,7 +5,14 @@ import { computed, ref, useTemplateRef, watch } from 'vue'
 
 import type { VariableTokenFields } from '@open-pencil/core/editor'
 import type { TokenStylesheetFormat } from '@open-pencil/dom-css/export'
-import type { VariableType, VariableValue } from '@open-pencil/scene-graph'
+import {
+  formatVariableFormula,
+  parseVariableFormula,
+  variableFormulaReference,
+  isLibraryCollection,
+  type VariableType,
+  type VariableValue
+} from '@open-pencil/scene-graph'
 import { useI18n, useSceneComputed, useVariables } from '@open-pencil/vue'
 
 import {
@@ -16,6 +23,7 @@ import {
   tokenGroups,
   type TokenGroup
 } from '@/app/editor/tokens/model'
+import { applyTokenValueEdit, type TokenValueEdit } from '@/app/editor/tokens/value-editor'
 import AppButton from '@/components/ui/button/AppButton.vue'
 import IconButton from '@/components/ui/button/IconButton.vue'
 import AppPlaceholder from '@/components/ui/feedback/AppPlaceholder.vue'
@@ -40,7 +48,7 @@ import tokensPanelTheme, {
   TOKENS_PANEL_SIDEBAR_WIDTH
 } from '@/theme/tokens-panel'
 
-const emit = defineEmits<{ copy: [format: TokenStylesheetFormat] }>()
+const emit = defineEmits<{ copy: [format: TokenStylesheetFormat]; export: [] }>()
 
 const { variables: messages, common } = useI18n()
 const ui = tv(tokensPanelTheme)()
@@ -141,7 +149,8 @@ const sidebarCollections = computed(() =>
   ctx.collections.value.map((candidate) => ({
     id: candidate.id,
     name: candidate.name,
-    count: candidate.variableIds.length
+    count: candidate.variableIds.length,
+    library: isLibraryCollection(candidate)
   }))
 )
 const modeOptions = computed(() =>
@@ -268,11 +277,21 @@ const tokenInspector = computed(() => {
   const id = editedId.value
   return {
     aliasCandidates: candidates.value,
+    formula: id
+      ? {
+          parse: (modeId: string, source: string) =>
+            parseVariableFormula(editor.graph, id, modeId, source),
+          format: (value: VariableValue) => formatVariableFormula(editor.graph, value),
+          reference: (id: string) => variableFormulaReference(editor.graph, id)
+        }
+      : undefined,
     onRename: (name: string) => id && editor.renameVariable(id, name),
     onUpdateToken: (patch: Partial<VariableTokenFields>) =>
       id && editor.updateVariableToken(id, patch),
     onUpdateValue: (modeId: string, value: VariableValue, coalesceKey?: string) =>
       id && editor.updateVariableValue(id, modeId, value, coalesceKey),
+    onUpdateMode: (modeId: string, edit: TokenValueEdit) =>
+      id && applyTokenValueEdit(editor, id, modeId, edit),
     onAlias: (modeId: string, aliasId: string) => id && actions.alias(id, modeId, aliasId),
     onDetach: (modeId: string) => id && actions.detach(id, modeId),
     onRemove: () => id && removeTokens([id]),
@@ -375,6 +394,7 @@ const groupOptions = computed(() => groupEntries.value.map((entry) => entry.path
           :collection-id="collection.id"
           layout="full"
           @copy="emit('copy', $event)"
+          @export="emit('export')"
         />
       </template>
 
@@ -511,7 +531,11 @@ const groupOptions = computed(() => groupEntries.value.map((entry) => entry.path
           />
         </Transition>
       </div>
-      <TokenOutput :collection-id="collection.id" @copy="emit('copy', $event)" />
+      <TokenOutput
+        :collection-id="collection.id"
+        @copy="emit('copy', $event)"
+        @export="emit('export')"
+      />
     </template>
   </div>
 </template>

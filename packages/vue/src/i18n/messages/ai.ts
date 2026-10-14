@@ -3,6 +3,8 @@ import { params } from '@nanostores/i18n'
 import { i18n } from '#vue/i18n/create'
 
 export const aiMessageDefaults = {
+  followAgents: 'Follow agents',
+  stopFollowingAgents: 'Stop following agents',
   cliIntegrationTitle: 'Integration configuration (advanced)',
   cliIntegrationConfiguration: 'Configuration JSON',
   cliIntegrationHint:
@@ -108,6 +110,8 @@ export const aiMessageDefaults = {
   newChat: 'New chat',
   allChats: 'All chats',
   renameChat: 'Rename',
+  saveChatTrace: 'Save trace…',
+  chatTraceFailed: 'The chat trace could not be saved.',
   deleteChat: 'Delete',
   chatTitle: 'Conversation title',
   saveChatTitle: 'Save',
@@ -160,14 +164,18 @@ export const aiMessageDefaults = {
   copyResponse: 'Copy response',
   revertTurn: 'Revert changes',
   turnReverted: 'Changes reverted',
+  turnPartlyUndone: params('{undone} of {total} changes undone'),
+  turnStopped: 'Stopped',
   restoreTurn: 'Restore changes',
   regenerate: 'Regenerate',
   revertAndRegenerate: 'Revert and regenerate',
+  retryRequest: 'Retry',
   editMessage: 'Edit message',
   cancelEdit: 'Cancel',
   resendMessage: 'Send again',
   responseCopied: 'Response copied',
   toolFinished: 'Done',
+  toolUndone: 'Undone',
   toolRunning: 'Running…',
   toolError: 'Error',
   toolInput: 'Input',
@@ -240,7 +248,31 @@ export const aiMessageDefaults = {
   modelRoleDesign: 'Design agent',
   modelRoleReview: 'Review',
   modelRoleFast: 'Fast tasks',
-  modelRoleVision: 'Vision',
+  designChecks: 'Design checks',
+  designChecksDescription:
+    'Check changed designs before finishing. Optional extra model requests; no brief or PRD required.',
+  designChecksAutomatic: 'Check designs automatically',
+  designChecksReviewer: 'Visual reviewer',
+  designChecksReviewerHint:
+    'Uses the design agent’s images when supported; otherwise falls back to Image understanding. Without either, checks structure only.',
+  designChecksUseAgent: 'Design agent when supported',
+  designChecksCorrections: 'Apply corrections automatically',
+  designChecksPasses: 'Maximum correction passes',
+  designCheckChecking: 'Checking the design',
+  designCheckReviewed: 'Latest design reviewed',
+  designCheckStructureOnly: 'Structure checked · appearance not checked',
+  designCheckStale: 'Some changes still need review',
+  designCheckFailed: 'Design check did not finish',
+  modelRoleVision: 'Image understanding',
+  imageSupportVerified: 'Verified with an image',
+  imageSupportAdvertised: 'Reported support · not tested',
+  imageSupportUnsupported: 'This connection does not accept images',
+  imageSupportUnknown: 'Unknown · test image support',
+  testImageSupport: 'Test image support',
+  imageSupportTestHint:
+    'Sends a small generated image to this model. Uses a little model usage; no document content is sent. Save the profile to keep the result.',
+  imageSupportTestFailed:
+    'Image support could not be verified. Check the connection and selected model, then retry.',
   modelRoleDesignDescription: 'AI chat and canvas edits',
   modelRoleReviewDescription: 'Used by Review design in chat. Runs only when requested.',
   reviewDesign: 'Review design',
@@ -286,7 +318,7 @@ export const aiMessageDefaults = {
     'The local agent cannot connect to the canvas. Open Settings → AI & agents to set up the canvas connection, or check its status in MCP settings.',
   localAgentsCanvasRequired: 'Set up the canvas connection',
   localAgentsCanvasHint:
-    'Local agents need the OpenPencil MCP companion to work with your design. Setup installs the matching package globally with npm and starts it.',
+    'The desktop app includes its canvas helper and runtime. Connect to start it locally; no download or npm installation is needed.',
   localAgentsCanvasInstall: 'Set up canvas connection',
   localAgentsCanvasInstallFailed:
     'Could not install the canvas companion. Check npm permissions and your network connection, then retry.',
@@ -311,6 +343,10 @@ export const aiMessageDefaults = {
   aiSetupWelcomeAITitle: 'Design with AI',
   aiSetupWelcomeAIDescription:
     'Connect the AI you already use to edit the canvas and review designs. You can change it later in Settings.',
+  aiSetupWelcomeTourTitle: 'Take the tour',
+  aiSetupWelcomeTourDescription:
+    'A short file that walks through components and slots, working controls, modes, shaders, code, and lint, with a card on each that says what to try.',
+  aiSetupTakeTour: 'Open the tour',
   aiSetupStart: 'Set up AI',
   aiSetupSkip: 'Start designing',
   aiSetupProgress: params('Step {current} of {total}'),
@@ -331,6 +367,8 @@ export const aiMessageDefaults = {
   aiSetupAccessAPI: 'API accounts',
   aiSetupAccessServer: 'Local model or company server',
   aiSetupAccessMore: 'More providers',
+  providerGroupAgents: 'Your agents',
+  providerGroupProviders: 'Providers',
   aiSetupServerOther: 'Other server',
   aiSetupAccessServerDescription:
     'Any server that speaks the OpenAI API, such as Ollama or LM Studio.',
@@ -358,6 +396,8 @@ export const aiMessageDefaults = {
   aiSetupAgentGetCLI: params('Install {agent}'),
   aiSetupAgentNeedsNpm:
     'Installing needs npm, which comes with Node.js. Install Node.js, then check again.',
+  aiSetupAgentNeedsAdmin:
+    'Installing needs administrator rights, because npm keeps global packages in a protected folder. Run the command below in a terminal, or let your agent set up a folder you own.',
   aiSetupAgentInstallFailed:
     'The installation didn’t finish. Check your connection, or run the command yourself.',
   aiSetupAgentMCPStartFailed:
@@ -365,7 +405,6 @@ export const aiMessageDefaults = {
   aiSetupAgentLookupFailed: 'Couldn’t check this computer. Try again.',
   aiSetupAgentCopyPrompt: 'Copy setup prompt',
   aiSetupAgentCheckAgain: 'Check again',
-  aiSetupAgentGuide: 'Setup guide',
   aiSetupPiDescription:
     'OpenPencil runs Pi through its Harness companion and uses the providers you signed in to in Pi.',
   aiSetupPiCompanion: 'Harness companion',

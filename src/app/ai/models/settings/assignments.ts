@@ -3,6 +3,7 @@ import type { Ref } from 'vue'
 import {
   aiModelSettings,
   canAssignModelRole,
+  isACPModelProfile,
   modelProfile,
   setModelRoleAssignment,
   type AIModelRole,
@@ -10,7 +11,14 @@ import {
 } from '@/app/ai/models'
 
 export function useModelRoleAssignments(
-  ai: Readonly<Ref<{ modelRoleUseDesign: string; noModel: string }>>
+  ai: Readonly<
+    Ref<{
+      modelRoleUseDesign: string
+      noModel: string
+      imageSupportUnknown: string
+      imageSupportUnsupported: string
+    }>
+  >
 ) {
   const SAME_AS_DESIGN = '__design__'
   const NO_MODEL = '__none__'
@@ -23,8 +31,15 @@ export function useModelRoleAssignments(
 
   function optionsForRole(role: AIModelRole) {
     const profiles = aiModelSettings.value.models
-      .filter((profile) => canAssignModelRole(profile, role))
-      .map((profile) => ({ value: profile.id, label: profile.name }))
+      .filter((profile) => role === 'vision' || canAssignModelRole(profile, role))
+      .map((profile) => ({
+        value: profile.id,
+        label:
+          role === 'vision' && !canAssignModelRole(profile, role)
+            ? `${profile.name} — ${isACPModelProfile(profile) && profile.imageSupport !== 'unsupported' ? ai.value.imageSupportUnknown : ai.value.imageSupportUnsupported}`
+            : profile.name,
+        disabled: !canAssignModelRole(profile, role)
+      }))
     if (role === 'design') return profiles
 
     const design = modelProfile(aiModelSettings.value.assignments.design)

@@ -9,6 +9,7 @@ import { useModelSettings } from '@/app/ai/models/settings/use'
 import { LAYA_SUPPORTED } from '@/app/ai/routing/preferences'
 import SettingsPage from '@/components/settings/layout/SettingsPage.vue'
 import SettingsSection from '@/components/settings/layout/SettingsSection.vue'
+import DesignChecks from '@/components/settings/models/DesignChecks.vue'
 import LayaSettings from '@/components/settings/models/LayaSettings.vue'
 import ProfileEditor from '@/components/settings/models/ProfileEditor.vue'
 import RoleAssignments from '@/components/settings/models/RoleAssignments.vue'
@@ -113,7 +114,7 @@ const { profiles, statusByConnection, refreshStatuses } = useModelSettings()
                   :data-state="profile.available ? 'configured' : 'missing'"
                 >
                   <span
-                    class="size-1.5 rounded-full bg-muted data-[state=configured]:bg-[var(--color-success)]"
+                    class="size-1.5 rounded-full bg-muted data-[state=configured]:bg-success"
                     :data-state="profile.available ? 'configured' : 'missing'"
                   />
                   {{ statusLabel(profile.connectionId, profile.providerID, profile.available) }}
@@ -151,6 +152,7 @@ const { profiles, statusByConnection, refreshStatuses } = useModelSettings()
           <template #description>{{ ai.modelAssignmentsDescription }}</template>
           <RoleAssignments />
         </SettingsSection>
+        <DesignChecks />
         <LayaSettings v-if="LAYA_SUPPORTED" />
         <slot />
       </div>

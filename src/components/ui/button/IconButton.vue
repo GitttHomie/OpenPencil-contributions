@@ -13,6 +13,7 @@ const {
   label,
   side = 'top',
   size = 'xs',
+  toggle = false,
   type = 'button'
 } = defineProps<{
   active?: boolean
@@ -21,11 +22,14 @@ const {
   label: string
   side?: 'top' | 'bottom' | 'left' | 'right'
   size?: ControlSize
+  /** A toggle button: `aria-pressed` says whether it is on, off included. */
+  toggle?: boolean
   type?: 'button' | 'submit' | 'reset'
 }>()
 
 const attrs = useAttrs()
-const { forwardRef } = useForwardExpose()
+defineExpose({ focus: () => currentElement.value?.focus() })
+const { forwardRef, currentElement } = useForwardExpose()
 
 defineOptions({ inheritAttrs: false })
 
@@ -48,7 +52,7 @@ const cls = computed(() =>
       :type="type"
       :disabled="disabled"
       :aria-label="label"
-      :aria-pressed="active ? 'true' : undefined"
+      :aria-pressed="active ? 'true' : toggle ? 'false' : undefined"
       :data-state="active ? 'on' : 'off'"
       :class="cls"
     >

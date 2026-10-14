@@ -11,7 +11,7 @@ async function setup(
   bridgeVersion = '0.15.1'
 ) {
   const commands = new Set(initialCommands)
-  let installedBridgeVersion = bridgeVersion
+  const installedBridgeVersion = bridgeVersion
   const installs: Array<{ id: string; package: string }> = []
   let failInstall = false
   let scans = 0
@@ -64,8 +64,7 @@ async function setup(
     installs.push(request)
     if (failInstall) return route.fulfill({ status: 500 })
     const executable = request.id === 'claude-code' ? 'claude-agent-acp' : 'codex-acp'
-    commands.add(request.id === 'canvas' ? 'openpencil-mcp-http' : executable)
-    if (request.id === 'canvas') installedBridgeVersion = '0.15.1'
+    commands.add(executable)
     return route.fulfill({ status: 200 })
   })
   await page.goto('/tests/helpers/agents/fixture.html')
@@ -238,26 +237,14 @@ test('native ACP profiles need no npm and cancelling creates no model', async ({
   expect(fixture.installs).toEqual([])
 })
 
-test('sets up the missing canvas companion inside a CLI model profile', async ({ page }) => {
-  let restarts = 0
-  await page.route('**/__test/local-agents/restart', (route) => {
-    restarts++
-    return route.fulfill({ status: 200 })
-  })
-  const fixture = await setup(page, ['kiro-cli', 'npm'])
+test('a missing bundled helper never triggers an npm installation', async ({ page }) => {
+  const fixture = await setup(page, ['kiro-cli'])
   await addCLIModel(page, 'Kiro CLI')
-  const setupButton = page.getByRole('button', { name: 'Set up canvas connection', exact: true })
-  await expect(setupButton).toBeVisible()
+  await expect(
+    page.getByRole('status', { name: 'The bundled canvas helper is missing', exact: true })
+  ).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Connect', exact: true })).toHaveCount(0)
   expect(fixture.installs).toEqual([])
-  fixture.failInstall(true)
-  await setupButton.click()
-  await expect(page.getByRole('alert')).toContainText('Could not install the canvas companion')
-  expect(restarts).toBe(0)
-  fixture.failInstall(false)
-  await setupButton.click()
-  await expect(setupButton).toHaveCount(0)
-  expect(fixture.installs.at(-1)).toEqual({ id: 'canvas', package: '@open-pencil/mcp@0.15.1' })
-  await expect.poll(() => restarts).toBe(1)
 })
 
 test('CLI model verification is explicit, reports unavailable models, and resets after changes', async ({
@@ -294,6 +281,14 @@ test('CLI model verification is explicit, reports unavailable models, and resets
   expect(verifications.at(-1)).toMatchObject({
     acpLaunch: { codexProvider: 'bedrock', codexBaseURL: 'https://example.test/openai/v1' }
   })
+  await page.getByRole('textbox', { name: 'Base URL', exact: true }).fill('')
+  await page.getByRole('textbox', { name: 'Bedrock AWS region', exact: true }).fill('us-east-1')
+  await expect(result).toHaveCount(0)
+  await page.getByTestId('provider-test-connection').click()
+  await expect(result).toHaveAttribute('data-tone', 'success')
+  expect(verifications.at(-1)).toMatchObject({
+    acpLaunch: { codexProvider: 'bedrock', codexBaseURL: '', awsRegion: 'us-east-1' }
+  })
   await page.getByRole('button', { name: 'Save model', exact: true }).click()
   await expect(page.getByRole('button', { name: /^Codex/ })).toBeVisible()
   await page.reload()
@@ -303,26 +298,19 @@ test('CLI model verification is explicit, reports unavailable models, and resets
   await expect(page.getByRole('textbox', { name: 'Codex provider ID', exact: true })).toHaveValue(
     'bedrock'
   )
-  await expect(page.getByRole('textbox', { name: 'Base URL', exact: true })).toHaveValue(
-    'https://example.test/openai/v1'
+  await expect(page.getByRole('textbox', { name: 'Base URL', exact: true })).toHaveValue('')
+  await expect(page.getByRole('textbox', { name: 'Bedrock AWS region', exact: true })).toHaveValue(
+    'us-east-1'
   )
 })
 
-test('an incompatible companion keeps an update action until a matching version is installed', async ({
+test('canvas readiness ignores obsolete globally installed companion versions', async ({
   page
 }) => {
-  let restarts = 0
-  await page.route('**/__test/local-agents/restart', (route) => {
-    restarts++
-    return route.fulfill({ status: 200 })
-  })
-  await setup(page, ['codex', 'codex-acp', 'openpencil-mcp-http', 'npm'], false, '0.14.0')
+  const fixture = await setup(page, ['codex', 'codex-acp', 'openpencil-mcp-http'], false, '0.14.0')
   await addCLIModel(page, 'Codex')
-  const update = page.getByRole('button', { name: 'Update MCP server', exact: true })
-  await expect(update).toBeVisible()
-  await update.click()
-  await expect.poll(() => restarts).toBe(1)
-  await expect(update).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Update MCP server', exact: true })).toHaveCount(0)
+  expect(fixture.installs).toEqual([])
 })
 
 test('adapter launch fields follow provider selection and keep region values user-controlled', async ({

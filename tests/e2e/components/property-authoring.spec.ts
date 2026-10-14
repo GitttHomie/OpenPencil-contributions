@@ -484,7 +484,7 @@ test('appearance respects linked visibility and places the mask beside it', asyn
   scene.canvas.assertNoErrors()
 })
 
-test('linked canvas text focuses defaults or instance overrides and edits only after unlinking', async ({
+test('linked canvas text focuses defaults and edits instance overrides directly', async ({
   page
 }) => {
   const scene = await createPropertyLayoutScene(page)
@@ -519,15 +519,25 @@ test('linked canvas text focuses defaults or instance overrides and edits only a
     return text.id
   }, scene.ids.instance)
   await clickSelectedText(instanceTextId)
-  expect(await getEditingTextId(page)).toBeNull()
+  await expect.poll(() => getEditingTextId(page)).toBe(instanceTextId)
+  await page.keyboard.press('Meta+A')
+  await page.keyboard.insertText('Custom on canvas')
+  await expect
+    .poll(async () => (await scene.state()).children.find((node) => node.name === 'Caption')?.text)
+    .toBe('Custom on canvas')
+  await page.keyboard.press('Escape')
+  await scene.select(scene.ids.instance)
   const override = manager.getByRole('textbox', { name: 'Button label', exact: true })
-  await expect(override).toBeFocused()
+  await expect(override).toHaveValue('Custom on canvas')
   await override.fill('Custom')
   await override.blur()
   await expect
     .poll(async () => (await scene.state()).children.find((node) => node.name === 'Caption')?.text)
     .toBe('Custom')
   expect((await scene.state()).definitions[0]?.defaultValue).toBe('Purchase a subscription')
+  await clickSelectedText(instanceTextId)
+  await expect.poll(() => getEditingTextId(page)).toBe(instanceTextId)
+  await page.keyboard.press('Escape')
   await scene.select(scene.ids.label)
   await page.getByTestId('canvas-element').focus()
   await scene.canvas.pressKey('Enter')

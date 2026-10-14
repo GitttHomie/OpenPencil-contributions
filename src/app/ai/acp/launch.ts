@@ -2,6 +2,7 @@ import * as v from 'valibot'
 
 import type { ACPAgentID } from '@open-pencil/core/constants'
 
+import { getACPAgentAdapter } from './adapters/registry'
 import { integrationFor, resolveIntegration } from './configuration/resolve'
 import type { ACPIntegration } from './configuration/schema'
 
@@ -27,10 +28,11 @@ export function acpLaunchOptions(
   integration?: ACPIntegration
 ) {
   try {
-    return resolveIntegration(
+    const options = resolveIntegration(
       integrationFor(id, integration),
       v.parse(acpLaunchSchema, settings ?? {})
     )
+    return getACPAgentAdapter(id).prepareLaunch?.(options) ?? options
   } catch {
     throw new ACPLaunchSettingsError()
   }

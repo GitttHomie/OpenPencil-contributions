@@ -13,7 +13,7 @@ describe('live edit font loading', () => {
   test.each(['loaded', 'failed'] as const)(
     'keeps existing frames drawable while fonts are pending and then %s',
     async (outcome) => {
-      const data = await Bun.file(repoPath('public/Inter-Regular.ttf')).arrayBuffer()
+      const data = await Bun.file(repoPath('packages/core/assets/Inter-Regular.ttf')).arrayBuffer()
       fontManager.markLoaded('Inter', 'Regular', data)
       const graph = new SceneGraph()
       const page = expectDefined(graph.getPages()[0], 'page')

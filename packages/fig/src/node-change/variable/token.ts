@@ -18,7 +18,7 @@ const { token, modeConditions, modeAttribute } = OPEN_PENCIL_PLUGIN_DATA
 export const TOKEN_PLUGIN_KEY = token.key
 export const MODE_CONDITIONS_PLUGIN_KEY = modeConditions.key
 
-type TokenFields = Pick<Variable, 'unit' | 'expressions'>
+type TokenFields = Pick<Variable, 'unit' | 'expressions' | 'fontFamilyVariableId'>
 
 /** Plugin data other than the entries this module owns, which are rebuilt on every save. */
 export function withoutTokenPluginData(pluginData: PluginDataEntry[]): PluginDataEntry[] {
@@ -48,7 +48,11 @@ export function readVariableToken(
   const expressions = Object.entries(token.expressions ?? {}).filter(([mode, expression]) =>
     sameNumber(valuesByMode[mode], expression.resolved)
   )
-  return { unit: token.unit, expressions: nonEmpty(Object.fromEntries(expressions)) }
+  return {
+    unit: token.unit,
+    expressions: nonEmpty(Object.fromEntries(expressions)),
+    fontFamilyVariableId: token.fontFamilyVariableId
+  }
 }
 
 export function readModeConditions(nc: NodeChange): Record<string, string> {
@@ -78,13 +82,17 @@ export function modeAttributePluginData(
 /** Mode ids in the file differ from the model's, so callers map them. */
 export function tokenPluginData(
   variable: Variable,
-  modeKey: (modeId: string) => string
+  modeKey: (modeId: string) => string,
+  variableKey: (id: string) => string = (id) => id
 ): PluginDataEntry | undefined {
   const token = {
+    fontFamilyVariableId: variable.fontFamilyVariableId
+      ? variableKey(variable.fontFamilyVariableId)
+      : undefined,
     unit: variable.unit,
     expressions: nonEmpty(mapKeys(variable.expressions ?? {}, (_, mode) => modeKey(mode)))
   }
-  if (!token.unit && !token.expressions) return undefined
+  if (!token.unit && !token.expressions && !token.fontFamilyVariableId) return undefined
   return entry(OPEN_PENCIL_PLUGIN_DATA.token.key, token)
 }
 

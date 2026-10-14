@@ -73,6 +73,12 @@ export function sourceForNumberGroups(
       protectedField(group.independent)
     ) {
       source = { ...source, ...independentNumberGroup(source, group) }
+      for (const path of group.paths) {
+        if (protectedField(path) && !target.boundVariables[path]) {
+          Reflect.deleteProperty(source.boundVariables, path)
+          Reflect.deleteProperty(source.variableBindingScales, path)
+        }
+      }
     }
   }
   return source

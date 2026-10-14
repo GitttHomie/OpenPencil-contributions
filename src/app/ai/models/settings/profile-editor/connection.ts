@@ -12,6 +12,7 @@ import {
   resolveModelConnectionAPIKey,
   type AIModelProfileDraft
 } from '@/app/ai/models'
+import { createImageProbe } from '@/app/ai/vision/probe'
 import type { CredentialStatus } from '@/app/settings/credentials/types'
 
 interface ConnectionOptions {
@@ -26,6 +27,7 @@ export function useProfileConnection({ draft, keyInput }: ConnectionOptions) {
   const connectionTestStatus = ref<'idle' | 'testing' | 'success' | 'error'>('idle')
   const connectionTestReason = ref<ProviderConnectionTestFailureReason | null>(null)
 
+  const imageTestStatus = ref<'idle' | 'testing' | 'success' | 'error'>('idle')
   const keyCleared = ref(false)
   const hasExistingKey = computed(() => !keyCleared.value && keyStatus.value === 'configured')
 
@@ -43,6 +45,7 @@ export function useProfileConnection({ draft, keyInput }: ConnectionOptions) {
   function resetConnectionTest(): void {
     version++
     operation?.abort()
+    imageTestStatus.value = 'idle'
     connectionTestStatus.value = 'idle'
     connectionTestReason.value = null
   }
@@ -64,21 +67,38 @@ export function useProfileConnection({ draft, keyInput }: ConnectionOptions) {
     resetConnectionTest()
   }
 
-  async function testConnection(): Promise<void> {
+  function recordResult(
+    result: Awaited<ReturnType<typeof testProviderConnection>>,
+    imageTest: boolean
+  ) {
+    connectionTestStatus.value = result.ok ? 'success' : 'error'
+    connectionTestReason.value = result.ok ? null : result.reason
+    if (!imageTest) return
+    imageTestStatus.value = result.ok ? 'success' : 'error'
+    // Failure may be authentication or availability rather than absent image support.
+    draft.imageSupport = result.ok ? 'verified' : undefined
+    if (result.ok && !draft.capabilities.includes('vision')) draft.capabilities.push('vision')
+  }
+
+  async function testConnection(imageTest = false): Promise<void> {
     operation?.abort()
     operation = new AbortController()
-    const signal = operation.signal
+    const controller = operation
+    const signal = controller.signal
     const request = ++version
     const target = structuredClone(toRaw(draft))
     const replacement = keyInput.value.trim()
     connectionTestStatus.value = 'testing'
     connectionTestReason.value = null
+    if (imageTest) imageTestStatus.value = 'testing'
+    const timer = setTimeout(() => controller.abort(), 30_000)
     try {
+      const probe = imageTest ? await createImageProbe() : undefined
+      if (!current(request)) return
       if (target.providerID.startsWith('acp:')) {
-        const result = await verifyAgent(target, signal)
+        const result = await verifyAgent(target, signal, probe)
         if (!current(request)) return
-        connectionTestStatus.value = result.ok ? 'success' : 'error'
-        connectionTestReason.value = result.ok ? null : result.reason
+        recordResult(result, imageTest)
         return
       }
       const connection = findModelConnectionForDraft(target)
@@ -87,21 +107,27 @@ export function useProfileConnection({ draft, keyInput }: ConnectionOptions) {
           ? await resolveModelConnectionAPIKey(connection.id)
           : null
       if (!current(request)) return
-      const result = await testProviderConnection({
-        providerID: target.providerID,
-        apiKey: replacement || existingKey || '',
-        modelID: target.modelID,
-        customModelID: target.customModelID,
-        customBaseURL: target.customBaseURL,
-        customAPIType: target.customAPIType
-      })
+      const result = await testProviderConnection(
+        {
+          providerID: target.providerID,
+          apiKey: replacement || existingKey || '',
+          modelID: target.modelID,
+          customModelID: target.customModelID,
+          customBaseURL: target.customBaseURL,
+          customAPIType: target.customAPIType
+        },
+        probe,
+        signal
+      )
       if (!current(request)) return
-      connectionTestStatus.value = result.ok ? 'success' : 'error'
-      connectionTestReason.value = result.ok ? null : result.reason
+      recordResult(result, imageTest)
     } catch {
       if (!current(request)) return
       connectionTestStatus.value = 'error'
       connectionTestReason.value = 'unknown'
+      if (imageTest) imageTestStatus.value = 'error'
+    } finally {
+      clearTimeout(timer)
     }
   }
 
@@ -118,7 +144,10 @@ export function useProfileConnection({ draft, keyInput }: ConnectionOptions) {
       draft.acpThinking,
       keyInput.value
     ],
-    resetConnectionTest,
+    () => {
+      draft.imageSupport = undefined
+      resetConnectionTest()
+    },
     { deep: true, flush: 'sync' }
   )
 
@@ -131,6 +160,7 @@ export function useProfileConnection({ draft, keyInput }: ConnectionOptions) {
     resetConnectionTest,
     refreshKeyStatus,
     clearKey,
-    testConnection
+    testConnection,
+    imageTestStatus
   }
 }

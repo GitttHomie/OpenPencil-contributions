@@ -8,6 +8,7 @@ export function setInMemoryClipboardPayload(payload: ClipboardPayload): void {
   memoryClipboard = payload
 }
 
+/** The snapshot of the last copy when `html` is that copy, however the clipboard rewrote it. */
 export function matchingClipboardSnapshot(html: string) {
   return html &&
     (html === memoryClipboard.html || sameFigmaClipboardContent(html, memoryClipboard.html))

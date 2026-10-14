@@ -6,10 +6,12 @@ import { stringToGuid } from '@open-pencil/kiwi/fig/guid'
 import type {
   ComponentPropertyDefinition,
   ComponentPropertyReferenceField,
+  LayoutGrid,
   SceneGraph,
   SceneNode
 } from '@open-pencil/scene-graph'
 import { DEFAULT_STROKE_MITER_LIMIT, DEFAULT_STROKE_WEIGHT } from '@open-pencil/scene-graph'
+import { layoutGridCount } from '@open-pencil/scene-graph/layout'
 import { siblingOrderKeys } from '@open-pencil/scene-graph/order-keys'
 import type { GUID, Matrix, Vector } from '@open-pencil/scene-graph/primitives'
 
@@ -26,11 +28,13 @@ import {
   serializePluginRelaunchData,
   upsertPluginData
 } from '../plugin-data'
+import { applyTextRunReferences } from '../text/run-references'
 import {
   applyColorVariableBinding,
   createFillPaints,
   createStrokePaints,
   getOrCreateNodeGuid,
+  exportedStyleReference,
   instanceGuidResolver,
   getOrCreatePropertyGuid,
   parseGuidOrNull,
@@ -50,7 +54,7 @@ import {
   componentPropertyVariableValue,
   componentPropertyAssignments
 } from './property-values'
-import { nodeWithResolvedBindings } from './resolved-bindings'
+import { exportedNode } from './resolved-bindings'
 import { slotDefinitionFields } from './slots'
 import { variantDefaultPluginData } from './variant-defaults'
 
@@ -72,6 +76,8 @@ function exportOrderKey(
   node: SceneNode,
   childIndex: number
 ): string {
+  const decided = context.orderKeys?.get(node.id)
+  if (decided) return decided
   const parentId = node.parentId
   if (!parentId) return context.fractionalPosition(childIndex)
   const parent = context.graph.getNode(parentId)
@@ -375,17 +381,20 @@ function applyRawFigmaNodeFields(
     // For paint arrays on imported nodes, the raw NC data preserves the
     // original opacity/color.a split (e.g. opacity=0 for invisible strokes).
     // The scene model may lose this distinction for instance children whose
-    // strokes are resolved from component overrides. Prefer the raw data.
+    // strokes are resolved from component overrides. Prefer the raw data,
+    // except for a bound color: Figma draws the color a paint saves, so it
+    // takes what its variable resolves to now.
     if ((key === 'fillPaints' || key === 'strokePaints') && node.source.id) {
       const paints = materialized[key]
-      nc[key] = paints?.map((paint, index) =>
-        applyColorVariableBinding(
-          context,
-          node,
-          paint,
-          `${key === 'fillPaints' ? 'fills' : 'strokes'}/${index}/color`
-        )
-      )
+      const current = key === 'fillPaints' ? node.fills : node.strokes
+      nc[key] = paints?.map((paint, index) => {
+        const field = `${key === 'fillPaints' ? 'fills' : 'strokes'}/${index}/color`
+        const bound = applyColorVariableBinding(context, node, paint, field)
+        const resolved = node.boundVariables[field] ? current[index] : undefined
+        return resolved
+          ? { ...bound, color: context.safeColor(resolved.color), opacity: resolved.opacity }
+          : bound
+      })
       continue
     }
     if (
@@ -457,7 +466,9 @@ function applyInstancePayload(
         }) as KiwiSymbolOverridePayload[])
       )
     }
-    const runtime = serializeRuntimePropertyOverrides(context, node, localIdCounter)
+    const runtime = serializeRuntimePropertyOverrides(context, node, localIdCounter, (target) =>
+      overridableNodeFields(context, target)
+    )
     if (node.source.editedFields.includes('instanceOverrides'))
       symbolOverrides = withoutReleasedSizeClaims(
         context,
@@ -628,6 +639,7 @@ function applyComponentMetadata(
   if (node.type === 'COMPONENT' || node.isSymbolPublishable) {
     nc.isSymbolPublishable = node.isSymbolPublishable
   }
+  if (node.isExposedInstance) nc.propsAreBubbled = true
   if (node.symbolDescription) nc.symbolDescription = node.symbolDescription
   if (node.symbolLinks.length > 0) nc.symbolLinks = structuredClone(node.symbolLinks)
   const componentPropDefs = node.componentPropertyDefinitions.map((def) => {
@@ -752,19 +764,52 @@ function nodeForGeometryExport(node: SceneNode): SceneNode {
   }
 }
 
+/**
+ * A layout guide as the archive stores it: stripes along an axis or a grid, whichever shape it was
+ * given in, Figma's plugin names (`COLUMNS`, `count`, `alignment`) or the archive's own.
+ */
+function kiwiLayoutGrid(grid: LayoutGrid): LayoutGrid {
+  const rows = grid.pattern === 'ROWS' || (grid.pattern !== 'COLUMNS' && grid.axis === 'Y')
+  return {
+    type: grid.type ?? grid.alignment ?? 'STRETCH',
+    axis: rows ? 'Y' : 'X',
+    visible: grid.visible ?? true,
+    numSections: layoutGridCount(grid),
+    offset: grid.offset ?? 0,
+    // Figma's new grid is 10 px, the size the plugin API reports for one without a size.
+    sectionSize: grid.sectionSize ?? (grid.pattern === 'GRID' ? 10 : 0),
+    gutterSize: grid.gutterSize ?? 0,
+    color: grid.color ?? { r: 1, g: 0, b: 0, a: 0.1 },
+    pattern: grid.pattern === 'GRID' ? 'GRID' : 'STRIPES'
+  }
+}
+
 function applySharedStyleProps(
   context: SceneNodeToKiwiContext,
   node: SceneNode,
   nc: KiwiNodeChange
 ): void {
-  const reference = (id: string) => ({ guid: context.nodeIdToGuid?.get(id) ?? stringToGuid(id) })
+  const reference = (id: string) => exportedStyleReference(context, id)
   if (node.fillStyleId) nc.styleIdForFill = reference(node.fillStyleId)
   if (node.strokeStyleId) nc.styleIdForStrokeFill = reference(node.strokeStyleId)
   if (node.textStyleId) nc.styleIdForText = reference(node.textStyleId)
   if (node.effectStyleId) nc.styleIdForEffect = reference(node.effectStyleId)
   if (node.gridStyleId) nc.styleIdForGrid = reference(node.gridStyleId)
-  if (node.layoutGrids.length > 0) nc.layoutGrids = structuredClone(node.layoutGrids)
+  if (node.layoutGrids.length > 0) nc.layoutGrids = node.layoutGrids.map(kiwiLayoutGrid)
   if (node.guides.length > 0) nc.guides = exportCanvasGuides(node.guides)
+}
+
+/** A text's props, and what its ranges refer to, which needs the document's identities. */
+function serializeText(context: SceneNodeToKiwiContext, node: SceneNode, nc: KiwiNodeChange): void {
+  context.serializeTextProps(
+    node,
+    nc,
+    context.graph,
+    context.fontDigestMap,
+    context.blobs,
+    context.glyphBlobMap
+  )
+  if (nc.textData) applyTextRunReferences(context, node, nc.textData)
 }
 
 function applyNodeVisualProps(
@@ -783,6 +828,9 @@ function applyNodeVisualProps(
   if (node.fills.length > 0) nc.fillPaints = createFillPaints(context, node)
 
   context.serializeCornerRadii(node, nc)
+  // Figma draws a polygon or star from its count and inner scale; its clipboard has no geometry.
+  if (node.type === 'POLYGON' || node.type === 'STAR') nc.count = node.pointCount
+  if (node.type === 'STAR') nc.starInnerScale = node.starInnerRadius
 
   if (node.effects.length > 0 && !hasRawUnsupportedEffects(node)) {
     nc.effects = node.effects.map((effect) => ({
@@ -797,16 +845,7 @@ function applyNodeVisualProps(
     }))
   }
 
-  if (node.type === 'TEXT') {
-    context.serializeTextProps(
-      node,
-      nc,
-      context.graph,
-      context.fontDigestMap,
-      context.blobs,
-      context.glyphBlobMap
-    )
-  }
+  if (node.type === 'TEXT') serializeText(context, node, nc)
 
   if (node.type !== 'VECTOR') nc.frameMaskDisabled = !node.clipsContent
   applySharedStyleProps(context, node, nc)
@@ -842,6 +881,64 @@ function exportKiwiNodeType(node: SceneNode, context: SceneNodeToKiwiContext): s
   return isPathText ? 'TEXT_PATH' : context.mapToFigmaType(node.type)
 }
 
+/**
+ * The node a record is written from. Serializing writes plugin data onto the node it is given,
+ * and the export reads the live document, so each record gets a copy that lives only while it is
+ * written, carrying any plugin data the export renamed.
+ */
+function nodeToSerialize(context: SceneNodeToKiwiContext, source: SceneNode): SceneNode {
+  const resolved = exportedNode(context, source)
+  return {
+    ...resolved,
+    pluginData: context.pluginDataOverrides?.get(source.id) ?? resolved.pluginData
+  }
+}
+
+/** An instance writes its contents on its own record; a caller may write a record alone. */
+function exportedChildren(node: SceneNode, context: SceneNodeToKiwiContext): SceneNode[] {
+  if (node.type === 'INSTANCE' || context.writeChildren === false) return []
+  return context.graph
+    .getChildren(node.id)
+    .filter((child) => !child.internalOnly && child.sharedStyleType === null)
+}
+
+/** Stroke geometry and lock state, which a layer's record and its instance claims both write. */
+function applyNodeStateProps(node: SceneNode, nc: KiwiNodeChange): void {
+  // With strokes, their geometry is the node's. Without, the node keeps its own weight and
+  // alignment, written when set or when the source file carried them.
+  if (node.strokes.length > 0) {
+    nc.strokeWeight = node.strokes[0].weight
+    nc.strokeAlign = node.strokes[0].align
+  } else {
+    const rawNodeFields = effectiveFigmaRawNodeFields(node)
+    if (node.strokeWeight !== DEFAULT_STROKE_WEIGHT || 'strokeWeight' in rawNodeFields) {
+      nc.strokeWeight = node.strokeWeight
+    }
+    // Kiwi reads a missing alignment as centered.
+    if (node.strokeAlign !== 'CENTER' || 'strokeAlign' in rawNodeFields) {
+      nc.strokeAlign = node.strokeAlign
+    }
+  }
+  if (node.locked) nc.locked = true
+}
+
+/**
+ * The style fields of a layer as its own record writes them, for the instance override claims
+ * that carry them. Text is written without derived glyphs: a claim never carries them.
+ */
+export function overridableNodeFields(
+  context: SceneNodeToKiwiContext,
+  source: SceneNode
+): KiwiNodeChange {
+  const node = nodeToSerialize(context, source)
+  const nc: KiwiNodeChange = {}
+  if (node.blendMode !== 'PASS_THROUGH') nc.blendMode = node.blendMode
+  applyNodeStateProps(node, nc)
+  applyNodeVisualProps({ ...context, fontDigestMap: undefined }, node, nc)
+  context.serializeLayoutProps(node, nc)
+  return nc
+}
+
 export function sceneNodeToKiwiWithContext(
   source: SceneNode,
   parentGuid: GUID,
@@ -849,7 +946,7 @@ export function sceneNodeToKiwiWithContext(
   localIdCounter: { value: number },
   context: SceneNodeToKiwiContext
 ): KiwiNodeChange[] {
-  const node = nodeWithResolvedBindings(context.graph, source)
+  const node = nodeToSerialize(context, source)
   const guid = getOrCreateNodeGuid(context, node.id, localIdCounter) ?? {
     sessionID: 1,
     localID: localIdCounter.value++
@@ -877,23 +974,7 @@ export function sceneNodeToKiwiWithContext(
   if (node.type === 'GROUP') {
     nc.resizeToFit = true
   }
-  // With strokes, their geometry is the node's. Without, the node keeps its own weight and
-  // alignment, written when set or when the source file carried them.
-  if (node.strokes.length > 0) {
-    nc.strokeWeight = node.strokes[0].weight
-    nc.strokeAlign = node.strokes[0].align
-  } else {
-    const rawNodeFields = effectiveFigmaRawNodeFields(node)
-    if (node.strokeWeight !== DEFAULT_STROKE_WEIGHT || 'strokeWeight' in rawNodeFields) {
-      nc.strokeWeight = node.strokeWeight
-    }
-    // Kiwi reads a missing alignment as centered.
-    if (node.strokeAlign !== 'CENTER' || 'strokeAlign' in rawNodeFields) {
-      nc.strokeAlign = node.strokeAlign
-    }
-  }
-  if (node.locked) nc.locked = true
-
+  applyNodeStateProps(node, nc)
   applyNodeVisualProps(context, node, nc)
   applyComponentMetadata(context, node, nc, localIdCounter)
   applyInstancePayload(context, node, nc, localIdCounter)
@@ -931,12 +1012,7 @@ export function sceneNodeToKiwiWithContext(
   }
 
   const result: KiwiNodeChange[] = [nc]
-  const children =
-    node.type === 'INSTANCE'
-      ? []
-      : context.graph
-          .getChildren(node.id)
-          .filter((child) => !child.internalOnly && child.sharedStyleType === null)
+  const children = exportedChildren(node, context)
   for (let i = 0; i < children.length; i++) {
     result.push(...context.sceneNodeToKiwi(children[i], guid, i, localIdCounter, context))
   }

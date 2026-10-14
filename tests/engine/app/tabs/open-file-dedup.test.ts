@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'bun:test'
 
-import * as figModule from '@open-pencil/core/io/formats/fig'
 import * as layoutModule from '@open-pencil/core/layout'
 import { SceneGraph } from '@open-pencil/scene-graph'
 
 import { resolveBrowserFileURL } from '@/app/document/io/browser'
+import * as figModule from '@/app/document/io/fig'
 import type { DocumentSourceIdentity } from '@/app/document/io/types'
 import {
   createDocumentInCurrentTab,
@@ -138,7 +138,7 @@ describe('openFileInNewTab deduplication', () => {
   beforeEach(() => {
     setupGlobals()
     vi.spyOn(layoutModule, 'computeAllLayouts').mockReturnValue(undefined)
-    vi.spyOn(figModule, 'readFigFile').mockResolvedValue(new SceneGraph())
+    vi.spyOn(figModule, 'readFigDocument').mockResolvedValue(new SceneGraph())
     createTab()
   })
 
@@ -201,13 +201,13 @@ describe('openFileInNewTab deduplication', () => {
 
     expect(tabCount()).toBe(initialCount)
     expect(getActiveStore()).toBe(openedStore)
-    expect(figModule.readFigFile).toHaveBeenCalledTimes(1)
+    expect(figModule.readFigDocument).toHaveBeenCalledTimes(1)
   })
 
   test('shares one load between concurrent opens of the same path', async () => {
     const started = Promise.withResolvers<undefined>()
     const read = Promise.withResolvers<SceneGraph>()
-    ;(figModule.readFigFile as ReturnType<typeof vi.fn>).mockImplementation(() => {
+    ;(figModule.readFigDocument as ReturnType<typeof vi.fn>).mockImplementation(() => {
       started.resolve(undefined)
       return read.promise
     })
@@ -219,7 +219,7 @@ describe('openFileInNewTab deduplication', () => {
     const second = openFileInNewTab(file, undefined, '/tmp/concurrent.fig')
     await Promise.resolve()
 
-    expect(figModule.readFigFile).toHaveBeenCalledTimes(1)
+    expect(figModule.readFigDocument).toHaveBeenCalledTimes(1)
     read.resolve(new SceneGraph())
     await Promise.all([settleFileOpen(first), settleFileOpen(second)])
     expect(tabCount()).toBe(initialCount)
@@ -229,7 +229,7 @@ describe('openFileInNewTab deduplication', () => {
     const reads = [Promise.withResolvers<SceneGraph>(), Promise.withResolvers<SceneGraph>()]
     const bothStarted = Promise.withResolvers<undefined>()
     let readIndex = 0
-    ;(figModule.readFigFile as ReturnType<typeof vi.fn>).mockImplementation(() => {
+    ;(figModule.readFigDocument as ReturnType<typeof vi.fn>).mockImplementation(() => {
       const read = reads[readIndex++]
       if (readIndex === 2) bothStarted.resolve(undefined)
       return read?.promise ?? Promise.resolve(new SceneGraph())
@@ -240,7 +240,7 @@ describe('openFileInNewTab deduplication', () => {
     const second = openFileInNewTab(new File([], 'second.fig'), undefined, '/tmp/second.fig')
     await bothStarted.promise
 
-    expect(figModule.readFigFile).toHaveBeenCalledTimes(2)
+    expect(figModule.readFigDocument).toHaveBeenCalledTimes(2)
     reads[0].resolve(new SceneGraph())
     reads[1].resolve(new SceneGraph())
     await Promise.all([settleFileOpen(first), settleFileOpen(second)])
@@ -248,7 +248,7 @@ describe('openFileInNewTab deduplication', () => {
   })
 
   test('removes a failed pending open so the file can be retried', async () => {
-    ;(figModule.readFigFile as ReturnType<typeof vi.fn>)
+    ;(figModule.readFigDocument as ReturnType<typeof vi.fn>)
       .mockRejectedValueOnce(new Error('read failed'))
       .mockResolvedValueOnce(new SceneGraph())
 
@@ -259,7 +259,7 @@ describe('openFileInNewTab deduplication', () => {
       settleFileOpen(openFileInNewTab(new File([], 'retry.fig'), undefined, '/tmp/retry.fig'))
     ).resolves.toBeUndefined()
 
-    expect(figModule.readFigFile).toHaveBeenCalledTimes(2)
+    expect(figModule.readFigDocument).toHaveBeenCalledTimes(2)
     expect(getActiveStore().getSourceIdentity().path).toBe('/tmp/retry.fig')
   })
 
@@ -271,6 +271,6 @@ describe('openFileInNewTab deduplication', () => {
     await settleFileOpen(openFileInNewTab(file))
 
     expect(tabCount()).toBe(initialCount + 1)
-    expect(figModule.readFigFile).toHaveBeenCalledTimes(2)
+    expect(figModule.readFigDocument).toHaveBeenCalledTimes(2)
   })
 })

@@ -285,14 +285,14 @@
             "install",
             "--global",
             {
-              "validator": "^(@agentclientprotocol/(claude-agent-acp|codex-acp)|@open-pencil/(mcp|harness)@[0-9]+\\.[0-9]+\\.[0-9]+)$"
+              "validator": "^(@agentclientprotocol/(claude-agent-acp|codex-acp)|@open-pencil/harness@[0-9]+\\.[0-9]+\\.[0-9]+(-beta\\.[1-9][0-9]*)?)$"
             },
             "--registry=https://registry.npmjs.org"
           ]
         },
         {
-          "name": "openpencil-mcp-http",
-          "cmd": "openpencil-mcp-http",
+          "name": "binaries/openpencil-mcp-http",
+          "sidecar": true,
           "args": false
         },
         {
@@ -334,17 +334,9 @@
             "install",
             "--global",
             {
-              "validator": "^(@agentclientprotocol/(claude-agent-acp|codex-acp)|@open-pencil/(mcp|harness)@[0-9]+\\.[0-9]+\\.[0-9]+)$"
+              "validator": "^(@agentclientprotocol/(claude-agent-acp|codex-acp)|@open-pencil/harness@[0-9]+\\.[0-9]+\\.[0-9]+(-beta\\.[1-9][0-9]*)?)$"
             },
             "--registry=https://registry.npmjs.org"
-          ]
-        },
-        {
-          "name": "cmd-openpencil-mcp-http",
-          "cmd": "cmd",
-          "args": [
-            "/c",
-            "openpencil-mcp-http"
           ]
         },
         {
@@ -373,6 +365,32 @@
             "acp",
             "--agent-engine=v3",
             "--auth-method=cli"
+          ]
+        },
+        {
+          "name": "bun",
+          "cmd": "bun",
+          "args": [
+            "add",
+            "--global",
+            {
+              "validator": "^@open-pencil/harness@[0-9]+\\.[0-9]+\\.[0-9]+(-beta\\.[1-9][0-9]*)?$"
+            },
+            "--registry=https://registry.npmjs.org"
+          ]
+        },
+        {
+          "name": "cmd-bun",
+          "cmd": "cmd",
+          "args": [
+            "/c",
+            "bun",
+            "add",
+            "--global",
+            {
+              "validator": "^@open-pencil/harness@[0-9]+\\.[0-9]+\\.[0-9]+(-beta\\.[1-9][0-9]*)?$"
+            },
+            "--registry=https://registry.npmjs.org"
           ]
         }
       ]

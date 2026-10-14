@@ -19,8 +19,13 @@ export function useBindingFieldUI(options: BindingFieldUIOptions = {}, ui?: Bind
   const styles = tv(theme)(options)
   return {
     root: styles.root({ class: ui?.root }),
+    field: styles.field({ class: ui?.field }),
+    control: styles.control({ class: ui?.control }),
+    content: styles.content({ class: ui?.content }),
+    actions: styles.actions({ class: ui?.actions }),
     pill: styles.pill({ class: ui?.pill }),
     pillLabel: styles.pillLabel({ class: ui?.pillLabel }),
+    pillValue: styles.pillValue({ class: ui?.pillValue }),
     trigger: styles.trigger({ class: ui?.trigger }),
     createForm: styles.createForm({ class: ui?.createForm }),
     createInput: styles.createInput({ class: ui?.createInput })

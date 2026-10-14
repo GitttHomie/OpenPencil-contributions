@@ -5,12 +5,32 @@ import { useStore } from '@nanostores/vue'
 import { locale, type Locale, type TranslatedLocale } from '@open-pencil/vue'
 
 export const notificationMessageDefaults = {
+  layoutContainerFixedWidth: params(
+    '“{name}” switched to Fixed width so “{layer}” can fill the available space.'
+  ),
+  layoutContainerFixedHeight: params(
+    '“{name}” switched to Fixed height so “{layer}” can fill the available space.'
+  ),
+  layoutLayerFixedWidth: params(
+    '1 layer inside “{name}” switched to Fixed width so it can hug its contents.'
+  ),
+  layoutLayerFixedHeight: params(
+    '1 layer inside “{name}” switched to Fixed height so it can hug its contents.'
+  ),
+  layoutLayersFixedWidth: params(
+    '{count} layers inside “{name}” switched to Fixed width so it can hug its contents.'
+  ),
+  layoutLayersFixedHeight: params(
+    '{count} layers inside “{name}” switched to Fixed height so it can hug its contents.'
+  ),
   chatInitializationFailed: params('Could not initialize chat: {error}'),
   linkCopied: 'Link copied to clipboard.',
   clipboardMissingDesignData: 'Clipboard does not contain design data.',
   clipboardAccessBlocked: 'Clipboard access is blocked in this browser context.',
   copiedAs: params('Copied as {format}.'),
   tokensLeftOut: params('Left out of the stylesheet: {names}.'),
+  designTokensLeftOut: params('Left out of the design tokens: {names}.'),
+  designTokensImported: params('Imported {count} design tokens.'),
   nodeID: 'node ID',
   nodeIDs: 'node IDs',
   xPath: 'XPath',

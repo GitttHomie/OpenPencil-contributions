@@ -94,6 +94,7 @@ test('Convert to vector appears only for a single image node', async () => {
   await editor.canvas.drawRect(400, 400, 60, 60)
   await rightClickSelected()
   await expect(editor.page.getByTestId('context-vectorize')).toHaveCount(0)
+  await editor.page.keyboard.press('Escape')
   editor.canvas.assertNoErrors()
 })
 

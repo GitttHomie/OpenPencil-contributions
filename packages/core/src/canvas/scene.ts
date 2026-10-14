@@ -1,29 +1,31 @@
-/* eslint-disable max-lines -- scene dispatch stays together while shape domains live in sibling modules */
 import type { Canvas, Path } from 'canvaskit-wasm'
 
-import { type SceneNode, type SceneGraph, type Fill } from '@open-pencil/scene-graph'
+import {
+  resolvedPaintBindings,
+  type SceneNode,
+  type SceneGraph,
+  type Fill
+} from '@open-pencil/scene-graph'
 import type { ArrowEndpoint } from '@open-pencil/scene-graph/arrow-caps'
 import {
   arrowCapOverflow,
   collectArrowEndpoints,
   lineArrowEndpoints
 } from '@open-pencil/scene-graph/arrow-caps'
-import { computeDescendantVisualBounds } from '@open-pencil/scene-graph/geometry'
+import { computeDescendantVisualBounds, hasFiniteGeometry } from '@open-pencil/scene-graph/geometry'
 import Matrix from '@open-pencil/scene-graph/matrix'
 import type { Color } from '@open-pencil/scene-graph/primitives'
 
-import {
-  COMPONENT_SET_OUTLINE_RADIUS,
-  DROP_HIGHLIGHT_ALPHA,
-  DROP_HIGHLIGHT_STROKE
-} from '#core/constants'
-import { createSceneGeometry, nodeOrientationMatrix, projectedNode } from '#core/geometry/index'
-import { transformTextCase } from '#core/text/case'
+/* eslint-disable max-lines -- scene dispatch stays together while shape domains live in sibling modules */
+import { DROP_HIGHLIGHT_STROKE, DROP_HIGHLIGHT_ALPHA } from '#core/constants'
+import { createSceneGeometry, nodeOrientationMatrix, projectedNode } from '#core/geometry'
+import { shownText } from '#core/text/case'
 import { fontManager } from '#core/text/fonts'
-import { vectorNetworkToCenterlinePath } from '#core/vector/index'
+import { addStrokeRunToPath, strokeRuns, vectorNetworkToCenterlinePath } from '#core/vector'
 
 import { figmaBlendModeToSkia, needsIsolatedBlendLayer } from './blend'
 import { renderBooleanOperation } from './boolean'
+import { blurSigma } from './effects'
 import { drawVectorMultiStyleFills, paintFills } from './fills'
 import { drawLayoutGrids } from './layout-grids'
 import { renderMaskedChildIds } from './masks'
@@ -33,6 +35,7 @@ import {
   effectRasterScale,
   effectRasterScaleMatches
 } from './renderer/effect-raster-cache'
+import { drawForegroundBlurPreview } from './renderer/foreground-blur'
 import { makeSmoothRRectPath, nodeHasRadius, nodeHasSmoothCorners } from './shapes'
 import {
   configureStrokePaint,
@@ -45,6 +48,7 @@ import {
   normalizeDashPattern
 } from './strokes'
 import { textVerticalOffset, withTextParagraph } from './text'
+import { drawTextLayout } from './text/decorations'
 import {
   canDrawSavedText,
   drawDerivedText,
@@ -127,6 +131,12 @@ function renderNodeContent(
   nodeId: string,
   overlays: RenderOverlays
 ): void {
+  // Draw current variable RGB and alpha without writing derived paints into the document.
+  // Outline masks deliberately ignore paint alpha.
+  if (!(node.isMask && node.maskType === 'VECTOR')) {
+    const paints = resolvedPaintBindings(graph, node)
+    if (paints.fills || paints.strokes) node = { ...node, ...paints }
+  }
   if (node.type === 'SECTION') {
     r.renderSection(canvas, node, graph)
   } else if (node.type === 'COMPONENT_SET' && !overlays.playing) {
@@ -154,14 +164,51 @@ function renderMaskNodeContent(
   canvas: Canvas,
   graph: SceneGraph,
   node: SceneNode,
-  nodeId: string,
-  overlays: RenderOverlays
+  overlays: RenderOverlays,
+  absX: number,
+  absY: number
 ): void {
+  if (!hasFiniteGeometry(node)) return
   canvas.save()
   canvas.translate(node.x, node.y)
+  // As in Figma, a mask's opacity and layer blur reach what it masks; its blend mode does not.
+  const blur = node.effects.find(
+    (effect) =>
+      effect.visible && (effect.type === 'LAYER_BLUR' || effect.type === 'FOREGROUND_BLUR')
+  )
+  const layered = node.opacity < 1 || blur !== undefined
+  if (layered) {
+    const padding = (blur?.radius ?? 0) * 2
+    r.opacityPaint.setAlphaf(node.opacity)
+    r.opacityPaint.setBlendMode(r.ck.BlendMode.SrcOver)
+    r.opacityPaint.setImageFilter(blur ? r.getCachedBlur(blurSigma(blur.radius)) : null)
+    canvas.saveLayer(
+      r.opacityPaint,
+      r.ck.LTRBRect(-padding, -padding, node.width + padding, node.height + padding)
+    )
+    r.opacityPaint.setImageFilter(null)
+  }
   applyNodeTransforms(canvas, node, overlays)
-  renderNodeContent(r, canvas, graph, node, nodeId, {})
+  renderNodeContent(
+    r,
+    canvas,
+    graph,
+    node.maskType === 'VECTOR' ? opaqueFills(node) : node,
+    node.id,
+    {}
+  )
+  // A group or frame used as a mask masks with what its layers draw, as in Figma.
+  renderChildren(r, canvas, graph, node, overlays, absX + node.x, absY + node.y, true)
+  if (layered) canvas.restore()
   canvas.restore()
+}
+
+/** An outline mask masks with its shape alone, so Figma ignores how opaque its fills are. */
+function opaqueFills(node: SceneNode): SceneNode {
+  return {
+    ...node,
+    fills: node.fills.map((fill) => ({ ...fill, opacity: 1, color: { ...fill.color, a: 1 } }))
+  }
 }
 
 function renderChildIds(
@@ -185,7 +232,7 @@ function renderChildIds(
     (childId) => r.renderNode(canvas, graph, childId, overlays, absX, absY, hasTransformedAncestor),
     (childId) => {
       const child = graph.getNode(childId)
-      if (child) renderMaskNodeContent(r, canvas, graph, child, childId, overlays)
+      if (child) renderMaskNodeContent(r, canvas, graph, child, overlays, absX, absY)
     },
     (childId) => {
       const child = graph.getNode(childId)
@@ -237,6 +284,7 @@ export function renderNodeSelf(
     !node ||
     node.internalOnly ||
     !node.visible ||
+    !hasFiniteGeometry(node) ||
     node.isMask ||
     fontManager.isNodeBlocked(nodeId)
   ) {
@@ -307,7 +355,13 @@ function nodeIsolationLayerBounds(
  * node-edit mode, or left to a live island while the canvas previews.
  */
 function drawsNode(node: SceneNode, overlays: RenderOverlays): boolean {
-  if (node.internalOnly || !node.visible || node.isMask || fontManager.isNodeBlocked(node.id))
+  if (
+    node.internalOnly ||
+    !node.visible ||
+    node.isMask ||
+    !hasFiniteGeometry(node) ||
+    fontManager.isNodeBlocked(node.id)
+  )
     return false
   return overlays.nodeEditState?.nodeId !== node.id && !overlays.playIslands?.has(node.id)
 }
@@ -354,6 +408,29 @@ export function renderNode(
     canvas.saveLayer(r.opacityPaint, layerBounds)
   }
 
+  if (
+    overlays.dropTargetId !== nodeId &&
+    overlays.rotationPreview?.nodeId !== nodeId &&
+    drawForegroundBlurPreview(
+      r,
+      canvas,
+      node,
+      (target) => {
+        renderNodeContent(r, target, graph, node, nodeId, overlays)
+        drawLayoutGrids(r, target, node)
+      },
+      r.navigationPhase === 'idle' && !overlays.transforming
+    )
+  ) {
+    if (needsNodeLayer) {
+      canvas.restore()
+      r.opacityPaint.setAlphaf(1)
+      r.opacityPaint.setBlendMode(r.ck.BlendMode.SrcOver)
+    }
+    canvas.restore()
+    return
+  }
+
   const layerBlur = node.effects.find(
     (e) => e.visible && (e.type === 'LAYER_BLUR' || e.type === 'FOREGROUND_BLUR')
   )
@@ -363,7 +440,7 @@ export function renderNode(
     r.effectLayerPaint.setColorFilter(null)
     r.effectLayerPaint.setBlendMode(r.ck.BlendMode.SrcOver)
 
-    r.effectLayerPaint.setImageFilter(r.getCachedBlur(layerBlur.radius / 2))
+    r.effectLayerPaint.setImageFilter(r.getCachedBlur(blurSigma(layerBlur.radius)))
     const blurPadding = layerBlur.radius * 2
     canvas.saveLayer(
       r.effectLayerPaint,
@@ -481,16 +558,7 @@ export function renderComponentSet(
         drawStyledRRectStroke(r, canvas, rrect, node, stroke, color, dashPhase)
       }
     })
-    return
   }
-
-  r.auxStroke.setStrokeWidth(r.COMPONENT_SET_BORDER_WIDTH / r.zoom)
-  r.auxStroke.setColor(r.compColor())
-  r.auxStroke.setPathEffect(
-    r.ck.PathEffect.MakeDash([r.COMPONENT_SET_DASH / r.zoom, r.COMPONENT_SET_DASH_GAP / r.zoom], 0)
-  )
-  canvas.drawRRect(makeNodeRRect(r, node, COMPONENT_SET_OUTLINE_RADIUS), r.auxStroke)
-  r.auxStroke.setPathEffect(null)
 }
 
 function canRasterCacheEffects(node: SceneNode): boolean {
@@ -510,7 +578,7 @@ export function renderShape(
   graph: SceneGraph
 ): void {
   const hasEffects = node.effects.some((effect) => effect.visible)
-  if (!hasEffects) {
+  if (r.viewportImageRendering || !hasEffects) {
     r.renderShapeUncached(canvas, node, graph)
     return
   }
@@ -646,32 +714,13 @@ function vectorStrokePaths(r: SkiaRenderer, node: SceneNode): Path[] | null {
   const cached = r.vectorStrokePathCache.get(node.id)
   if (cached) return cached
 
-  const paths: Path[] = []
-  for (const segment of node.vectorNetwork.segments) {
-    const start = node.vectorNetwork.vertices[segment.start]
-    const end = node.vectorNetwork.vertices[segment.end]
-
+  // A path per run, so the corners inside a run join and only its open ends take caps.
+  const { segments, vertices } = node.vectorNetwork
+  const paths = strokeRuns(segments).map((run) => {
     const path = new r.ck.PathBuilder()
-    path.moveTo(start.x, start.y)
-    const isStraight =
-      Math.abs(segment.tangentStart.x) < 0.001 &&
-      Math.abs(segment.tangentStart.y) < 0.001 &&
-      Math.abs(segment.tangentEnd.x) < 0.001 &&
-      Math.abs(segment.tangentEnd.y) < 0.001
-    if (isStraight) {
-      path.lineTo(end.x, end.y)
-    } else {
-      path.cubicTo(
-        start.x + segment.tangentStart.x,
-        start.y + segment.tangentStart.y,
-        end.x + segment.tangentEnd.x,
-        end.y + segment.tangentEnd.y,
-        end.x,
-        end.y
-      )
-    }
-    paths.push(path.detachAndDelete())
-  }
+    addStrokeRunToPath(path, run, segments, vertices)
+    return path.detachAndDelete()
+  })
 
   if (paths.length === 0) return null
   r.vectorStrokePathCache.set(node.id, paths)
@@ -872,7 +921,12 @@ export function renderShapeUncached(
   const shadowChild = getShadowShapeChild(node, graph)
   r.renderEffects(canvas, node, rect, hasRadius, 'behind', shadowChild)
 
-  const sg = node.strokeGeometry.length > 0 ? r.getStrokeGeometry(node) : null
+  // Imported outlines retain the saved dimensions. Frames and buttons can reflow without
+  // rewriting those paths, so draw their border from the live box and corner settings.
+  const sg =
+    !r.isRectangularType(node.type) && node.strokeGeometry.length > 0
+      ? r.getStrokeGeometry(node)
+      : null
   const vectorPaths = node.type === 'VECTOR' ? r.getVectorPaths(node) : null
   const vectorStroke = node.type === 'VECTOR' ? vectorStrokePaths(r, node) : null
   const pathTextStrokeFirst = isPathTextWithStrokeGeometry(node)
@@ -912,8 +966,9 @@ function drawPaintedText(r: SkiaRenderer, canvas: Canvas, node: SceneNode): bool
       halfLeading: true,
       foregroundPaint: r.fillPaint
     },
-    (paragraph) => {
-      canvas.drawParagraph(paragraph, 0, textVerticalOffset(node, paragraph.getHeight()))
+    (paragraph, prepared) => {
+      const y = textVerticalOffset(node, paragraph.getHeight())
+      drawTextLayout(r.ck, canvas, node, prepared, y, r.fillPaint)
       return true
     }
   )
@@ -986,20 +1041,20 @@ export function renderText(r: SkiaRenderer, canvas: Canvas, node: SceneNode, fil
     return
   }
   if (r.fontsLoaded && r.fontProvider) {
-    withTextParagraph(r, node, r.fillPaint.getColor(), { halfLeading: true }, (paragraph) => {
-      const paragraphY = textVerticalOffset(node, paragraph.getHeight())
-      canvas.drawParagraph(paragraph, 0, paragraphY)
-    })
+    withTextParagraph(
+      r,
+      node,
+      r.fillPaint.getColor(),
+      { halfLeading: true },
+      (paragraph, prepared) => {
+        const paragraphY = textVerticalOffset(node, paragraph.getHeight())
+        drawTextLayout(r.ck, canvas, node, prepared, paragraphY, r.fillPaint)
+      }
+    )
   } else if (r.textFont) {
     const fontSize = node.fontSize || r.DEFAULT_FONT_SIZE
     const paragraphY = textVerticalOffset(node, fontSize)
-    canvas.drawText(
-      transformTextCase(text, node.textCase),
-      0,
-      paragraphY + fontSize,
-      r.fillPaint,
-      r.textFont
-    )
+    canvas.drawText(shownText(node), 0, paragraphY + fontSize, r.fillPaint, r.textFont)
   }
 
   canvas.restore()

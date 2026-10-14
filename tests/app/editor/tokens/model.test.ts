@@ -93,6 +93,23 @@ describe('groups', () => {
 })
 
 describe('typed values', () => {
+  test('numeric aliases expose the resolved value for both list and inspector', () => {
+    const graph = graphWith([
+      ['base', 'FLOAT', 0],
+      ['alias', 'FLOAT', { aliasId: 'base' }]
+    ])
+    const collection = graph.variableCollections.get('c')
+    if (!collection) throw new Error('Missing collection')
+    const rows = () =>
+      tokenGroups(graph, collection, [...graph.variables.values()]).flatMap((group) => group.rows)
+    expect(rows().find((row) => row.variable.id === 'alias')?.values[0].numericValue).toBe('0')
+    variable(graph, 'base').valuesByMode.m = 12.5
+    expect(rows().find((row) => row.variable.id === 'alias')?.values[0]).toMatchObject({
+      alias: 'base',
+      numericValue: '12.5px'
+    })
+  })
+
   const gutter: Variable = {
     id: 'g',
     name: 'Gutter',
@@ -191,6 +208,17 @@ describe('reordering', () => {
 })
 
 describe('alias candidates', () => {
+  test('numeric candidates provide the text displayed by the shared picker, including zero', () => {
+    const graph = graphWith([
+      ['base', 'FLOAT', 8],
+      ['zero', 'FLOAT', 0],
+      ['gap', 'FLOAT', 12.5]
+    ])
+    expect(aliasCandidates(graph, variable(graph, 'base'))).toEqual([
+      expect.objectContaining({ id: 'zero', text: '0' }),
+      expect.objectContaining({ id: 'gap', text: '12.5px' })
+    ])
+  })
   test('offer variables of the same type, never the token itself', () => {
     const graph = graphWith([
       ['primary', 'COLOR', { r: 0, g: 0, b: 1, a: 1 }],
@@ -219,5 +247,20 @@ describe('alias candidates', () => {
     const candidates = aliasCandidates(graph, variable(graph, 'base'))
 
     expect(candidates.map((candidate) => candidate.id)).toEqual(['other'])
+  })
+})
+test('derived color rows show the source and opacity alongside the resolved swatch', () => {
+  const graph = new SceneGraph()
+  const collection = graph.createCollection('Colors')
+  const base = graph.createVariable('Neutral', 'COLOR', collection.id, { r: 0, g: 0, b: 1, a: 1 })
+  const derived = graph.createVariable('Alpha', 'COLOR', collection.id, {
+    expression: 'COMPOSE_COLOR',
+    color: { aliasId: base.id },
+    opacity: 20
+  })
+  const groups = tokenGroups(graph, collection, [derived])
+  expect(groups[0].rows[0].values[0]).toMatchObject({
+    alias: 'Neutral · 20%',
+    color: { r: 0, g: 0, b: 1, a: 0.2 }
   })
 })

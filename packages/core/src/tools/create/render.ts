@@ -54,7 +54,8 @@ export async function renderDesignTree(
   tree: TreeNode,
   args: RenderPlacementInput
 ) {
-  const { renderRoots } = await import('#core/design-jsx/index')
+  const { designJSXRenderer } = await import('#core/design-jsx/index')
+  const { renderRoots } = designJSXRenderer(figma.icons)
   return renderPlaced(figma, args, (placement) => renderRoots(figma.graph, tree, placement))
 }
 
@@ -64,7 +65,7 @@ export const render = defineTool({
   description:
     'Create editable design nodes from JSX. Required argument: jsx (a string containing the complete JSX). Payload: {"jsx":"<Frame name=\\"Card\\" w={320} h={200} />"}. When using a tool dispatcher, put this entire payload in its arguments field. Use replace_id to replace a placeholder while preserving its position. Supports inline SVG, including open stroked paths.',
   execution: { kind: 'async', mutation: 'document' },
-  input: v.object({
+  input: v.strictObject({
     jsx: v.pipe(
       v.string(),
       v.description('Required JSX source string, for example <Frame name="Card" w={320} h={200} />')
@@ -90,7 +91,8 @@ export const render = defineTool({
     y: v.optional(toolNumber(v.pipe(v.number(), v.description('Y position of the root node'))))
   }),
   execute: async (figma, args) => {
-    const { renderJSX } = await import('#core/design-jsx/index')
+    const { designJSXRenderer } = await import('#core/design-jsx/index')
+    const { renderJSX } = designJSXRenderer(figma.icons)
 
     return renderPlaced(figma, args, (placement) => renderJSX(figma.graph, args.jsx, placement))
   }

@@ -10,6 +10,7 @@ import { randomHex } from '@open-pencil/core/random'
 
 import { makeFigmaFromStore } from '@/app/automation/bridge/figma-factory'
 import { createAutomationCommandHandlers } from '@/app/automation/bridge/handlers'
+import { getAutomationWebSocketURL } from '@/app/automation/mcp/endpoint'
 import type { EditorStore } from '@/app/editor/active-store'
 
 /** Requests from the MCP bridge; other message types (such as the register prompt) are ignored. */
@@ -28,7 +29,7 @@ const AutomationRequestJSON = v.pipe(
 export function connectAutomation(
   getStore: () => EditorStore,
   authToken: string | null = null,
-  automationURL = __OPENPENCIL_LOCAL_AUTOMATION_URL__
+  automationURL = getAutomationWebSocketURL()
 ) {
   const token = authToken ?? randomHex(32)
   let ws: WebSocket | null = null

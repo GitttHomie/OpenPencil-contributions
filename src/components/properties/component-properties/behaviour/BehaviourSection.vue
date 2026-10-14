@@ -112,7 +112,7 @@ const missingLabel = computed(() => {
         <span
           v-if="behaviour.missing.length"
           role="status"
-          class="flex h-5 shrink-0 items-center gap-1 rounded bg-issue-warning/15 px-1.5 text-[10px] text-issue-warning"
+          class="flex h-5 shrink-0 items-center gap-1 rounded bg-warning/15 px-1.5 text-[10px] text-warning"
           data-property="behaviour-missing"
         >
           <SeverityIcon severity="warning" />

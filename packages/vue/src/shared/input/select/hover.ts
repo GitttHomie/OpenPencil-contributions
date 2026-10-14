@@ -1,4 +1,4 @@
-import { getNodeEditCapability, type Editor } from '@open-pencil/core/editor'
+import { type Editor } from '@open-pencil/core/editor'
 
 import {
   buildResizeCursor,
@@ -7,7 +7,7 @@ import {
   hitTestCornerRotationByMatrix
 } from '#vue/shared/input/geometry'
 import type { HitTestFns } from '#vue/shared/input/select'
-import { drillHit, resolveLabelHit, selectedHit } from '#vue/shared/input/select/hit'
+import { drillHit, selectedHit, hitTestLabel } from '#vue/shared/input/select/hit'
 import { getNodeEditState } from '#vue/shared/input/vector'
 
 function getResizeCursorForSelection(cx: number, cy: number, editor: Editor): string | null {
@@ -51,7 +51,7 @@ function getRotationCursorForSelection(cx: number, cy: number, editor: Editor): 
 function updateHoveredNode(cx: number, cy: number, editor: Editor, fns: HitTestFns, deep: boolean) {
   const hit = deep
     ? fns.hitTestInScope(cx, cy, true)
-    : (resolveLabelHit(cx, cy, fns) ??
+    : (hitTestLabel(cx, cy, fns) ??
       drillHit(editor, fns.hitTestInScope(cx, cy, true)) ??
       selectedHit(editor, fns.hitTestInScope(cx, cy, true)) ??
       fns.hitTestInScope(cx, cy, false))
@@ -77,14 +77,11 @@ export function updateHoverCursor(
     updateHoveredNode(cx, cy, editor, fns, true)
     return null
   }
-
-  const label = resolveLabelHit(cx, cy, fns)
-  if (label) {
-    updateHoveredNode(cx, cy, editor, fns, false)
-    return !label.locked && getNodeEditCapability(editor.graph, label.id).editable ? 'move' : null
-  }
+  const label = hitTestLabel(cx, cy, fns)
+  const labelCursor = label && !label.locked ? 'move' : null
   const cursor =
-    getResizeCursorForSelection(cx, cy, editor) ?? getRotationCursorForSelection(cx, cy, editor)
+    getResizeCursorForSelection(cx, cy, editor) ??
+    (label ? labelCursor : getRotationCursorForSelection(cx, cy, editor))
   updateHoveredNode(cx, cy, editor, fns, deep)
   return cursor
 }

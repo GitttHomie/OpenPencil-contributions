@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useTemplateRef } from 'vue'
+import { computed, useTemplateRef } from 'vue'
 
 import {
   useAutomationMessages,
@@ -22,10 +22,13 @@ import ProviderSettingsField from '@/components/settings/provider/ProviderSettin
 import ProviderSettingsKeyField from '@/components/settings/provider/ProviderSettingsKeyField.vue'
 import AppButton from '@/components/ui/button/AppButton.vue'
 import AppInput from '@/components/ui/input/AppInput.vue'
+import AppTextarea from '@/components/ui/input/AppTextarea.vue'
+import AppSelect from '@/components/ui/select/AppSelect.vue'
 import AppSwitch from '@/components/ui/toggle/AppSwitch.vue'
 
 const draft = defineModel<MCPConnectionDraft>('draft', { required: true })
 const token = defineModel<string>('token', { required: true })
+const environment = defineModel<string>('environment', { default: '' })
 const {
   tokenStatus,
   busy,
@@ -38,13 +41,16 @@ const {
   error: string
   saveResult?: SettingsSaveResult | null
   fieldErrors?: MCPConnectionFieldErrors
+  testedTools?: string[] | null
+  testing?: boolean
 }>()
 defineEmits<{
   cancel: []
   save: []
   remove: []
   clear: []
-  blurField: [field: 'name' | 'url' | 'credential']
+  blurField: [field: 'name' | 'url' | 'command' | 'credential']
+  test: []
 }>()
 const automation = useAutomationMessages()
 const common = useCommonMessages()
@@ -52,6 +58,21 @@ const credentials = useCredentialMessages()
 const settings = useSettingsMessages()
 const formElement = useTemplateRef<HTMLFormElement>('formElement')
 defineExpose({ focusInvalid: () => focusInvalidField(formElement.value) })
+const argumentsText = computed({
+  get: () => (draft.value.args ?? []).join('\n'),
+  set: (value: string) => {
+    draft.value.args = value ? value.split('\n') : []
+  }
+})
+const approvalsText = computed({
+  get: () => (draft.value.autoApprove ?? []).join('\n'),
+  set: (value: string) => {
+    draft.value.autoApprove = value
+      .split('\n')
+      .map((s) => s.trim())
+      .filter(Boolean)
+  }
+})
 </script>
 
 <template>
@@ -84,7 +105,19 @@ defineExpose({ focusInvalid: () => focusInvalidField(formElement.value) })
               autocomplete="off"
             />
           </ProviderSettingsField>
+          <ProviderSettingsField v-slot="{ control }" :label="automation.transportType">
+            <AppSelect
+              v-bind="control"
+              :model-value="draft.transportType ?? 'streamable-http'"
+              :options="[
+                { value: 'streamable-http', label: automation.httpServer },
+                { value: 'stdio', label: automation.localCommand }
+              ]"
+              @update:model-value="draft.transportType = $event"
+            />
+          </ProviderSettingsField>
           <ProviderSettingsField
+            v-if="draft.transportType !== 'stdio'"
             v-slot="{ control }"
             :label="automation.serverURL"
             :hint="automation.serverURLHint"
@@ -103,6 +136,53 @@ defineExpose({ focusInvalid: () => focusInvalidField(formElement.value) })
               :spellcheck="false"
             />
           </ProviderSettingsField>
+          <template v-else>
+            <ProviderSettingsField
+              v-slot="{ control }"
+              :label="automation.command"
+              :error="fieldErrors.command"
+              @blur="$emit('blurField', 'command')"
+            >
+              <AppInput
+                v-bind="control"
+                :model-value="draft.command ?? ''"
+                tone="panel"
+                autocomplete="off"
+                @update:model-value="draft.command = String($event)"
+              />
+            </ProviderSettingsField>
+            <ProviderSettingsField v-slot="{ control }" :label="automation.arguments">
+              <AppTextarea
+                tone="panel"
+                v-bind="control"
+                v-model="argumentsText"
+                :rows="3"
+                spellcheck="false"
+              />
+            </ProviderSettingsField>
+            <ProviderSettingsField
+              v-slot="{ control }"
+              :label="automation.environment"
+              :hint="automation.environmentHint"
+            >
+              <AppTextarea
+                tone="panel"
+                v-bind="control"
+                v-model="environment"
+                :rows="4"
+                spellcheck="false"
+              />
+            </ProviderSettingsField>
+          </template>
+          <ProviderSettingsField v-slot="{ control }" :label="automation.approvalList">
+            <AppTextarea
+              tone="panel"
+              v-bind="control"
+              v-model="approvalsText"
+              :rows="2"
+              spellcheck="false"
+            />
+          </ProviderSettingsField>
           <SettingsGroup>
             <SettingsRow :label="automation.enableConnection">
               <AppSwitch
@@ -111,7 +191,10 @@ defineExpose({ focusInvalid: () => focusInvalidField(formElement.value) })
                 :disabled="busy"
               />
             </SettingsRow>
-            <SettingsRow :label="automation.bearerAuthentication">
+            <SettingsRow
+              v-if="draft.transportType !== 'stdio'"
+              :label="automation.bearerAuthentication"
+            >
               <AppSwitch
                 :model-value="draft.authenticationType === 'bearer'"
                 :label="automation.bearerAuthentication"
@@ -142,6 +225,15 @@ defineExpose({ focusInvalid: () => focusInvalidField(formElement.value) })
             @blur="$emit('blurField', 'credential')"
           />
         </fieldset>
+        <AppButton class="self-start" :disabled="busy" :loading="testing" @click="$emit('test')">{{
+          automation.testConnection
+        }}</AppButton>
+        <div v-if="testedTools" role="status" class="flex flex-col gap-2 text-xs">
+          <span>{{ automation.connectionReady }} ({{ testedTools.length }})</span>
+          <ul class="max-h-40 overflow-auto text-muted">
+            <li v-for="name in testedTools" :key="name">{{ name }}</li>
+          </ul>
+        </div>
         <SettingsSaveFeedback :error="error" :result="saveResult" />
       </SettingsSection>
       <template #footer>

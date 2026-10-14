@@ -10,6 +10,8 @@ const collections: VariableCollection[] = [
   {
     id: 'set',
     name: 'Tokens',
+    key: 'published-collection',
+    version: 'library-version',
     modes: [{ modeId: 'mode', name: 'Default' }],
     defaultModeId: 'mode',
     variableIds: ['color', 'alias']
@@ -49,6 +51,8 @@ test('variable transfer remaps resource membership, modes, and aliases with isol
   const prepared = prepareVariableTransfer(variables, collections, references())
   expect(prepared.collections[0]).toMatchObject({
     id: 'new-set',
+    key: 'published-collection',
+    version: 'library-version',
     defaultModeId: 'new-mode',
     variableIds: ['new-color', 'new-alias']
   })

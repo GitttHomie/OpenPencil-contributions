@@ -4,8 +4,8 @@ import type { ComputedRef } from 'vue'
 import { parseFontStyle } from '@open-pencil/scene-graph'
 import type { SceneNode } from '@open-pencil/scene-graph'
 
-import { TYPOGRAPHY_WEIGHTS } from '#vue/controls/typography/actions'
 import type { TypographyFontLoader } from '#vue/controls/typography/use'
+import { TYPOGRAPHY_WEIGHTS } from '#vue/controls/typography/weights'
 
 export function useFontStyleOptions(
   node: ComputedRef<SceneNode | null>,

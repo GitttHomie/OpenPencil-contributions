@@ -5,6 +5,7 @@ import type { SceneGraph, SceneNode } from '../'
 import { cloneNodeProps, copyEffects, copyFills, copyStrokes, copyStyleRuns } from '../copy'
 import type { NodeCloneMode } from '../copy'
 import {
+  getInstanceOverride,
   hasInstanceOverride as hasNodeInstanceOverride,
   createInstanceOverrideState,
   setInstanceOverride,
@@ -13,20 +14,24 @@ import {
 import { sourceForNumberGroups } from '../numeric-properties'
 import { scaleNodeChanges } from '../scaling/node'
 import { ownsSlotContent, slotPropertyId } from '../slots/frames'
-import { isNumericVariableBindingField } from '../variables/fields'
 import { scaleVariableBindingUnits } from '../variables/units'
-import { INSTANCE_SYNC_FIELDS, INSTANCE_SYNC_PROPS } from './fields'
+import { keepOwnContentSize, remeasureChangedText } from './content-size'
+import {
+  createInstanceSyncContext,
+  hasUnplacedCopiesBelow,
+  restoreRemovedCopy,
+  unplacedCopy,
+  type InstanceSyncContext
+} from './copies'
+import { INSTANCE_SYNC_FIELD_OWNERS, INSTANCE_SYNC_FIELDS, INSTANCE_SYNC_PROPS } from './fields'
 import { instanceMainComponent } from './main-component'
+import { PLACEMENT_FIELDS, placedByConstraints } from './placement'
 import {
   enclosingAssignment,
   applyEnclosingAssignments,
   propertyDrivenFields
 } from './property-values'
-import {
-  createInstanceStructureSync,
-  mappedComponentChild,
-  type InstanceStructureSync
-} from './structure'
+import { followVectorGeometry } from './vector-geometry'
 
 function setSceneProp<K extends keyof SceneNode>(
   target: Partial<SceneNode>,
@@ -58,6 +63,8 @@ export function copyProp(
   } else if (key === 'gridPosition') {
     // Shallow copy the grid position object — all fields are primitives
     setSceneProp(target, key, source.gridPosition ? { ...source.gridPosition } : null)
+  } else if (key === 'targetAspectRatio') {
+    setSceneProp(target, key, source.targetAspectRatio ? { ...source.targetAspectRatio } : null)
   } else {
     const value = source[key]
     setSceneProp(target, key, Array.isArray(value) ? structuredClone(value) : value)
@@ -89,11 +96,7 @@ export function syncBindingFields(
     ...Object.keys(target.boundVariables),
     ...Object.keys(target.variableBindingScales)
   ])) {
-    if (
-      !protectedField(`boundVariables/${field}`) &&
-      !(isNumericVariableBindingField(field) && protectedField(field))
-    )
-      continue
+    if (!protectedField(`boundVariables/${field}`)) continue
     if (!Object.hasOwn(target.boundVariables, field)) Reflect.deleteProperty(bindings, field)
     else bindings[field] = target.boundVariables[field]
     if (target.variableBindingScales[field] === undefined) Reflect.deleteProperty(scales, field)
@@ -124,6 +127,42 @@ export function sourceInTargetCoordinates(source: SceneNode, targetScale: number
     ...scaleNodeChanges(source, factor, true),
     ...scaleVariableBindingUnits(source, factor)
   }
+}
+
+interface SyncedFieldsInput {
+  compParent: SceneNode
+  instParent: SceneNode
+  /** The component's coordinates in the copy's. */
+  factor: number
+  /** Fields the copy keeps: overridden, bound, or driven by a property. */
+  skip: (key: string) => boolean
+}
+
+/** The fields a copy takes from its component's layer, placed in the copy's parent. */
+function copySyncedFields(
+  updates: Partial<SceneNode>,
+  copy: SceneNode,
+  source: SceneNode,
+  { compParent, instParent, factor, skip }: SyncedFieldsInput
+): void {
+  // In an auto layout flow the layout places the copy, as it placed the component's layer.
+  const placedByLayout = instParent.layoutMode !== 'NONE' && source.layoutPositioning !== 'ABSOLUTE'
+  const placed = placedByLayout
+    ? source
+    : placedByConstraints(source, compParent, instParent, factor)
+  for (const key of INSTANCE_SYNC_FIELDS) {
+    if (key === 'boundVariables') continue
+    if (placedByLayout && (key === 'x' || key === 'y')) continue
+    if (skip(key)) continue
+    const owner = INSTANCE_SYNC_FIELD_OWNERS[key]
+    if (owner && skip(owner)) continue
+    const from = PLACEMENT_FIELDS.has(key) ? placed : source
+    // Most fields already match: comparing first spares cloning them for nothing.
+    if (isEqual(copy[key], from[key])) continue
+    copyProp(updates, from, key)
+  }
+  followVectorGeometry(updates, copy, source)
+  remeasureChangedText(updates, copy)
 }
 
 export function updateSyncedProps(
@@ -164,9 +203,7 @@ export function cloneChildrenWithMapping(
   destParentId: string,
   mode: NodeCloneMode = 'deep'
 ): void {
-  // Guard against cloning a subtree into itself or its own descendant. Without this,
-  // a self-referential or cyclic component (e.g. an INSTANCE whose componentId points
-  // to an ancestor) causes unbounded recursion and eventual stack overflow / OOM.
+  // A cyclic component, such as an instance of an ancestor, would clone itself without end.
   if (sourceParentId === destParentId || graph.isDescendant(destParentId, sourceParentId)) return
 
   const sourceParent = graph.nodes.get(sourceParentId)
@@ -228,7 +265,7 @@ function matchFallbackChildren(
   instParentId: string,
   overrides: InstanceOverrideState,
   instChildMap: Map<string, SceneNode>,
-  structure: InstanceStructureSync
+  usedInstChildIds: Set<string>
 ): void {
   const fallbackByType = new Map<SceneNode['type'], Map<string, SceneNode[]>>()
   const remainingCandidateCount = new Map<SceneNode['type'], number>()
@@ -242,7 +279,7 @@ function matchFallbackChildren(
   }
   for (const childId of instParent.childIds) {
     const child = graph.nodes.get(childId)
-    if (!child || !structure.canMatchFallback(child)) continue
+    if (!child || usedInstChildIds.has(child.id)) continue
     remainingCandidateCount.set(child.type, (remainingCandidateCount.get(child.type) ?? 0) + 1)
     let byName = fallbackByType.get(child.type)
     if (!byName) {
@@ -266,7 +303,7 @@ function matchFallbackChildren(
     if (!match) continue
     remainingCandidateCount.set(compChild.type, candidateCount - 1)
     instChildMap.set(compChildId, match)
-    structure.claim(match.id)
+    usedInstChildIds.add(match.id)
     linkMatchedChild(overrides, instParentId, match, compChildId)
   }
 }
@@ -285,7 +322,10 @@ function sortInstanceChildren(
   for (let index = 0; index < instParent.childIds.length; index++) {
     const childId = instParent.childIds[index]
     const node = graph.nodes.get(childId)
-    const mapped = node ? mappedComponentChild(node, instParentId, overrides) : null
+    const source = node
+      ? getInstanceOverride(overrides, instParentId, node.id, 'sourceComponentId')
+      : undefined
+    const mapped = typeof source === 'string' ? source : node?.componentId
     const componentIndex = mapped ? orderMap.get(mapped) : undefined
     ranks.set(childId, componentIndex ?? compChildOrder.length + index)
   }
@@ -311,20 +351,75 @@ function matchLinkedChildren(
   overrides: InstanceOverrideState,
   compChildIdSet: ReadonlySet<string>,
   instChildMap: Map<string, SceneNode>,
-  usedInstChildIds: Set<string>,
-  structure: InstanceStructureSync
+  usedInstChildIds: Set<string>
 ): void {
   for (const childId of instParent.childIds) {
     const child = graph.nodes.get(childId)
     if (!child) continue
-    const mappedComponentId = mappedComponentChild(child, instParentId, overrides)
+    const sourceComponentId = getInstanceOverride(
+      overrides,
+      instParentId,
+      child.id,
+      'sourceComponentId'
+    )
+    const mappedComponentId =
+      typeof sourceComponentId === 'string' ? sourceComponentId : child.componentId
     if (mappedComponentId && compChildIdSet.has(mappedComponentId)) {
-      const previous = instChildMap.get(mappedComponentId)
-      if (previous && !structure.prefer(child, previous)) continue
-      if (previous) usedInstChildIds.delete(previous.id)
+      const existing = instChildMap.get(mappedComponentId)
+      const hasEdits = (node: SceneNode) =>
+        [
+          ...(overrides.descendants.get(node.id)?.keys() ?? []),
+          ...node.instanceOverrides.self.keys()
+        ].some((field) => field !== 'sourceComponentId')
+      if (existing && (!hasEdits(child) || hasEdits(existing))) continue
+      if (existing) usedInstChildIds.delete(existing.id)
       instChildMap.set(mappedComponentId, child)
       usedInstChildIds.add(child.id)
     }
+  }
+}
+
+/**
+ * Pass 3 of a sync: bring along the copy of a layer moved here inside the component, bring back
+ * one the sync removed when its layer returns, or clone a layer the instance has no copy of. A
+ * clone takes its own subtree unless copies the instance has belong in it, which the recursion
+ * moves in instead. Children left unmatched are the sync's to remove once it finishes.
+ */
+function placeMissingChildren(
+  graph: SceneGraph,
+  compParent: SceneNode,
+  instParent: SceneNode,
+  instChildMap: Map<string, SceneNode>,
+  usedInstChildIds: Set<string>,
+  context: InstanceSyncContext
+): void {
+  for (const child of instChildMap.values()) context.matched.add(child.id)
+
+  for (const compChildId of compParent.childIds) {
+    if (instChildMap.has(compChildId)) continue
+    const moved =
+      unplacedCopy(graph, context, compChildId, instParent.id) ??
+      restoreRemovedCopy(graph, context, compChildId, instParent.id)
+    if (moved) {
+      graph.insertChildAt(moved.id, instParent.id, instParent.childIds.length)
+      instChildMap.set(compChildId, moved)
+      usedInstChildIds.add(moved.id)
+      context.matched.add(moved.id)
+      continue
+    }
+    const src = graph.nodes.get(compChildId)
+    if (!src) continue
+    const clone = cloneChildInCoordinates(graph, src, compParent, instParent)
+    if (src.childIds.length > 0 && !hasUnplacedCopiesBelow(graph, context, compChildId)) {
+      cloneChildrenWithMapping(graph, compChildId, clone.id)
+    }
+    applyEnclosingAssignments(graph, clone)
+    instChildMap.set(compChildId, clone)
+    usedInstChildIds.add(clone.id)
+    context.matched.add(clone.id)
+  }
+  for (const childId of instParent.childIds) {
+    if (!usedInstChildIds.has(childId)) context.leftovers.add(childId)
   }
 }
 
@@ -332,29 +427,10 @@ export function syncChildren(
   graph: SceneGraph,
   compParentId: string,
   instParentId: string,
-  overrides: InstanceOverrideState
-): void {
-  if (
-    isCyclicSync(graph, compParentId, instParentId) ||
-    !graph.getNode(compParentId) ||
-    !graph.getNode(instParentId)
-  )
-    return
-  const structure = createInstanceStructureSync(graph, compParentId, instParentId, overrides)
-  syncChildTree(graph, compParentId, instParentId, overrides, structure)
-  structure.finish()
-}
-
-function syncChildTree(
-  graph: SceneGraph,
-  compParentId: string,
-  instParentId: string,
   overrides: InstanceOverrideState,
-  structure: InstanceStructureSync
+  context: InstanceSyncContext = createInstanceSyncContext(instParentId, overrides)
 ): void {
-  // Guard against cyclic sync: if the instance parent is inside the component's own
-  // subtree, syncing would clone the component into itself — a self-referential cycle
-  // that causes unbounded recursion and OOM.
+  // An instance inside its own component would clone the component into itself without end.
   if (isCyclicSync(graph, compParentId, instParentId)) return
 
   const compParent = graph.nodes.get(compParentId)
@@ -373,19 +449,8 @@ function syncChildTree(
     overrides,
     compChildIdSet,
     instChildMap,
-    usedInstChildIds,
-    structure
+    usedInstChildIds
   )
-  for (const id of usedInstChildIds) structure.claim(id)
-
-  // The source may have moved under a new wrapper or into a sibling container.
-  for (const compChildId of compParent.childIds) {
-    if (instChildMap.has(compChildId)) continue
-    const existing = structure.reuse(compChildId, instParentId)
-    if (existing) {
-      instChildMap.set(compChildId, existing)
-    }
-  }
 
   // Pass 2: Fallback matching for unmatched children (e.g. from Figma imports)
   matchFallbackChildren(
@@ -395,20 +460,10 @@ function syncChildTree(
     instParentId,
     overrides,
     instChildMap,
-    structure
+    usedInstChildIds
   )
 
-  // Pass 3: Clone only genuinely missing component children
-  for (const compChildId of compParent.childIds) {
-    if (!instChildMap.has(compChildId)) {
-      const src = graph.nodes.get(compChildId)
-      if (!src) continue
-      const clone = cloneChildInCoordinates(graph, src, compParent, instParent)
-      applyEnclosingAssignments(graph, clone)
-      instChildMap.set(compChildId, clone)
-      structure.claim(clone.id)
-    }
-  }
+  placeMissingChildren(graph, compParent, instParent, instChildMap, usedInstChildIds, context)
 
   // Pass 4: Synchronize properties and recurse
   for (const compChildId of compParent.childIds) {
@@ -425,29 +480,20 @@ function syncChildTree(
       overrides
     )
 
-    if (inheritsChildren(graph, compChild, instChild, instParentId, overrides)) {
-      syncChildTree(graph, compChildId, instChild.id, overrides, structure)
+    if (
+      compChild.childIds.length > 0 &&
+      !hasNodeInstanceOverride(overrides, instParentId, instChild.id, 'componentId') &&
+      // The component's frame is the authority on which slot this is; instance copies of
+      // its bindings are not synced.
+      !ownsSlotContent(graph, instChild, slotPropertyId(compChild))
+    ) {
+      syncChildren(graph, compChildId, instChild.id, overrides, context)
     }
     if (swapped) applyEnclosingAssignments(graph, instChild)
   }
 
   // Pass 5: Sort instance children to match component child order
   sortInstanceChildren(graph, instParent, instParentId, compParent.childIds, overrides)
-}
-
-function inheritsChildren(
-  graph: SceneGraph,
-  component: SceneNode,
-  instance: SceneNode,
-  parentId: string,
-  overrides: InstanceOverrideState
-): boolean {
-  // The main component identifies the slot; its assigned instance content owns the children.
-  return (
-    component.childIds.length > 0 &&
-    !hasNodeInstanceOverride(overrides, parentId, instance.id, 'componentId') &&
-    !ownsSlotContent(graph, instance, slotPropertyId(component))
-  )
 }
 
 /** Sync an occurrence's values, using its selected component after a nested swap. */
@@ -494,13 +540,19 @@ function syncChildProperties(
     if (reference.field === 'VISIBLE') updates.visible = value === 'true'
   }
   syncBindingFields(instChild, selectedSource, updates, protectedField)
-  for (const key of INSTANCE_SYNC_FIELDS) {
-    if (key === 'boundVariables') continue
-    if (driven.has(key)) continue
-    if (isProtectedSyncField(instChild, key, protectedField)) continue
-
-    copyProp(updates, swapped && INSTANCE_SYNC_PROPS.includes(key) ? selectedSource : source, key)
+  const selected = swapped ? { ...source } : source
+  if (swapped) {
+    for (const key of INSTANCE_SYNC_PROPS) {
+      if (key !== 'name') copyProp(selected, selectedSource, key)
+    }
   }
+  copySyncedFields(updates, instChild, selected, {
+    compParent,
+    instParent,
+    factor: componentScale / compChild.componentScale,
+    skip: (key) => driven.has(key) || isProtectedSyncField(instChild, key, protectedField)
+  })
+  keepOwnContentSize(graph, updates, instChild, selected)
   updateSyncedProps(graph, instChild, updates)
   return Boolean(swapped)
 }

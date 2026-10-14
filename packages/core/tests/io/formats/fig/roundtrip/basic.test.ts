@@ -1,5 +1,8 @@
 import { beforeAll, describe, expect, setDefaultTimeout, test } from 'bun:test'
 
+import { expectDefined } from '#core-tests/helpers/assert'
+import { collectAllNodes, countByType } from '#core-tests/helpers/fig/traversal'
+
 import {
   exportFigFile,
   initCodec,
@@ -8,9 +11,6 @@ import {
   type SceneNode
 } from '@open-pencil/core'
 import { populateFigPage } from '@open-pencil/core/io/formats/fig'
-
-import { expectDefined } from '#core-tests/helpers/assert'
-import { collectAllNodes, countByType } from '#core-tests/helpers/fig/traversal'
 
 setDefaultTimeout(60_000)
 
@@ -174,7 +174,7 @@ describe('roundtrip: export → re-import', () => {
     })
 
     const restored = await parseFigFile((await exportFigFile(graph)).buffer as ArrayBuffer)
-    const roundTripped = restored.getAllNodes().find((node) => node.name === vector.name)
+    const roundTripped = [...restored.getAllNodes()].find((node) => node.name === vector.name)
 
     expect(roundTripped?.textAlignHorizontal).toBe('CENTER')
     expect(roundTripped?.textAlignVertical).toBe('CENTER')
@@ -198,7 +198,7 @@ describe('roundtrip: export → re-import', () => {
     })
 
     const restored = await parseFigFile((await exportFigFile(graph)).buffer as ArrayBuffer)
-    const roundTripped = restored.getAllNodes().find((node) => node.name === text.name)
+    const roundTripped = [...restored.getAllNodes()].find((node) => node.name === text.name)
 
     expect(roundTripped?.blendMode).toBe('NORMAL')
     expect(roundTripped?.source.fig.rawNodeFields.blendMode).toBe('NORMAL')
@@ -259,7 +259,7 @@ describe('roundtrip: export → re-import', () => {
 
     const figBytes = await exportFigFile(graph)
     const parsed = await parseFigFile(figBytes.buffer as ArrayBuffer)
-    const parsedSet = parsed.getAllNodes().find((node) => node.name === 'Button')
+    const parsedSet = [...parsed.getAllNodes()].find((node) => node.name === 'Button')
 
     expect(parsedSet).toBeDefined()
     expect(expectDefined(parsedSet, 'parsedSet').type).toBe('COMPONENT_SET')

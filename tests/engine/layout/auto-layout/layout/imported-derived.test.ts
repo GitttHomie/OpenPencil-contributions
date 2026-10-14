@@ -264,8 +264,8 @@ describe('imported auto-layout bounds', () => {
 
     computeAllLayouts(graph)
 
-    expect(graph.getNode(first.id)).toMatchObject({ x: 0, width: 136 })
-    expect(graph.getNode(second.id)).toMatchObject({ x: 168, width: 136 })
+    expect(graph.getNode(first.id)).toMatchObject({ x: 0, width: 152 })
+    expect(graph.getNode(second.id)).toMatchObject({ x: 168, width: 152 })
   })
 
   test('stretches generated children inside authoritative imported bounds', () => {
@@ -293,7 +293,8 @@ describe('imported auto-layout bounds', () => {
     expect(graph.getNode(label.id)).toMatchObject({ x: 0, width: 302 })
   })
 
-  test('does not infer authoritative stretch without generated parent bounds', () => {
+  // Stretch is fill, as in Figma, whether or not the parent's bounds came from the file.
+  test('stretches an auto-layout child without generated parent bounds', () => {
     const graph = new SceneGraph()
     const page = graph.getPages()[0]
     const column = graph.createNode('FRAME', page.id, {
@@ -314,7 +315,7 @@ describe('imported auto-layout bounds', () => {
 
     computeAllLayouts(graph)
 
-    expect(graph.getNode(label.id)?.width).toBe(44)
+    expect(graph.getNode(label.id)?.width).toBe(624)
   })
 
   test('preserves hidden child geometry while excluding it from parent flow', () => {
@@ -422,7 +423,7 @@ describe('imported auto-layout bounds', () => {
       paddingLeft: 24
     })
     graph.updateNode(frame.id, { source: { ...frame.source, format: 'fig' } })
-    graph.createNode('TEXT', frame.id, {
+    const text = graph.createNode('TEXT', frame.id, {
       width: 333,
       height: 30,
       text: 'Bar Chart',
@@ -430,6 +431,7 @@ describe('imported auto-layout bounds', () => {
       layoutAlignSelf: 'STRETCH',
       derivedLayout: { width: 333, height: 30 }
     })
+    graph.updateNode(text.id, { source: { ...text.source, format: 'fig' } })
 
     computeAllLayouts(graph)
 

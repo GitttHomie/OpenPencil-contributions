@@ -8,6 +8,7 @@ import { AGENT_KINDS, AGENT_STATUSES } from './types'
 /** Bounds on what a peer can publish, so a broken or hostile peer cannot flood rendering. */
 export const MAX_AGENTS_PER_PEER = 16
 const MAX_SELECTION = 256
+export const MAX_OUTLINE = 32
 export const MAX_NAME_LENGTH = 40
 const MAX_ID = 64
 
@@ -26,6 +27,12 @@ const personPoint = v.object({
 })
 const selection = v.pipe(v.array(id), v.maxLength(MAX_SELECTION))
 
+const extent = v.pipe(finite, v.minValue(0))
+const outline = v.pipe(
+  v.array(v.object({ x: finite, y: finite, width: extent, height: extent })),
+  v.maxLength(MAX_OUTLINE)
+)
+
 const agent = v.object({
   id,
   name,
@@ -34,7 +41,8 @@ const agent = v.object({
   status: v.picklist(AGENT_STATUSES),
   pageId: lenient(id),
   cursor: lenient(point),
-  selection: lenient(selection)
+  selection: lenient(selection),
+  outline: lenient(outline)
 })
 
 const peerState = v.object({
@@ -43,6 +51,7 @@ const peerState = v.object({
   selection: lenient(selection),
   treeFormat: lenient(v.pipe(v.number(), v.integer(), v.minValue(1))),
   hasFile: lenient(v.boolean()),
+  voice: lenient(v.object({ muted: v.boolean() })),
   agents: v.fallback(
     v.optional(
       v.pipe(v.array(v.fallback(v.nullable(agent), null)), v.maxLength(MAX_AGENTS_PER_PEER))
@@ -55,7 +64,7 @@ const peerState = v.object({
 export function parsePeer(clientId: number, state: unknown): RemotePeer | null {
   const result = v.safeParse(peerState, state)
   if (!result.success) return null
-  const { user, cursor, selection: selected, agents, treeFormat, hasFile } = result.output
+  const { user, cursor, selection: selected, agents, treeFormat, hasFile, voice } = result.output
   return {
     clientId,
     name: user.name ?? 'Anonymous',
@@ -64,6 +73,7 @@ export function parsePeer(clientId: number, state: unknown): RemotePeer | null {
     selection: selected,
     agents: (agents ?? []).flatMap((entry) => (entry ? [entry] : [])),
     treeFormat,
-    hasFile: hasFile === true
+    hasFile: hasFile === true,
+    voice
   }
 }

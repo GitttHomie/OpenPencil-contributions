@@ -5,6 +5,7 @@ import { parseColor } from '@open-pencil/scene-graph/color'
 import { copyFills, copyStrokes } from '@open-pencil/scene-graph/copy'
 
 import { BLACK } from '#core/constants'
+import { withBatch } from '#core/tools/batch/define'
 import { nodeIdInput, toolNumber } from '#core/tools/input'
 import { defineTool } from '#core/tools/schema'
 
@@ -127,51 +128,58 @@ function paintIndexForOperation(
   return operation === 'append' ? length : (index ?? 0)
 }
 
-export const setPaint = defineTool({
-  name: 'set_paint',
-  description:
-    'Edit one fill or stroke without replacing the rest: append, replace at an index, or remove. Supports solid/image paints and linear/radial/angular/diamond gradients with multiple stops and editable transforms. Stacks run bottom to top. Existing stroke width/alignment/caps/dashes survive paint replacement unless specified. Replacement detaches that paint’s color variable; removal shifts remaining color bindings with their paints. Returns both resulting stacks.',
-  execution: { kind: 'sync', mutation: 'properties' },
-  input: v.object({
-    id: nodeIdInput,
-    target: v.picklist(['fills', 'strokes']),
-    operation: v.picklist(['append', 'replace', 'remove']),
-    index: v.optional(toolNumber(v.pipe(v.number(), v.integer(), v.minValue(0)))),
-    paint: v.optional(paintInput)
-  }),
-  execute(figma, { id, target, operation, index, paint }) {
-    const node = figma.getNodeById(id)
-    if (!node) throw new Error(`Node "${id}" not found`)
-    const stack = target === 'fills' ? node.fills : node.strokes
-    const paintIndex = paintIndexForOperation(stack.length, operation, index, paint)
-    const bindings = paintBindingChanges(figma.graph, id, target, paintIndex, operation)
-    if (target === 'fills') {
-      const fills = copyFills([...node.fills])
-      if (paint)
-        fills.splice(paintIndex, operation === 'append' ? 0 : 1, createPaint(figma.graph, paint))
-      else fills.splice(paintIndex, 1)
-      node.fills = fills
-    } else {
-      const strokes = copyStrokes([...node.strokes])
-      if (paint)
-        strokes.splice(
-          paintIndex,
-          operation === 'append' ? 0 : 1,
-          createStrokePaint(figma.graph, paint, index === undefined ? undefined : strokes[index])
+export const setPaint = withBatch(
+  defineTool({
+    name: 'set_paint',
+    description:
+      'Edit one fill or stroke without replacing the rest: append, replace at an index, or remove. Supports solid/image paints and linear/radial/angular/diamond gradients with multiple stops and editable transforms. Stacks run bottom to top. Existing stroke width/alignment/caps/dashes survive paint replacement unless specified. Replacement detaches that paint’s color variable; removal shifts remaining color bindings with their paints. Returns both resulting stacks.',
+    execution: { kind: 'sync', mutation: 'properties' },
+    input: v.strictObject({
+      id: nodeIdInput,
+      target: v.picklist(['fills', 'strokes']),
+      operation: v.picklist(['append', 'replace', 'remove']),
+      index: v.optional(toolNumber(v.pipe(v.number(), v.integer(), v.minValue(0)))),
+      paint: v.optional(paintInput)
+    }),
+    execute(figma, { id, target, operation, index, paint }) {
+      const node = figma.getNodeById(id)
+      if (!node) throw new Error(`Node "${id}" not found`)
+      if (typeof node.fills === 'symbol')
+        throw new Error(
+          'This text has mixed character fills; select a uniform paint range before editing its paint stack.'
         )
-      else strokes.splice(paintIndex, 1)
-      node.strokes = strokes
+      const stack = target === 'fills' ? node.fills : node.strokes
+      const paintIndex = paintIndexForOperation(stack.length, operation, index, paint)
+      const bindings = paintBindingChanges(figma.graph, id, target, paintIndex, operation)
+      if (target === 'fills') {
+        const fills = copyFills([...node.fills])
+        if (paint)
+          fills.splice(paintIndex, operation === 'append' ? 0 : 1, createPaint(figma.graph, paint))
+        else fills.splice(paintIndex, 1)
+        node.fills = fills
+      } else {
+        const strokes = copyStrokes([...node.strokes])
+        if (paint)
+          strokes.splice(
+            paintIndex,
+            operation === 'append' ? 0 : 1,
+            createStrokePaint(figma.graph, paint, index === undefined ? undefined : strokes[index])
+          )
+        else strokes.splice(paintIndex, 1)
+        node.strokes = strokes
+      }
+      for (const binding of bindings) figma.graph.unbindVariable(id, binding.field)
+      for (const binding of bindings) {
+        if (binding.nextField) figma.graph.bindVariable(id, binding.nextField, binding.variableId)
+      }
+      return {
+        id,
+        target,
+        index: paintIndex,
+        fills: copyFills([...node.fills]),
+        strokes: copyStrokes([...node.strokes])
+      }
     }
-    for (const binding of bindings) figma.graph.unbindVariable(id, binding.field)
-    for (const binding of bindings) {
-      if (binding.nextField) figma.graph.bindVariable(id, binding.nextField, binding.variableId)
-    }
-    return {
-      id,
-      target,
-      index: paintIndex,
-      fills: copyFills([...node.fills]),
-      strokes: copyStrokes([...node.strokes])
-    }
-  }
-})
+  }),
+  { target: 'id' }
+)

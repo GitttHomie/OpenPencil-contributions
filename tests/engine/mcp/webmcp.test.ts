@@ -85,7 +85,7 @@ describe('WebMCP registration', () => {
     await registration.ready
     try {
       const tool = requiredTool(context.tools, 'get_node')
-      await expect(tool.execute({}, options())).rejects.toThrow()
+      await expect(tool.execute({ id: 42 }, options())).rejects.toThrow()
       expect(calls).toBe(0)
       const pending = tool.execute({ id: 'node' }, options())
       active = 'second'

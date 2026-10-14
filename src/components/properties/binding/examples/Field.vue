@@ -8,7 +8,7 @@ import {
 } from '@open-pencil/vue'
 
 import VariableBindingPicker from '@/components/properties/binding/VariableBindingPicker.vue'
-import { BindingPill } from '@/components/ui/binding'
+import { BindingPill, useBindingFieldUI } from '@/components/ui/binding'
 
 const {
   provider,
@@ -27,6 +27,7 @@ const {
 }>()
 
 const value = defineModel<number>({ required: true })
+const styles = useBindingFieldUI()
 
 function tooltip(variableName: string, resolvedValue: unknown) {
   return typeof resolvedValue === 'number' ? `${variableName} · ${resolvedValue}px` : variableName
@@ -49,7 +50,7 @@ function tooltip(variableName: string, resolvedValue: unknown) {
     >
       <div
         v-bind="{ ...attrs, ...binding.stateAttrs }"
-        class="group/binding flex h-6 min-w-0 items-center rounded border border-transparent bg-panel-field text-xs text-surface outline-none hover:bg-panel-field-hover focus-within:border-panel-focus data-[derived]:text-muted"
+        :class="styles.field"
         :data-derived="derived ? '' : undefined"
         @pointerdown="
           !editing &&
@@ -58,11 +59,12 @@ function tooltip(variableName: string, resolvedValue: unknown) {
         "
       >
         <NumberFieldInput class="min-w-0 flex-1 border-0 bg-transparent px-2 outline-none" />
-        <NumberFieldValue class="flex min-w-0 flex-1 items-center overflow-hidden px-1">
+        <NumberFieldValue :class="styles.content">
           <template #default="display">
             <BindingPill
               v-if="binding.state === 'bound' && binding.variable"
               :label="binding.variable.name"
+              :value="binding.mixedValues ? 'Mixed' : binding.resolvedValue"
               :tooltip="tooltip(binding.variable.name, binding.resolvedValue)"
               :disabled="disabled"
               :derived="derived"
@@ -73,17 +75,19 @@ function tooltip(variableName: string, resolvedValue: unknown) {
             <span v-else class="min-w-0 flex-1 truncate px-1">{{ display.value }}</span>
           </template>
         </NumberFieldValue>
-        <VariableBindingPicker
-          trigger-label="Apply variable"
-          search-placeholder="Search variables"
-          empty-label="No variables found"
-          detach-label="Detach variable"
-          create-label="Create number variable"
-          create-name-placeholder="Variable name"
-          create-submit-label="Create"
-          :disabled="disabled"
-          :derived="derived"
-        />
+        <span :class="styles.actions">
+          <VariableBindingPicker
+            trigger-label="Apply variable"
+            search-placeholder="Search variables"
+            empty-label="No variables found"
+            detach-label="Detach variable"
+            create-label="Create number variable"
+            create-name-placeholder="Variable name"
+            create-submit-label="Create"
+            :disabled="disabled"
+            :derived="derived"
+          />
+        </span>
       </div>
     </NumberFieldRoot>
   </BindableValueRoot>

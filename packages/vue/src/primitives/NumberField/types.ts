@@ -8,6 +8,8 @@ export type NumberFieldMutationSource = 'edit' | 'scrub' | 'step'
 export interface NumberFieldRootProps {
   /** Current numeric value or the mixed-value sentinel. */
   modelValue: number | symbol
+  /** Formats displayed numbers and initial edit drafts; must return numeric expression syntax. */
+  formatValue?: (value: number) => string
   /** Minimum allowed value. */
   min?: number
   /** Maximum allowed value and percentage-expression basis. */

@@ -1,3 +1,4 @@
+import bindingFieldTheme from '../binding/field'
 import { panelFieldBase } from '../panel/field'
 
 export default {
@@ -8,9 +9,9 @@ export default {
     ],
     preview:
       'flex aspect-square h-full shrink-0 items-center justify-center [&>[data-slot=swatch-trigger]]:size-full [&>[data-slot=swatch-trigger]]:p-[3px]',
-    value: 'flex min-w-0 flex-1 items-center px-1',
+    value: bindingFieldTheme.slots.content,
     divider: 'h-4 w-px shrink-0 bg-muted/40',
     opacity: 'h-full w-12 flex-none shrink-0',
-    binding: 'flex aspect-square h-full shrink-0 items-center justify-center'
+    binding: bindingFieldTheme.slots.actions
   }
 } as const

@@ -7,6 +7,7 @@ export async function injectMockChatTransport(page: Page): Promise<void> {
     const setChatTransport = window.openPencil?.setChatTransport
     if (!setChatTransport) throw new Error('Transport override not available')
     let messageCounter = 0
+    let flakyFailed = false
 
     setChatTransport(() => ({
       async sendMessages({
@@ -39,11 +40,54 @@ export async function injectMockChatTransport(page: Page): Promise<void> {
         if (normalized.includes('missing canvas')) {
           throw new MCPStartupError('MCP automation is not installed.', { code: 'not-installed' })
         }
+        // Fails the first time only, before any reply, as a dropped connection does.
+        if (normalized.includes('flaky request') && !flakyFailed) {
+          flakyFailed = true
+          throw new Error('Mock connection dropped')
+        }
+
+        // Streams 40 lines (2 for a short one), waits for a `mock-chat-continue` event on window,
+        // then streams 40 more, so a test can scroll while no output arrives.
+        if (normalized.includes('paused stream') || normalized.includes('paused short stream')) {
+          const beforePause = normalized.includes('short') ? 2 : 40
+          return new ReadableStream({
+            start(controller) {
+              controller.enqueue({ type: 'start', messageId })
+              controller.enqueue({ type: 'text-start', id: 'text-1' })
+              let line = 0
+              const streamLines = (until: number, done: () => void) => {
+                const timer = setInterval(() => {
+                  controller.enqueue({
+                    type: 'text-delta',
+                    id: 'text-1',
+                    delta: `Line ${line}\n\n`
+                  })
+                  if (++line < until) return
+                  clearInterval(timer)
+                  done()
+                }, 20)
+              }
+              streamLines(beforePause, () => {
+                window.addEventListener(
+                  'mock-chat-continue',
+                  () =>
+                    streamLines(beforePause + 40, () => {
+                      controller.enqueue({ type: 'text-end', id: 'text-1' })
+                      controller.enqueue({ type: 'finish', finishReason: 'stop' })
+                      controller.close()
+                    }),
+                  { once: true }
+                )
+              })
+            }
+          })
+        }
 
         return new ReadableStream({
           start(controller) {
             controller.enqueue({ type: 'start', messageId })
             if (normalized.includes('codex tool results')) enqueueCodexTools(controller)
+            if (normalized.includes('image tool result')) enqueueImageTool(controller)
             if (tool) enqueueToolCall(controller, messageId)
             if (reasoning) enqueueReasoning(controller)
             if (multipleParts) {
@@ -83,6 +127,38 @@ export async function injectMockChatTransport(page: Page): Promise<void> {
           providerExecuted: true
         })
       }
+    }
+
+    function enqueueImageTool(controller: ReadableStreamDefaultController): void {
+      const image =
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEAQH/69cbGAAAAABJRU5ErkJggg=='
+      controller.enqueue({
+        type: 'tool-input-available',
+        toolCallId: 'image-tool',
+        toolName: 'set_image_fill',
+        input: { id: '1:2', image_data: image },
+        providerExecuted: true
+      })
+      controller.enqueue({
+        type: 'tool-output-available',
+        toolCallId: 'image-tool',
+        output: {
+          result: {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  image_data: image,
+                  width: 1,
+                  height: 1
+                })
+              }
+            ]
+          },
+          error: null
+        },
+        providerExecuted: true
+      })
     }
 
     function enqueueText(controller: ReadableStreamDefaultController, text: string): void {

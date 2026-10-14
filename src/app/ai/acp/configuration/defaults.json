@@ -26,6 +26,17 @@
           "key": "model_providers.{codexProvider}.base_url"
         },
         "labelKey": "baseURL"
+      },
+      {
+        "id": "awsRegion",
+        "label": "Bedrock AWS region",
+        "type": "region",
+        "target": {
+          "kind": "config",
+          "flag": "-c",
+          "key": "model_providers.{codexProvider}.aws.region"
+        },
+        "labelKey": "cliAWSRegion"
       }
     ]
   },

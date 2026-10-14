@@ -77,3 +77,67 @@ test('destroying a verification session settles the pending request', async () =
   await agent.dispose()
   expect(await pending).toBeInstanceOf(Error)
 })
+
+test('catalog reports image transport support without running inference', async () => {
+  const agent = createConnectedAgent(ACP_AGENTS[0], false, undefined, false, true, {
+    purpose: 'catalog'
+  })
+  try {
+    expect((await agent.transport.listModels()).imageInput).toBe(true)
+    expect(agent.prompts).toEqual([])
+  } finally {
+    await agent.dispose()
+  }
+})
+
+for (const [supportsImages, answer, success] of [
+  [true, '384729', true],
+  [true, '000000', false],
+  [false, '384729', false]
+] as const) {
+  test(`image verification requires image delivery and the right answer: ${supportsImages}/${answer}`, async () => {
+    const agent = createConnectedAgent(ACP_AGENTS[0], false, undefined, false, supportsImages, {
+      purpose: 'verification',
+      responseText: answer
+    })
+    try {
+      const result = agent.transport.verifyModel({ data: 'test-image', expected: '384729' })
+      if (success) await result
+      else await expect(result).rejects.toThrow()
+      expect(agent.sessions[0].mcpServers).toEqual([])
+      expect(agent.images).toEqual(supportsImages ? ['test-image'] : [])
+      expect(agent.prompts.join(' ')).not.toContain('384729')
+    } finally {
+      await agent.dispose()
+    }
+  })
+}
+
+test('vision sessions deliver every image without attaching canvas tools or accepting permissions', async () => {
+  const agent = createConnectedAgent(ACP_AGENTS[0], false, undefined, true, true, {
+    purpose: 'vision',
+    responseText: 'The right column is clipped.',
+    images: [
+      { data: 'first', mimeType: 'image/png' },
+      { data: 'second', mimeType: 'image/jpeg' }
+    ]
+  })
+  try {
+    const stream = await agent.transport.sendMessages({
+      chatId: 'vision',
+      trigger: 'submit-message',
+      messageId: undefined,
+      abortSignal: undefined,
+      messages: [{ id: 'request', role: 'user', parts: [{ type: 'text', text: 'Inspect both.' }] }]
+    })
+    for await (const chunk of stream) {
+      expect(chunk.type).not.toBe('error')
+    }
+    expect(agent.transport.imageIncluded).toBe(true)
+    expect(agent.images).toEqual(['first', 'second'])
+    expect(agent.sessions[0].mcpServers).toEqual([])
+    expect(agent.permissions).toEqual([{ outcome: { outcome: 'cancelled' } }])
+  } finally {
+    await agent.dispose()
+  }
+})

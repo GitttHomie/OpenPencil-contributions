@@ -1,6 +1,11 @@
 import { describe, expect, test } from 'bun:test'
 
-import { SceneGraph, getInstanceOverride, setInstanceOverride, type SceneNode } from '@open-pencil/scene-graph'
+import {
+  SceneGraph,
+  getInstanceOverride,
+  setInstanceOverride,
+  type SceneNode
+} from '@open-pencil/scene-graph'
 import { cloneNodeProps } from '@open-pencil/scene-graph/copy'
 
 import { expectDefined, getNodeOrThrow } from '../helpers/assert'
@@ -131,12 +136,13 @@ describe('cloneNodeProps deep-copies overrides values', () => {
     const cloneOverrideVal = getInstanceOverride(
       clonedInstance.instanceOverrides,
       clonedInstance.id,
-      instanceChild.id,
+      graph.getChildren(clone.id)[0].id,
       'fills'
     ) as Array<{
       color: { r: number }
     }>
-    if (cloneOverrideVal) cloneOverrideVal[0].color.r = 0.5
+    expect(cloneOverrideVal).toBeDefined()
+    cloneOverrideVal[0].color.r = 0.5
 
     const origOverrideVal = getInstanceOverride(
       instance.instanceOverrides,

@@ -5,6 +5,21 @@ test.use({ viewport: { width: 900, height: 700 } })
 
 const editor = useEditorSetupWithClear('/?test&no-chrome&no-rulers')
 
+test('agent edit highlights never appear over another page', async () => {
+  const activity = await createCanvasActivityProbe(editor.page)
+  try {
+    const before = await editor.canvas.screenshotCanvasRegion(600, 420)
+    await activity.highlightOtherPage()
+    await editor.canvas.waitForRender()
+    const after = await editor.canvas.screenshotCanvasRegion(600, 420)
+    expect(after.equals(before)).toBe(true)
+    expect(after).toMatchSnapshot('other-page-agent-highlights.png')
+    editor.canvas.assertNoErrors()
+  } finally {
+    await activity.dispose()
+  }
+})
+
 test('an ACP agent is visible before rendering a batch, follows its result, and clears on finish', async () => {
   const testInfo = test.info()
   const activity = await createCanvasActivityProbe(editor.page)

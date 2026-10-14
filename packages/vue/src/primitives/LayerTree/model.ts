@@ -1,7 +1,14 @@
-import { isInComponent, slotPropertyId } from '@open-pencil/scene-graph'
+import { isEqual } from 'es-toolkit'
+
+import { isInComponent, readIcon, slotPropertyId } from '@open-pencil/scene-graph'
 import type { SceneGraph, SceneNode } from '@open-pencil/scene-graph'
 
 import type { LayerNode, LayerRow, LayerSelectionMode } from '#vue/primitives/LayerTree/context'
+
+function explicitModeIds(node: SceneNode): string[] | undefined {
+  const ids = Object.values(node.variableModes)
+  return ids.length > 0 ? ids : undefined
+}
 
 function nodeToLayerNode(node: SceneNode, graph: SceneGraph): LayerNode {
   return {
@@ -11,8 +18,10 @@ function nodeToLayerNode(node: SceneNode, graph: SceneGraph): LayerNode {
     layoutMode: node.layoutMode,
     slot: !!slotPropertyId(node),
     component: isInComponent(graph, node.id),
+    icon: !!readIcon(node),
     visible: node.visible,
-    locked: node.locked
+    locked: node.locked,
+    modeIds: explicitModeIds(node)
   }
 }
 
@@ -60,15 +69,19 @@ export function patchLayerNode(target: LayerNode, source: SceneNode): boolean {
     target.type !== source.type ||
     target.layoutMode !== source.layoutMode ||
     target.slot !== !!slotPropertyId(source) ||
+    target.icon !== !!readIcon(source) ||
     target.visible !== source.visible ||
-    target.locked !== source.locked
+    target.locked !== source.locked ||
+    !isEqual(target.modeIds, explicitModeIds(source))
   if (!changed) return false
   target.name = source.name
   target.type = source.type
   target.layoutMode = source.layoutMode
   target.slot = !!slotPropertyId(source)
+  target.icon = !!readIcon(source)
   target.visible = source.visible
   target.locked = source.locked
+  target.modeIds = explicitModeIds(source)
   return true
 }
 
@@ -114,4 +127,13 @@ export function layerSelectionForTarget(
     if (id) next.add(id)
   }
   return next
+}
+
+/**
+ * Where a dropped layer goes among its new siblings: `index` in `childIds` counted without the
+ * layer, so one dragged from earlier in the same parent lands one slot sooner.
+ */
+export function dropIndex(childIds: readonly string[], sourceId: string, index: number): number {
+  const sourceIndex = childIds.indexOf(sourceId)
+  return sourceIndex !== -1 && sourceIndex < index ? index - 1 : index
 }

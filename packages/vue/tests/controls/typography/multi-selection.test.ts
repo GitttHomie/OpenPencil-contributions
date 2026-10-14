@@ -31,8 +31,7 @@ function setup() {
     createTypographyActions({
       editor,
       nodes,
-      node: computed(() => null),
-      currentWeightLabel: computed(() => ''),
+      supports: () => true,
       activeFormatting: computed(() => []),
       options: {
         fontLoader: {

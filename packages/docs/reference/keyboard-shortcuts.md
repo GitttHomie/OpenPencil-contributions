@@ -18,8 +18,8 @@ Full Figma-compatible shortcut map. ✅ = implemented.
 | <kbd>V</kbd> | Move/Select | ✅ |
 | <kbd>K</kbd> | Scale | 🔲 |
 | <kbd>H</kbd> | Hand | ✅ |
-| <kbd>F</kbd> | Frame | ✅ |
-| <kbd>S</kbd> | Section | ✅ |
+| <kbd>F</kbd> or <kbd>A</kbd> | Frame | ✅ |
+| <kbd>⇧</kbd><kbd>S</kbd> | Section | ✅ |
 | <kbd>R</kbd> | Rectangle | ✅ |
 | <kbd>O</kbd> | Ellipse | ✅ |
 | <kbd>L</kbd> | Line | ✅ |
@@ -27,9 +27,9 @@ Full Figma-compatible shortcut map. ✅ = implemented.
 | — | Star | ✅ (flyout only) |
 | <kbd>⇧</kbd><kbd>L</kbd> | Arrow | 🔲 |
 | <kbd>P</kbd> | Pen | ✅ |
-| <kbd>⇧</kbd><kbd>P</kbd> | Pencil | 🔲 |
+| <kbd>⇧</kbd><kbd>P</kbd> | Pencil | ✅ |
 | <kbd>T</kbd> | Text | ✅ |
-| <kbd>C</kbd> | Comment | 🔲 |
+| <kbd>C</kbd> | Comment | ✅ |
 | <kbd>I</kbd> | Eyedropper | 🔲 |
 
 ## File
@@ -69,6 +69,7 @@ Full Figma-compatible shortcut map. ✅ = implemented.
 | <kbd>⌘</kbd><kbd>'</kbd> | Pixel Grid | 🔲 |
 | <kbd>⌃</kbd><kbd>G</kbd> | Layout Guides | 🔲 |
 | <kbd>⇧</kbd><kbd>R</kbd> | Rulers | 🔲 |
+| <kbd>⇧</kbd><kbd>C</kbd> | Show/Hide Comments | ✅ |
 | <kbd>⌘</kbd><kbd>\\</kbd> | Show/Hide UI | ✅ |
 | <kbd>⌥</kbd><kbd>⌘</kbd><kbd>↩</kbd> | Preview controls | ✅ |
 | <kbd>⌘</kbd><kbd>=</kbd> | Zoom In | ✅ |

@@ -3,14 +3,15 @@ const DOC_ASSET = /\.(?:md|png|jpe?g|gif|webp|svg|ico|pdf|woff2?|ttf)$/i
 
 export type ChangeScope = 'docs' | 'code'
 
-/** Root docs, package READMEs, and every AGENTS.md guide are docs-only; unknown paths, executable docs, and runtime prompt Markdown require the code checks. */
-export function classifyPaths(paths: readonly string[]): ChangeScope {
+/** Root docs, changelog fragments, package READMEs, and every AGENTS.md guide are docs-only; unknown paths, executable docs, and runtime prompt Markdown require the code checks. */
+export function classifyPaths(paths: readonly string[]): Exclude<ChangeScope, 'verified'> {
   if (paths.length === 0) return 'code'
   return paths.every((path) => {
     if (ROOT_DOCS.has(path) || /^packages\/[^/]+\/README\.md$/.test(path)) return true
     if (/(?:^|\/)AGENTS\.md$/.test(path)) return true
     if (path.startsWith('packages/docs/')) return DOC_ASSET.test(path)
     if (path.startsWith('openspec/')) return path.endsWith('.md')
+    if (path.startsWith('changes/')) return path.endsWith('.md')
     if (path.startsWith('skills/')) return path.endsWith('.md') || path.endsWith('/LICENSE.txt')
     return false
   })
@@ -24,7 +25,8 @@ export const CODE_JOBS = [
   'repository-quality',
   'storybook',
   'native-test-contracts',
-  'unit-tests'
+  'unit-tests',
+  'feedback-tests'
 ] as const
 export const DOCS_JOB = 'documentation'
 export const ALWAYS_JOBS = ['commit-messages'] as const

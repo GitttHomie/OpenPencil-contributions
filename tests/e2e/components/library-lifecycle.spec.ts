@@ -245,6 +245,8 @@ test('publishes, consumes, saves, and reopens a multidimensional library instanc
   }, saved)
   await page.keyboard.press('ControlOrMeta+KeyO')
 
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Keep everything' }).click()
+
   await expect
     .poll(() =>
       page.evaluate(() => {

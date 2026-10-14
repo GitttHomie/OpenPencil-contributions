@@ -25,5 +25,15 @@
   "newDesign": "新しいデザイン",
   "noMatchingFiles": "「{query}」に一致するファイルはありません。",
   "saveAsPrompt": "名前を付けて保存：",
-  "browserFileAPINotSupported": "このブラウザはローカルファイルAPIに対応していません。ファイルは同じ場所に保存されず、ダウンロードされます。"
+  "browserFileAPINotSupported": "このブラウザはローカルファイルAPIに対応していません。ファイルは同じ場所に保存されず、ダウンロードされます。",
+  "cleanupHeading": "埋め込みコンポーネントを整理しますか？",
+  "cleanupDescription": "内部ページから未使用の定義を{count}件削除します。すべてのインスタンス、必要な定義、通常ページのコンポーネントは保持します。",
+  "cleanupKeep": "すべて保持",
+  "cleanupRemove": "未使用のコンポーネントを削除",
+  "cleanupIntro": "「{name}」の開き方を選択してください。保存するまで元のファイルは変更されません。",
+  "cleanupInternalHeading": "内部ページと関連インスタンスを削除",
+  "cleanupInternalDescription": "内部ページ{canvases}件、埋め込み定義{components}件、通常ページ{pages}件の関連インスタンスレイヤー{instances}件を削除します。",
+  "cleanupInternalWarning": "非表示の内容や外部ライブラリのインスタンスも含めてデザインが変更されます。入れ子の関連レイヤーだけを削除し、それを含むボタンやフレームは保持します。通常ページの有効なコンポーネントは残ります。",
+  "cleanupHiddenInstances": "差し替え先が削除される入れ子のインスタンス{count}件を非表示にし、それを含むコンポーネントを保持します。",
+  "cleanupInternalRemove": "ページと関連インスタンスを削除"
 }

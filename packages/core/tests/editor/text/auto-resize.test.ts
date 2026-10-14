@@ -1,6 +1,6 @@
+import { getNodeOrThrow } from '#core-tests/helpers/assert'
 import { afterEach, describe, expect, test } from 'bun:test'
 
-import { getNodeOrThrow } from '#core-tests/helpers/assert'
 import { autoFrame, rect } from '#core-tests/helpers/layout'
 
 import { createEditor } from '@open-pencil/core/editor'

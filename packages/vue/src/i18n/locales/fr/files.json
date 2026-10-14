@@ -25,5 +25,15 @@
   "newDesign": "Nouveau design",
   "noMatchingFiles": "Aucun fichier ne correspond à « {query} ».",
   "saveAsPrompt": "Enregistrer sous :",
-  "browserFileAPINotSupported": "Votre navigateur ne prend pas en charge l’API de fichiers locaux. Les fichiers seront téléchargés au lieu d’être enregistrés sur place."
+  "browserFileAPINotSupported": "Votre navigateur ne prend pas en charge l’API de fichiers locaux. Les fichiers seront téléchargés au lieu d’être enregistrés sur place.",
+  "cleanupHeading": "Nettoyer les composants intégrés ?",
+  "cleanupDescription": "Supprimez {count} définitions inutilisées des pages internes. Conservez toutes les instances, les définitions nécessaires et les composants des pages ordinaires.",
+  "cleanupKeep": "Tout conserver",
+  "cleanupRemove": "Supprimer les composants inutilisés",
+  "cleanupIntro": "Choisissez comment ouvrir « {name} ». Le fichier original reste inchangé jusqu’à l’enregistrement.",
+  "cleanupInternalHeading": "Supprimer les pages internes et les instances liées",
+  "cleanupInternalDescription": "Supprimez {canvases} pages internes, {components} définitions intégrées et {instances} calques d’instances liées sur {pages} pages ordinaires.",
+  "cleanupInternalWarning": "Cette action modifie vos créations, y compris le contenu masqué et les instances de bibliothèques externes. Les calques liés imbriqués sont supprimés sans supprimer les boutons ou cadres qui les contiennent. Les composants valides des pages ordinaires sont conservés.",
+  "cleanupHiddenInstances": "Masquez {count} instances imbriquées échangées dont les remplacements sont supprimés, en conservant leurs composants parents.",
+  "cleanupInternalRemove": "Supprimer les pages et instances liées"
 }

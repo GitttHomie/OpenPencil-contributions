@@ -23,9 +23,13 @@ import { newLayerDefaults } from '#core/editor/shapes/defaults'
 import { booleanOperationPaints, createBooleanOperation } from '#core/editor/structure/boolean'
 import { wrapNodes } from '#core/editor/structure/container-wrap'
 import { ungroupNode } from '#core/editor/structure/group'
-import type { RasterCodec } from '#core/io/formats/raster/index'
+import { iconify, type IconProvider } from '#core/icons'
+import type { RasterCodec } from '#core/io/formats/raster'
+import { createSVGNodes } from '#core/io/formats/svg'
+import { textAutoResizeChanges } from '#core/layout/text-auto-resize'
 import { reconcileVariableLayouts } from '#core/layout/variables'
 import { documentFontStatus, type DocumentFontStatus } from '#core/text/font/status'
+import { fontManager } from '#core/text/fonts'
 
 import { combineComponentsAsVariants, componentFromNode, exposeInstanceSwap } from './components'
 import type {
@@ -43,6 +47,7 @@ import type {
   FigmaTextNode,
   FigmaVectorNode
 } from './node-types'
+import { startPendingLayout } from './pending-layout'
 import {
   FigmaNodeProxy,
   INTERNAL_ID,
@@ -56,6 +61,8 @@ import type { ExportImageOptions } from './types'
 const noop = () => undefined
 
 export { FigmaNodeProxy } from './proxy'
+export { getPageBackgrounds, setPageBackgrounds } from './page-backgrounds'
+export { flushPendingLayout } from './pending-layout'
 export type { FigmaEffect } from './effects'
 export type { ExportImageOptions } from './types'
 export type {
@@ -95,6 +102,7 @@ export class FigmaAPI implements NodeProxyHost {
 
   constructor(graph: SceneGraph) {
     this.graph = graph
+    startPendingLayout(graph)
     const pages = graph.getPages()
     this._currentPageId = pages[0]?.id ?? graph.rootId
   }
@@ -164,9 +172,10 @@ export class FigmaAPI implements NodeProxyHost {
   /** New layers start as the editor's tools make them, which is how Figma's plugin API makes them. */
   private _createNode(type: NodeType): FigmaNodeProxy {
     const defaults = newLayerDefaults(type, this.theme)
-    // Figma's plugin API makes a line 100 wide with no height, and a section 496 square.
+    // Figma's plugin API makes a line with no height, a 496 px section, and a hugging frame.
     if (type === 'LINE') defaults.height = 0
     if (type === 'SECTION') Object.assign(defaults, { width: 496, height: 496 })
+    if (type === 'FRAME' || type === 'COMPONENT') defaults.primaryAxisSizing = 'HUG'
     const node = this.graph.createNode(type, this._currentPageId, defaults)
     return this.wrapNode(node.id)
   }
@@ -184,7 +193,13 @@ export class FigmaAPI implements NodeProxyHost {
   }
 
   createText(): FigmaTextNode {
-    return this._createNode('TEXT') as FigmaTextNode
+    const text = this._createNode('TEXT') as FigmaTextNode
+    // Figma's plugin text starts empty at 12px and sizes itself to its content: no width, one
+    // line tall.
+    const node = this.graph.getNode(text.id)
+    const defaults = { fontSize: 12, textAutoResize: 'WIDTH_AND_HEIGHT' as const, width: 0 }
+    this.graph.updateNode(text.id, { ...defaults, ...textAutoResizeChanges(node, defaults) })
+    return text
   }
 
   createLine(): FigmaLineNode {
@@ -201,6 +216,14 @@ export class FigmaAPI implements NodeProxyHost {
 
   createVector(): FigmaVectorNode {
     return this._createNode('VECTOR') as FigmaVectorNode
+  }
+
+  /** The layers Figma makes from SVG markup, on the current page at its origin. */
+  // eslint-disable-next-line open-pencil/no-mixed-case-acronym-identifiers -- Figma Plugin API name.
+  createNodeFromSvg(svg: string): FigmaFrameNode {
+    const node = createSVGNodes(this.graph, this._currentPageId, svg, { keepEmpty: true })
+    if (!node) throw new Error('in createNodeFromSvg: Failed to convert SVG file')
+    return this.wrapNode(node.id) as FigmaFrameNode
   }
 
   createComponent(): FigmaComponentNode {
@@ -526,8 +549,12 @@ export class FigmaAPI implements NodeProxyHost {
 
   // --- Stubs ---
 
-  async loadFontAsync(_fontName: FigmaFontName): Promise<void> {
-    // No-op: we don't gate text editing on font loading
+  /**
+   * Loads the font so text measures and draws with it from then on. Hosts with their own font
+   * sources replace this; a font that cannot load is skipped, where Figma would reject.
+   */
+  async loadFontAsync(fontName: FigmaFontName): Promise<void> {
+    await fontManager.loadFont(fontName.family, fontName.style).catch(() => null)
   }
 
   async listAvailableFontsAsync(): Promise<FigmaFont[]> {
@@ -563,6 +590,8 @@ export class FigmaAPI implements NodeProxyHost {
   }
 
   exportImage?: (nodeIds: string[], options: ExportImageOptions) => Promise<Uint8Array | null>
+  /** Where icon tools search and fetch icons; hosts may pass a self-hosted or bundled set. */
+  icons: IconProvider = iconify
   rasterCodec?: RasterCodec
   /** The document as it was before the current AI run first edited `pageId`, or null if unedited. */
   changeBaseline?: (pageId: string) => SceneGraph | null

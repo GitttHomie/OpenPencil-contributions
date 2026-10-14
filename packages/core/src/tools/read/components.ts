@@ -1,6 +1,10 @@
 import * as v from 'valibot'
 
-import { getComponentCatalog } from '#core/tools/component-catalog'
+import {
+  readerComponentSearchPages,
+  recoverReaderPage
+} from '#core/kiwi/fig/session/document-state'
+import { getComponentCatalog, getComponentPageLoader } from '#core/tools/component-catalog'
 import { toolNumber } from '#core/tools/input'
 import { defineTool } from '#core/tools/schema'
 
@@ -10,6 +14,8 @@ interface DocumentComponentResult {
   type: string
   page: string
   source: 'document'
+  variants?: { id: string; name: string; width: number; height: number }[]
+  variantCount?: number
 }
 
 interface LibraryComponentResult {
@@ -28,9 +34,9 @@ interface LibraryComponentResult {
 export const getComponents = defineTool({
   name: 'get_components',
   description:
-    'List reusable components from the document and enabled component libraries, optionally filtered by name.',
+    'List reusable components from the document and enabled component libraries, optionally filtered by name. Searches unopened document pages too; use a semantic name to load only relevant component pages.',
   execution: { kind: 'async', mutation: 'none' },
-  input: v.object({
+  input: v.strictObject({
     name: v.optional(
       v.pipe(v.string(), v.description('Filter by name (case-insensitive substring)'))
     ),
@@ -40,6 +46,15 @@ export const getComponents = defineTool({
     ),
     library_id: v.optional(
       v.pipe(v.string(), v.description('Filter library components by library ID'))
+    ),
+    include_variants: v.optional(
+      v.pipe(
+        v.boolean(),
+        v.description(
+          'Include up to 12 direct variant IDs, names and sizes per document component set'
+        )
+      ),
+      false
     ),
     limit: v.optional(
       toolNumber(
@@ -54,19 +69,45 @@ export const getComponents = defineTool({
     const documentComponents: DocumentComponentResult[] = []
 
     if (source !== 'libraries') {
+      const load = getComponentPageLoader(figma)
+      for (const pageId of readerComponentSearchPages(figma.graph, args.name)) {
+        if (limit === 0) break
+        if (load) await load(pageId)
+        else recoverReaderPage(figma.graph, pageId)
+        const matches = [...figma.graph.getAllNodes()].filter(
+          (node) =>
+            (node.type === 'COMPONENT' || node.type === 'COMPONENT_SET') &&
+            (!nameFilter || node.name.toLowerCase().includes(nameFilter))
+        )
+        if (matches.length >= limit) break
+      }
       for (const page of figma.root.children) {
         if (documentComponents.length >= limit) break
         page.findAll((node) => {
           if (documentComponents.length >= limit) return false
           if (node.type !== 'COMPONENT' && node.type !== 'COMPONENT_SET') return false
           if (nameFilter && !node.name.toLowerCase().includes(nameFilter)) return false
-          documentComponents.push({
+          const variants =
+            args.include_variants && node.type === 'COMPONENT_SET'
+              ? node.children.filter((child) => child.type === 'COMPONENT')
+              : undefined
+          const component: DocumentComponentResult = {
             id: node.id,
             name: node.name,
             type: node.type,
             page: page.name,
             source: 'document'
-          })
+          }
+          if (variants) {
+            component.variantCount = variants.length
+            component.variants = variants.slice(0, 12).map((variant) => ({
+              id: variant.id,
+              name: variant.name,
+              width: variant.width,
+              height: variant.height
+            }))
+          }
+          documentComponents.push(component)
           return false
         })
       }

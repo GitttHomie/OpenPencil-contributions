@@ -115,10 +115,13 @@ export function useProfileModelSelection(
     if (!knownModel.value) return
 
     draft.capabilities = [...knownCapabilities.value]
+    if (draft.imageSupport === 'verified' && !draft.capabilities.includes('vision'))
+      draft.capabilities.push('vision')
     draft.maxOutputTokens = outputTokenRecommendation.value
   }
 
   function updateProvider(providerID: AIProviderID): void {
+    draft.imageSupport = undefined
     draft.acpThinking = undefined
     draft.acpLaunch = undefined
     draft.acpIntegration = undefined
@@ -144,6 +147,7 @@ export function useProfileModelSelection(
   }
 
   function updateModel(modelID: string): void {
+    draft.imageSupport = undefined
     if (modelID === CUSTOM_MODEL_VALUE) {
       customModelSelected.value = true
       draft.customModelID = ''

@@ -1,24 +1,16 @@
 import { expect, test } from 'bun:test'
 
-import { pixelGridLines } from '#core/canvas/pixel-grid'
+import { pixelGridVisible } from '#core/canvas/overlays/pixel-grid'
 import { createEditor } from '#core/editor'
 import { copyEditorViewState, pickEditorViewState } from '#core/editor/state/view'
 
-test('pixel boundaries follow positive and negative pans at integer and fractional zoom', () => {
-  expect(pixelGridLines(0, 8, 24, 1)).toEqual([0, 8, 16, 24])
-  expect(pixelGridLines(10, 8, 24, 1)).toEqual([2, 10, 18])
-  expect(pixelGridLines(-10, 8, 24, 1)).toEqual([6, 14, 22])
-  expect(pixelGridLines(0.3, 8.25, 24, 2)).toEqual([0.5, 8.5, 17])
-  expect(pixelGridLines(-100000, 16, 32, 2)).toEqual([0, 16, 32])
-})
-
-test('the grid disappears below inspection zoom and rejects invalid viewports', () => {
-  expect(pixelGridLines(0, 3.99, 100, 2)).toEqual([])
-  expect(pixelGridLines(0, 4, 24, 2)).toEqual([0, 4, 8, 12, 16, 20, 24])
-  expect(pixelGridLines(0, 8, 0, 2)).toEqual([])
-  expect(pixelGridLines(0, 8, 100, 0)).toEqual([])
-  expect(pixelGridLines(Infinity, 8, 100, 2)).toEqual([])
-  expect(pixelGridLines(0, 8, Infinity, 2)).toEqual([])
+test('the grid appears at 400% regardless of display density', () => {
+  for (const dpr of [1, 2, 3]) {
+    expect(pixelGridVisible(3.99, dpr)).toBe(false)
+    expect(pixelGridVisible(4, dpr)).toBe(true)
+  }
+  expect(pixelGridVisible(Infinity, 2)).toBe(false)
+  expect(pixelGridVisible(8, 0)).toBe(false)
 })
 
 test('visibility is view state: it repaints without mutating the document or undo history', () => {

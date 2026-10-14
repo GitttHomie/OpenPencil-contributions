@@ -55,6 +55,19 @@ export function createHistorySession(reset: () => Promise<void>) {
   return {
     attach,
     detach,
+    async dispose(flush: () => Promise<void>) {
+      interrupted ||= live?.status === 'submitted' || live?.status === 'streaming'
+      generation++
+      stopWatch?.()
+      stopWatch = undefined
+      try {
+        await live?.stop()
+        await flush()
+      } finally {
+        live = null
+        await reset()
+      }
+    },
     get chat() {
       return live
     },

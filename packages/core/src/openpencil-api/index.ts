@@ -1,6 +1,9 @@
+import { omit } from 'es-toolkit'
+
 import {
   BEHAVIOUR_CONTRACTS,
   BEHAVIOUR_KINDS,
+  parseVariableFormula,
   type BehaviourKind,
   type BehaviourSpec
 } from '@open-pencil/scene-graph'
@@ -14,8 +17,22 @@ import {
   type BehaviourHandle,
   type NodeRef
 } from './behaviours'
+import {
+  addComment,
+  getComment,
+  getComments,
+  type CommentFilter,
+  type CommentHandle,
+  type NewComment
+} from './comments'
 
 export { BehaviourHandle, type NodeRef } from './behaviours'
+export {
+  CommentHandle,
+  DEFAULT_COMMENT_AUTHOR,
+  type CommentFilter,
+  type NewComment
+} from './comments'
 
 /**
  * What OpenPencil adds to the Figma Plugin API for scripts, as the `openpencil` global next to
@@ -24,6 +41,44 @@ export { BehaviourHandle, type NodeRef } from './behaviours'
  */
 export class OpenPencilAPI {
   constructor(private readonly figma: FigmaAPI) {}
+
+  /**
+   * Set a numeric or Boolean token formula by collection, variable and optional mode names.
+   * References use `{variable/name}` or `{Collection::variable/name}` and persist by ID.
+   */
+  setVariableFormula(
+    collectionName: string,
+    variableName: string,
+    source: string,
+    modeName?: string
+  ): number | boolean {
+    const graph = this.figma.graph
+    const collections = [...graph.variableCollections.values()].filter(
+      (item) => item.name === collectionName
+    )
+    const collection = collections.at(0)
+    if (!collection || collections.length !== 1)
+      throw new Error(`Unknown or ambiguous collection: ${collectionName}`)
+    const variables = [...graph.variables.values()].filter(
+      (item) => item.collectionId === collection.id && item.name === variableName
+    )
+    const variable = variables.at(0)
+    if (!variable || variables.length !== 1)
+      throw new Error(`Unknown or ambiguous variable: ${variableName}`)
+    const modes = collection.modes.filter((mode) =>
+      modeName ? mode.name === modeName : mode.modeId === collection.defaultModeId
+    )
+    const mode = modes.at(0)
+    if (!mode || modes.length !== 1) throw new Error(`Unknown or ambiguous mode: ${modeName}`)
+    const { value, resolved } = parseVariableFormula(graph, variable.id, mode.modeId, source)
+    this.figma.setVariableValue(variable.id, mode.modeId, value)
+    // Match the inspector: a live formula supersedes this mode's CSS-only expression.
+    if (typeof value !== 'number' && variable.expressions) {
+      variable.expressions = omit(variable.expressions, [mode.modeId])
+      if (Object.keys(variable.expressions).length === 0) delete variable.expressions
+    }
+    return resolved
+  }
 
   /** The behaviour kinds, after Reka UI's primitives, with the values and parts each binds. */
   get behaviourKinds() {
@@ -47,5 +102,25 @@ export class OpenPencilAPI {
   /** Make a frame of a main component a slot, as Create slot does; returns the slot's name. */
   createSlot(frame: NodeRef): string {
     return makeSlot(this.figma.graph, frame)
+  }
+
+  /**
+   * The document's comment threads, oldest first: all of them, or only resolved or open ones,
+   * one page's, or those a person started or replied to, such as `{ resolved: false }`.
+   */
+  getComments(filter?: CommentFilter): CommentHandle[] {
+    return getComments(this.figma.graph, filter)
+  }
+
+  getComment(id: string): CommentHandle | null {
+    return getComment(this.figma.graph, id)
+  }
+
+  /**
+   * Leave a comment pinned on a layer, `{ node }`, which it then follows, or at a point of a
+   * page, `{ page, x, y }`; the current page by default. `author` names who wrote it.
+   */
+  addComment(text: string, options?: NewComment): CommentHandle {
+    return addComment(this.figma.graph, this.figma.currentPageId, text, options)
   }
 }

@@ -1,5 +1,5 @@
-//! Configured ACP launches keep the executable native-owned. The webview may provide
-//! bounded string settings, never a program, shell fragment, or arbitrary CLI flags.
+//! ACP launches use known executables with bounded configuration settings.
+//! User-configured MCP launches accept literal commands and arguments without shell expansion.
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 use tauri::{ipc::Channel, State};
@@ -86,6 +86,19 @@ fn environment_name(name: &str) -> bool {
         && !upper.starts_with("DYLD_")
 }
 
+fn codex_config(value: &str) -> bool {
+    if value.len() > 65_536 {
+        return false;
+    }
+    let Ok(config) = serde_json::from_str::<BTreeMap<String, String>>(value) else {
+        return false;
+    };
+    config.len() <= 24
+        && config
+            .iter()
+            .all(|(key, value)| config_key(key) && literal(value))
+}
+
 fn validate(command: &str, args: &[String], env: &BTreeMap<String, String>) -> Result<(), String> {
     let base = base_args(command)?;
     if args.len() < base.len() || !args.iter().zip(base).all(|(a, b)| a == b) {
@@ -106,10 +119,13 @@ fn validate(command: &str, args: &[String], env: &BTreeMap<String, String>) -> R
             return Err("Invalid ACP configuration setting.".into());
         }
     }
-    if env
-        .iter()
-        .any(|(key, value)| !environment_name(key) || !literal(value))
-    {
+    if env.iter().any(|(key, value)| {
+        if key == "CODEX_CONFIG" {
+            command != "codex-acp" || !codex_config(value)
+        } else {
+            !environment_name(key) || !literal(value)
+        }
+    }) {
         return Err("Invalid ACP environment setting.".into());
     }
     Ok(())
@@ -129,18 +145,75 @@ pub async fn agent_process_spawn(
         return Err("Agent launches belong to the main window.".into());
     }
     validate(&command, &args, &env)?;
+    // Validated ACP adapters can be npm .cmd shims on Windows.
+    #[cfg(target_os = "windows")]
+    let (command, args) = (
+        "cmd".to_owned(),
+        [vec!["/c".to_owned(), command], args].concat(),
+    );
+    spawn_process(app, processes, command, args, env, events).await
+}
+
+/// Local MCP definitions are supplied by the user's Settings, never a shell command string.
+#[tauri::command]
+pub async fn mcp_process_spawn(
+    app: tauri::AppHandle,
+    window: tauri::Window,
+    processes: State<'_, AgentProcesses>,
+    command: String,
+    args: Vec<String>,
+    env: BTreeMap<String, String>,
+    events: Channel<AgentEvent>,
+) -> Result<u32, String> {
+    if window.label() != "main" {
+        return Err("MCP connections belong to the main window.".into());
+    }
+    validate_mcp(&command, &args, &env)?;
+    spawn_process(app, processes, command, args, env, events).await
+}
+
+fn validate_mcp(
+    command: &str,
+    args: &[String],
+    env: &BTreeMap<String, String>,
+) -> Result<(), String> {
+    if command.trim().is_empty()
+        || command.len() > 8192
+        || command.contains('\0')
+        || args.len() > 128
+        || args
+            .iter()
+            .any(|arg| arg.len() > 8192 || arg.contains('\0'))
+        || env.len() > 128
+        || env.iter().any(|(key, value)| {
+            key.is_empty()
+                || key.contains(['=', '\0'])
+                || value.len() > 8192
+                || value.contains('\0')
+        })
+    {
+        return Err("Invalid MCP process configuration.".into());
+    }
+    Ok(())
+}
+
+async fn spawn_process(
+    app: tauri::AppHandle,
+    processes: State<'_, AgentProcesses>,
+    command: String,
+    args: Vec<String>,
+    env: BTreeMap<String, String>,
+    events: Channel<AgentEvent>,
+) -> Result<u32, String> {
     let path = crate::augment_path(
         &std::env::var("PATH").unwrap_or_default(),
         &crate::mcp_candidate_dirs(),
     );
-    // The name was checked above; cmd.exe receives only the fixed adapter and validated literals.
-    #[cfg(windows)]
-    let process = app.shell().command("cmd").args(["/c", &command]).args(args);
-    #[cfg(not(windows))]
+    // MCP executables and arguments are passed literally, without a shell wrapper.
     let process = app.shell().command(&command).args(args);
     let (mut receiver, child) = process
-        .envs(env)
         .env("PATH", path)
+        .envs(env)
         .set_raw_out(true)
         .spawn()
         .map_err(|_| "Could not start the configured agent.")?;
@@ -221,6 +294,26 @@ mod tests {
         values.iter().map(|s| (*s).to_owned()).collect()
     }
     #[test]
+    fn validates_local_mcp_without_reinterpreting_literal_arguments() {
+        assert!(validate_mcp(
+            "/Applications/Example App/server",
+            &strings(&["argument with spaces", "$(literal)", ""]),
+            &BTreeMap::from([("EXAMPLE_TOKEN".into(), "secret with spaces".into())]),
+        )
+        .is_ok());
+        for command in ["", "  ", "server\0bad"] {
+            assert!(validate_mcp(command, &[], &BTreeMap::new()).is_err());
+        }
+        assert!(validate_mcp("server", &strings(&["\0"]), &BTreeMap::new()).is_err());
+        assert!(validate_mcp("server", &vec!["arg".into(); 129], &BTreeMap::new()).is_err());
+        assert!(validate_mcp(
+            "server",
+            &[],
+            &BTreeMap::from([("BAD=KEY".into(), "value".into())])
+        )
+        .is_err());
+    }
+    #[test]
     fn permits_bounded_string_configuration_for_known_adapters() {
         assert!(validate(
             "codex-acp",
@@ -263,5 +356,44 @@ mod tests {
             )
             .is_err());
         }
+    }
+
+    #[test]
+    fn permits_codex_json_settings_with_the_same_limits_as_config_arguments() {
+        assert!(validate(
+            "codex-acp",
+            &[],
+            &BTreeMap::from([(
+                "CODEX_CONFIG".into(),
+                r#"{"model_provider":"team","model_providers.team.aws.region":"us-east-1"}"#.into(),
+            )]),
+        )
+        .is_ok());
+        for config in [
+            "invalid JSON",
+            r#"{"model_providers":{"team":{"aws":{"region":"us-east-1"}}}}"#,
+            r#"{"mcp_servers.local.command":"sh"}"#,
+            r#"{"notify":"command"}"#,
+            r#"{"model_provider":"team&command"}"#,
+            r#"{"model_provider":true}"#,
+        ] {
+            assert!(validate(
+                "codex-acp",
+                &[],
+                &BTreeMap::from([("CODEX_CONFIG".into(), config.into())]),
+            )
+            .is_err());
+        }
+        assert!(validate(
+            "claude-agent-acp",
+            &[],
+            &BTreeMap::from([("CODEX_CONFIG".into(), "{}".into())]),
+        )
+        .is_err());
+        assert!(!codex_config(&" ".repeat(65_537)));
+        let many: BTreeMap<_, _> = (0..25)
+            .map(|index| (format!("setting{index}"), "value"))
+            .collect();
+        assert!(!codex_config(&serde_json::to_string(&many).unwrap()));
     }
 }

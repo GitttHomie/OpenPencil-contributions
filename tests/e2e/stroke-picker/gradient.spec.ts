@@ -3,9 +3,11 @@ import { expect, test, type Page } from '@playwright/test'
 import { CanvasHelper } from '#tests/helpers/canvas'
 import {
   beginGradientDrag,
+  gradientHandleOnScreen,
+  gradientGuideCount,
   createGradientFixture,
   gradientPointOnScreen
-} from '#tests/helpers/canvas/gradient'
+} from '#tests/helpers/canvas/gradient/scene'
 import { propertyItems, propertySection } from '#tests/helpers/properties'
 
 async function selectedStroke(page: Page) {
@@ -79,17 +81,14 @@ for (const type of [
       .first()
       .getByRole('button', { name: 'Stroke', exact: true })
       .click()
-    const handle = page.getByRole('button', {
-      name: type === 'GRADIENT_LINEAR' ? 'Gradient start' : 'Rotate and resize gradient',
-      exact: true
-    })
-    await expect(handle).toBeVisible()
+    const handle = type === 'GRADIENT_LINEAR' ? 'start' : 'radius-x'
+    await gradientHandleOnScreen(page, handle)
     await beginGradientDrag(
       page,
       handle,
       await gradientPointOnScreen(page, fixture.id, { x: 2, y: 3 })
     )
-    await expect(page.locator('[data-gradient-snap-guide]')).toHaveCount(2)
+    await expect.poll(() => gradientGuideCount(page)).toBe(2)
     await page.mouse.up()
     const changed = await selectedStroke(page)
     expect(changed?.gradientTransform).not.toEqual(before?.gradientTransform)
@@ -114,7 +113,7 @@ for (const type of [
       path: test.info().outputPath(`${type.toLowerCase()}-stroke-handles.png`)
     })
     await page.keyboard.press('Escape')
-    await expect(handle).toHaveCount(0)
+    expect(await page.evaluate(() => window.openPencil?.getStore?.().state.gradientEdit)).toBeNull()
     canvas.assertNoErrors()
   })
 }

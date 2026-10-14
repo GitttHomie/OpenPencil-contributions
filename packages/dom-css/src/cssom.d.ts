@@ -3,6 +3,7 @@ declare module '@acemir/cssom' {
     readonly length: number
     readonly [index: number]: string
     getPropertyValue(property: string): string
+    setProperty(property: string, value: string, priority?: string): void
   }
 
   export interface CSSStyleRuleLike {
@@ -23,6 +24,12 @@ declare module '@acemir/cssom' {
 
   export interface CSSStyleSheetLike {
     cssRules: unknown[]
+  }
+
+  export class CSSStyleSheet {
+    cssRules: CSSStyleRuleLike[]
+    insertRule(rule: string, index: number): number
+    toString(): string
   }
 
   export function parse(cssText: string): CSSStyleSheetLike
