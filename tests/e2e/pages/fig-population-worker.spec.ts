@@ -1,4 +1,5 @@
 import { expect, test, useEditorSetup } from '#tests/e2e/fixtures'
+import { keepEmbeddedDefinitions } from '#tests/helpers/document/open'
 
 const editor = useEditorSetup()
 
@@ -14,7 +15,7 @@ test('populates a real lazy FIG page in the retained parse worker', async () => 
   const openFile = editor.page.evaluate(() =>
     window.openPencil?.openFile?.('/tests/fixtures/material3.fig')
   )
-  await openFile
+  await keepEmbeddedDefinitions(editor.page, openFile)
   await editor.canvas.waitForRender()
 
   const targetPageId = await editor.page.evaluate(() => {
