@@ -12,7 +12,7 @@ import {
   selectTextForTypography,
   typographySelectionMatchesPaint
 } from '#tests/helpers/fonts/typography'
-import { publicPath } from '#tests/helpers/paths'
+import { repoPath } from '#tests/helpers/paths'
 
 test('a regular-only local choice survives deselection during loading and undoes as one change', async ({
   page
@@ -23,7 +23,7 @@ test('a regular-only local choice survives deselection during loading and undoes
   })
   const counts = await mockLocalFont(
     page,
-    await readFile(publicPath('Inter-Regular.ttf')),
+    await readFile(repoPath('packages/core/assets', 'Inter-Regular.ttf')),
     () => download
   )
   await trackFontModuleResources(page)
@@ -81,7 +81,7 @@ test('first Google font selection commits while SemiBold loads without a substit
     finish = resolve
   })
   const fonts = await mockGoogleFonts(page, ['Downloaded Test Font'], {
-    fontData: await readFile(publicPath('Inter-SemiBold.ttf')),
+    fontData: await readFile(repoPath('packages/core/assets', 'Inter-SemiBold.ttf')),
     weights: [400, 600],
     beforeDownload: () => download
   })

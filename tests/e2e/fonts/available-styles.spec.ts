@@ -10,14 +10,14 @@ import {
   readTypography,
   selectTextForTypography
 } from '#tests/helpers/fonts/typography'
-import { publicPath } from '#tests/helpers/paths'
+import { repoPath } from '#tests/helpers/paths'
 import { trackResizeErrors } from '#tests/helpers/resize-errors'
 import { getNodeById } from '#tests/helpers/store'
 
 test('Abril Fatface exposes only Regular and prevents unavailable formatting', async ({ page }) => {
   const fonts = await mockGoogleFonts(page, ['Abril Fatface'], {
     weights: [400],
-    fontData: await readFile(publicPath('Inter-Regular.ttf'))
+    fontData: await readFile(repoPath('packages/core/assets', 'Inter-Regular.ttf'))
   })
   await trackFontModuleResources(page)
   await page.goto('/?test&no-rulers')
@@ -56,7 +56,7 @@ test('font list stays usable while searching, loading previews, and resizing the
     page,
     Array.from({ length: 80 }, (_, index) => `Preview Font ${index}`),
     {
-      fontData: await readFile(publicPath('Inter-Regular.ttf'))
+      fontData: await readFile(repoPath('packages/core/assets', 'Inter-Regular.ttf'))
     }
   )
   await trackFontModuleResources(page)
