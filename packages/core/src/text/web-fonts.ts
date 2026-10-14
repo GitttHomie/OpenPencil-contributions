@@ -30,6 +30,16 @@ export const DEFAULT_WEB_FONT_PROVIDER_SETTINGS: Record<WebFontProviderId, boole
 
 export type WebFontFetch = (url: string, init?: RequestInit) => Promise<Response>
 
+/** Unifont's provider metadata endpoints; unrelated app traffic keeps its own transport. */
+const PROVIDER_REQUEST_HOSTS = new Set([
+  'api.fontshare.com',
+  'api.fontsource.org',
+  'cdn.jsdelivr.net',
+  'fonts.bunny.net',
+  'fonts.google.com',
+  'fonts.googleapis.com'
+])
+
 const DEFAULT_WEB_FONT_SUBSETS = [
   'latin',
   'latin-ext',
@@ -291,7 +301,7 @@ export class WebFontResolver {
     const originalFetch = globalThis.fetch
     const proxyFetch = (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === 'string' || input instanceof URL ? input.toString() : input.url
-      if (url.startsWith('https://') || url.startsWith('http://')) {
+      if (url.startsWith('https://') && PROVIDER_REQUEST_HOSTS.has(new URL(url).hostname)) {
         signal?.throwIfAborted()
         return (
           this.remoteFetch?.(url, { ...init, signal: signal ?? init?.signal }) ??
