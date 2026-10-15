@@ -10,13 +10,16 @@ import { resolveWorkspaceRoot } from '@open-pencil/package-artifacts-tools'
 const root = await resolveWorkspaceRoot(import.meta.dir)
 
 async function lint(message: string, args: string[] = [], prTitle = false) {
-  const child = Bun.spawn([process.execPath, 'run', 'check:commits', '--verbose', ...args], {
-    cwd: root,
-    env: { ...process.env, COMMITLINT_PR_TITLE: prTitle ? '1' : '0' },
-    stdin: new Blob([message]),
-    stdout: 'pipe',
-    stderr: 'pipe'
-  })
+  const child = Bun.spawn(
+    [process.execPath, join(root, 'node_modules/@commitlint/cli/cli.js'), '--verbose', ...args],
+    {
+      cwd: root,
+      env: { ...process.env, COMMITLINT_PR_TITLE: prTitle ? '1' : '0' },
+      stdin: new Blob([message]),
+      stdout: 'pipe',
+      stderr: 'pipe'
+    }
+  )
   const [code, stdout, stderr] = await Promise.all([
     child.exited,
     new Response(child.stdout).text(),
