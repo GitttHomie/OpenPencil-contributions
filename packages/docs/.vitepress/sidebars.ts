@@ -43,6 +43,7 @@ export const userGuideSidebar = (
       { text: labels.layers, link: `${prefix}/user-guide/layers-and-pages` },
       { text: labels.exporting, link: `${prefix}/user-guide/exporting` },
       // English only until translated; locales link to the canonical page.
+      { text: labels.openPencilCloud, link: '/user-guide/openpencil-cloud' },
       { text: labels.cloudStorage, link: '/user-guide/cloud-storage' },
     ],
   },
@@ -129,6 +130,7 @@ export const developmentSidebar = (
             { text: 'Roadmap', link: '/development/roadmap' },
             { text: 'AI Chat Replies', link: '/development/ai-chat' },
             { text: 'Behaviours and Preview', link: '/development/behaviours-and-preview' },
+            { text: 'Cloud Architecture', link: '/development/cloud' },
             { text: 'Navigation Performance', link: '/development/navigation-performance' },
             { text: 'Renderer Lifecycle', link: '/development/renderer-lifecycle' },
             { text: 'Renderer Profiler', link: '/development/renderer-profiler' },
