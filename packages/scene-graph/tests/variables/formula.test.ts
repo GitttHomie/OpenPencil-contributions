@@ -10,6 +10,8 @@ import {
   variableValueReferences,
   mapVariableValueReferences,
   variableFormulaSchema,
+  collectionsBoundIn,
+  type VariableFormulaNode,
   type VariableValue
 } from '@open-pencil/scene-graph'
 import { createBatchVariableResolver } from '@open-pencil/scene-graph/variables'
@@ -206,4 +208,70 @@ test('100 consumers share one calculation per mode during a batch', () => {
   } finally {
     get.mockRestore()
   }
+})
+
+test('numeric schema and resolver reject invalid formula trees', () => {
+  const values: VariableFormulaNode[] = [
+    { operator: 'ADDITION', operands: [true, 1] },
+    { operator: 'ADDITION', operands: [1] },
+    { operator: 'NOT', operands: [true] },
+    { operator: 'MULTIPLY', operands: [1, { operator: 'OR', operands: [false, true] }] },
+    { operator: 'DIVIDE', operands: [Infinity, 2] }
+  ]
+  const { graph, derived, mode } = setup()
+  for (const value of values) {
+    const definition: VariableValue = { expression: 'FORMULA', type: 'FLOAT', value }
+    expect(v.safeParse(variableFormulaSchema, definition).success).toBe(false)
+    derived.valuesByMode[mode] = definition
+    expect(graph.resolveVariable(derived.id)).toBeUndefined()
+  }
+})
+
+test('bounded schema rejects deeply nested and cyclic input', () => {
+  const value: VariableValue = { expression: 'FORMULA', type: 'FLOAT', value: 1 }
+  if (!('expression' in value) || value.expression !== 'FORMULA')
+    throw new Error('Expected formula')
+  for (let i = 0; i < 65; i++) value.value = { operator: 'NEGATE', operands: [value.value] }
+  expect(v.safeParse(variableFormulaSchema, value).success).toBe(false)
+  const operands: VariableFormulaNode[] = [1]
+  const cyclic: VariableFormulaNode = { operator: 'NEGATE', operands }
+  operands[0] = cyclic
+  expect(
+    v.safeParse(variableFormulaSchema, { expression: 'FORMULA', type: 'FLOAT', value: cyclic })
+      .success
+  ).toBe(false)
+})
+
+test('a depth-limited batch lookup does not poison a later shallow lookup', () => {
+  const { graph, collection, base } = setup()
+  let previous = base
+  const chain = [base]
+  for (let i = 0; i < 65; i++) {
+    previous = graph.createVariable(`alias${i}`, 'FLOAT', collection.id, { aliasId: previous.id })
+    chain.push(previous)
+  }
+  const node = graph.createNode('FRAME', graph.getPages()[0].id)
+  const resolve = createBatchVariableResolver(graph)
+  expect(resolve(node.id, previous.id)).toBeUndefined()
+  expect(resolve(node.id, chain[2].id)).toBe(4)
+  expect(resolve(node.id, base.id)).toBe(4)
+})
+
+test('collection discovery follows formulas and composed color operands transitively', () => {
+  const { graph, collection, derived, set } = setup()
+  const other = graph.createCollection('Other')
+  graph.createVariable('factor', 'FLOAT', other.id, 2)
+  set('{Other::factor} * 10')
+  const colors = graph.createCollection('Colors')
+  const color = graph.createVariable('scrim', 'COLOR', colors.id, {
+    expression: 'COMPOSE_COLOR',
+    color: { r: 0, g: 0, b: 0, a: 1 },
+    opacity: { aliasId: derived.id }
+  })
+  const node = graph.createNode('FRAME', graph.getPages()[0].id, {
+    boundVariables: { fillColor: color.id }
+  })
+  expect(collectionsBoundIn(graph, [node.id])).toEqual(
+    new Set([colors.id, collection.id, other.id])
+  )
 })

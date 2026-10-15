@@ -144,9 +144,13 @@ function restoreInputFocus(event: Event) {
   selection.value = { start: caret, end: caret }
 }
 function detach() {
-  const resolved = formula.parse(modeId, formula.format(variable.valuesByMode[modeId])).resolved
-  draft.value = tokenValueText(variable, resolved)
-  apply()
+  try {
+    const { resolved } = formula.parse(modeId, formula.format(variable.valuesByMode[modeId]))
+    draft.value = tokenValueText(variable, resolved)
+    apply()
+  } catch (error) {
+    commitError.value = error instanceof Error ? error.message : String(error)
+  }
 }
 </script>
 

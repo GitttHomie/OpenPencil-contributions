@@ -1,13 +1,7 @@
-import type {
-  SceneGraph,
-  VariableFormulaNode,
-  VariableLiteral,
-  VariableValue
-} from '@open-pencil/scene-graph'
+import type { SceneGraph, VariableFormulaNode, VariableValue } from '@open-pencil/scene-graph'
 
-import { variableValueInMode } from '../resolution'
-import { variableValueReferences, resolveVariableValue } from '../value'
-import { evaluateVariableFormula, MAX_FORMULA_DEPTH, VariableFormulaError } from './evaluate'
+import { resolveVariableInModes } from '../resolution'
+import { MAX_FORMULA_DEPTH, VariableFormulaError } from './evaluate'
 import { parseFormulaSyntax } from './parse'
 
 export {
@@ -102,47 +96,15 @@ export function parseVariableFormula(
     typeof tree === 'object' && 'operator' in tree
       ? { expression: 'FORMULA', type, value: tree }
       : tree
-  const visiting = new Set<string>()
-  const memo = new Map<string, VariableLiteral>()
-  const resolve = (id: string): VariableLiteral => {
-    const cached = memo.get(id)
-    if (cached !== undefined) return cached
-    if (visiting.has(id)) throw new VariableFormulaError('Circular variable reference')
-    if (visiting.size >= MAX_FORMULA_DEPTH)
-      throw new VariableFormulaError('Too many linked variables')
-    const target = graph.variables.get(id)
-    if (!target) throw new VariableFormulaError(`Missing variable: ${id}`)
-    if (target.type !== variable.type)
-      throw new VariableFormulaError(`Incompatible variable type: ${target.name}`)
-    const targetMode =
-      target.collectionId === variable.collectionId
-        ? modeId
-        : graph.getActiveModeId(target.collectionId)
-    const definition = id === variableId ? value : variableValueInMode(graph, target, targetMode)
-    if (definition === undefined) throw new VariableFormulaError(`Missing value: ${target.name}`)
-    visiting.add(id)
-    try {
-      // Resolve dependencies first so the safe canvas resolver cannot conceal a diagnostic.
-      for (const reference of variableValueReferences(definition)) resolve(reference)
-      const result =
-        typeof definition === 'object' &&
-        'expression' in definition &&
-        definition.expression === 'FORMULA'
-          ? evaluateVariableFormula(definition.value, resolve)
-          : resolveVariableValue(definition, resolve)
-      const expected = target.type === 'FLOAT' ? 'number' : 'boolean'
-      if (typeof result !== expected)
-        throw new VariableFormulaError(`Wrong result type: ${target.name}`)
-      if (typeof result === 'number' && !Number.isFinite(result))
-        throw new VariableFormulaError(`Non-finite value: ${target.name}`)
-      if (result === undefined) throw new VariableFormulaError(`Cannot resolve ${target.name}`)
-      memo.set(id, result)
-      return result
-    } finally {
-      visiting.delete(id)
-    }
-  }
-  const resolved = resolve(variableId)
+  const resolved = resolveVariableInModes(
+    graph,
+    variableId,
+    (collectionId) =>
+      collectionId === variable.collectionId ? modeId : graph.getActiveModeId(collectionId),
+    new Set(),
+    new Map(),
+    new Map([[variableId, value]])
+  )
   if (typeof resolved !== 'number' && typeof resolved !== 'boolean')
     throw new VariableFormulaError('Expected a number or Boolean result')
   return { value, resolved }

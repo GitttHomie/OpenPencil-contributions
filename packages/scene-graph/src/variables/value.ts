@@ -1,5 +1,13 @@
+import * as v from 'valibot'
+
 import type { VariableLiteral, VariableValue } from '../types'
-import { evaluateVariableFormula, mapFormulaReferences } from './formula/evaluate'
+import {
+  evaluateVariableFormula,
+  mapFormulaReferences,
+  VariableFormulaError
+} from './formula/evaluate'
+import { variableFormulaSchema } from './formula/schema'
+import { variableColorExpressionSchema } from './schema'
 
 /** All references in one definition, including color and opacity operands. */
 export function variableValueReferences(value: VariableValue): string[] {
@@ -37,7 +45,7 @@ export function mapVariableValueReferences(
   return { ...value }
 }
 
-/** Resolve operands through the caller's mode context; invalid results remain unresolved. */
+/** Resolve operands through the caller's mode context; formula failures retain their diagnostics for the caller. */
 export function resolveVariableValue(
   value: VariableValue,
   resolve: (id: string) => VariableLiteral | undefined
@@ -46,15 +54,18 @@ export function resolveVariableValue(
   if ('aliasId' in value) return resolve(value.aliasId)
   if (!('expression' in value)) return value
   if (value.expression === 'FORMULA') {
-    try {
-      const result = evaluateVariableFormula(value.value, resolve)
-      return typeof result === (value.type === 'FLOAT' ? 'number' : 'boolean') ? result : undefined
-    } catch {
-      return undefined
-    }
+    const formula = v.parse(variableFormulaSchema, value)
+    const result = evaluateVariableFormula(formula.value, resolve)
+    if (typeof result !== (formula.type === 'FLOAT' ? 'number' : 'boolean'))
+      throw new VariableFormulaError('Wrong formula result type')
+    return result
   }
-  const color = 'aliasId' in value.color ? resolve(value.color.aliasId) : value.color
-  const opacity = typeof value.opacity === 'object' ? resolve(value.opacity.aliasId) : value.opacity
+  const expression = v.parse(variableColorExpressionSchema, value)
+  const color = 'aliasId' in expression.color ? resolve(expression.color.aliasId) : expression.color
+  const opacity =
+    typeof expression.opacity === 'object'
+      ? resolve(expression.opacity.aliasId)
+      : expression.opacity
   if (
     !color ||
     typeof color !== 'object' ||

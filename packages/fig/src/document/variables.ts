@@ -1,14 +1,16 @@
+import * as v from 'valibot'
+
 import type { NodeChange, VariableDataEntry } from '@open-pencil/kiwi/fig/codec'
 import { guidToString } from '@open-pencil/kiwi/fig/guid'
 import {
   VARIABLE_FORMULA_OPERATORS,
-  formulaArity,
+  variableFormulaSchema,
+  variableColorExpressionSchema,
   formulaOperandType,
   MAX_FORMULA_DEPTH,
   type SceneGraph,
   type VariableValue,
-  type VariableColorExpression,
-  type VariableFormulaNode
+  type VariableColorExpression
 } from '@open-pencil/scene-graph'
 
 import { extractPluginData } from '../node-change/plugin-data'
@@ -52,31 +54,24 @@ function expressionValue(
   if (!value) throw new Error('Missing expression')
   if (value.expressionValue?.expressionFunction === 'COMPOSE_COLOR')
     return colorExpression(entry, resolve)
-  const operator = VARIABLE_FORMULA_OPERATORS.find(
-    (op) => op === value.expressionValue?.expressionFunction
-  )
-  const args = value.expressionValue?.expressionArguments
-  if (!operator || args?.length !== formulaArity(operator))
-    throw new Error(`Unsupported variable expression ${value.expressionValue?.expressionFunction}`)
+  const expression = value.expressionValue
+  const operator = v.parse(v.picklist(VARIABLE_FORMULA_OPERATORS), expression?.expressionFunction)
   const type = formulaOperandType(operator)
   if (entry.resolvedDataType && entry.resolvedDataType !== type)
     throw new Error(`Expression result type does not match ${entry.resolvedDataType}`)
-  const operands: VariableFormulaNode[] = args.map((arg) => {
+  const operands = (expression?.expressionArguments ?? []).map((arg) => {
     const operand = valueOf(arg, resolve, depth + 1)
-    if (typeof operand === 'number' && type === 'FLOAT') return operand
-    if (typeof operand === 'boolean' && type === 'BOOLEAN') return operand
-    if (typeof operand === 'object') {
-      if ('aliasId' in operand) return operand
-      if ('expression' in operand && operand.expression === 'FORMULA' && operand.type === type)
-        return operand.value
-    }
-    throw new Error('Invalid formula operand')
+    return typeof operand === 'object' &&
+      'expression' in operand &&
+      operand.expression === 'FORMULA'
+      ? operand.value
+      : operand
   })
-  return {
+  return v.parse(variableFormulaSchema, {
     expression: 'FORMULA',
     type,
     value: { operator, operands }
-  }
+  })
 }
 
 function colorExpression(
@@ -92,14 +87,7 @@ function colorExpression(
     throw new Error('Unsupported nested color expression')
   const color = valueOf(args[0], resolve)
   const opacity = valueOf(args[1], resolve)
-  if (
-    typeof color !== 'object' ||
-    !('r' in color || 'aliasId' in color) ||
-    (!(typeof opacity === 'number' && Number.isFinite(opacity)) &&
-      !(typeof opacity === 'object' && 'aliasId' in opacity))
-  )
-    throw new Error('Invalid COMPOSE_COLOR operands')
-  return { expression: 'COMPOSE_COLOR', color, opacity }
+  return v.parse(variableColorExpressionSchema, { expression: 'COMPOSE_COLOR', color, opacity })
 }
 
 function modeValues(

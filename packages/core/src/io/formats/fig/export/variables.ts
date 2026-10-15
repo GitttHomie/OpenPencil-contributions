@@ -1,3 +1,5 @@
+import * as v from 'valibot'
+
 import {
   collectionPluginDataNodeChange,
   parseGuidOrNull,
@@ -9,7 +11,8 @@ import { guidToString, stringToGuid } from '@open-pencil/kiwi/fig/guid'
 import {
   modesDefaultFirst,
   MAX_FORMULA_DEPTH,
-  formulaArity,
+  variableFormulaSchema,
+  variableColorExpressionSchema,
   type SceneGraph,
   type SceneNode,
   type VariableFormulaNode,
@@ -142,22 +145,28 @@ function variableValueToKiwi(
   type: string,
   ids: Map<string, GUID>
 ): VariableDataEntry {
-  if (typeof value === 'object' && 'expression' in value && value.expression === 'FORMULA')
-    return formulaToKiwi(graph, value.value, value.type, ids)
-  if (typeof value === 'object' && 'expression' in value)
+  if (typeof value === 'object' && 'expression' in value && value.expression === 'FORMULA') {
+    const formula = v.parse(variableFormulaSchema, value)
+    if (formula.type !== type) throw new Error('Formula type does not match variable type')
+    return formulaToKiwi(graph, formula.value, formula.type, ids)
+  }
+  if (typeof value === 'object' && 'expression' in value) {
+    const expression = v.parse(variableColorExpressionSchema, value)
+    if (type !== 'COLOR') throw new Error('Color expression requires a color variable')
     return {
       dataType: 'EXPRESSION',
       resolvedDataType: 'COLOR',
       value: {
         expressionValue: {
-          expressionFunction: value.expression,
+          expressionFunction: expression.expression,
           expressionArguments: [
-            variableValueToKiwi(graph, value.color, 'COLOR', ids),
-            variableValueToKiwi(graph, value.opacity, 'FLOAT', ids)
+            variableValueToKiwi(graph, expression.color, 'COLOR', ids),
+            variableValueToKiwi(graph, expression.opacity, 'FLOAT', ids)
           ]
         }
       }
     }
+  }
   if (typeof value === 'object' && 'aliasId' in value)
     return {
       value: { alias: variableAlias(graph, value.aliasId, ids) },
@@ -187,7 +196,6 @@ function formulaToKiwi(
   if (depth > MAX_FORMULA_DEPTH) throw new Error('Variable formula is too deeply nested')
   if (typeof node !== 'object' || 'aliasId' in node)
     return variableValueToKiwi(graph, node, type, ids)
-  if (node.operands.length !== formulaArity(node.operator)) throw new Error('Invalid formula arity')
   return {
     dataType: 'EXPRESSION',
     resolvedDataType: type,

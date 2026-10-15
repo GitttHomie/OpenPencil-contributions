@@ -244,9 +244,8 @@ export function collectionsBoundIn(graph: SceneGraph, roots: Iterable<string>): 
     const variable = graph.variables.get(id)
     if (!variable) continue
     collections.add(variable.collectionId)
-    for (const value of Object.values(variable.valuesByMode)) {
-      if (typeof value === 'object' && 'aliasId' in value) pending.push(value.aliasId)
-    }
+    for (const value of Object.values(variable.valuesByMode))
+      pending.push(...variableValueReferences(value))
   }
   return collections
 }

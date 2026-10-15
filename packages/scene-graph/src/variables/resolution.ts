@@ -1,6 +1,7 @@
 import type { SceneGraph } from '../index'
 import type { Color } from '../primitives'
 import type { Variable, VariableLiteral, VariableValue } from '../types'
+import { MAX_FORMULA_DEPTH, VariableFormulaError } from './formula/evaluate'
 import { resolveVariableValue } from './value'
 
 export function getActiveModeId(graph: SceneGraph, collectionId: string): string {
@@ -51,28 +52,83 @@ export function resolveVariable(
   )
 }
 
+export class VariableResolutionError extends VariableFormulaError {
+  override name = 'VariableResolutionError'
+  constructor(
+    readonly code: 'cycle' | 'depth' | 'missing-variable' | 'missing-value' | 'type' | 'non-finite',
+    readonly variableId: string,
+    message: string
+  ) {
+    super(message)
+  }
+}
+
+/** Resolve a draft or saved definition with identical mode, dependency and error semantics. */
+export function resolveVariableInModes(
+  graph: SceneGraph,
+  variableId: string,
+  modeFor: (collectionId: string) => string,
+  visiting = new Set<string>(),
+  memo = new Map<string, VariableLiteral>(),
+  overrides?: ReadonlyMap<string, VariableValue>
+): VariableLiteral {
+  const cached = memo.get(variableId)
+  if (cached !== undefined) return cached
+  if (visiting.has(variableId))
+    throw new VariableResolutionError('cycle', variableId, 'Circular variable reference')
+  if (visiting.size >= MAX_FORMULA_DEPTH)
+    throw new VariableResolutionError('depth', variableId, 'Too many linked variables')
+  const variable = graph.variables.get(variableId)
+  if (!variable)
+    throw new VariableResolutionError(
+      'missing-variable',
+      variableId,
+      `Missing variable: ${variableId}`
+    )
+  const value =
+    overrides?.get(variableId) ??
+    variableValueInMode(graph, variable, modeFor(variable.collectionId))
+  if (value === undefined)
+    throw new VariableResolutionError(
+      'missing-value',
+      variableId,
+      `Missing value: ${variable.name}`
+    )
+  visiting.add(variableId)
+  try {
+    const result = resolveVariableValue(value, (id) =>
+      resolveVariableInModes(graph, id, modeFor, visiting, memo, overrides)
+    )
+    const expected = { FLOAT: 'number', BOOLEAN: 'boolean', STRING: 'string', COLOR: 'object' }[
+      variable.type
+    ]
+    if (result === undefined || typeof result !== expected)
+      throw new VariableResolutionError('type', variableId, `Wrong result type: ${variable.name}`)
+    if (typeof result === 'number' && !Number.isFinite(result))
+      throw new VariableResolutionError(
+        'non-finite',
+        variableId,
+        `Non-finite value: ${variable.name}`
+      )
+    // Failures can depend on the current path's depth. Only completed values are reusable.
+    memo.set(variableId, result)
+    return result
+  } finally {
+    visiting.delete(variableId)
+  }
+}
+
 function resolveInModes(
   graph: SceneGraph,
   variableId: string,
   modeFor: (collectionId: string) => string,
   visiting: Set<string>,
-  memo = new Map<string, VariableLiteral | undefined>()
+  memo = new Map<string, VariableLiteral>()
 ): VariableLiteral | undefined {
-  if (memo.has(variableId)) return memo.get(variableId)
-  if (visiting.has(variableId) || visiting.size >= 64) return undefined
-  const variable = graph.variables.get(variableId)
-  if (!variable) return undefined
-  const value = variableValueInMode(graph, variable, modeFor(variable.collectionId))
-  if (value === undefined) return undefined
-  visiting.add(variableId)
   try {
-    const result = resolveVariableValue(value, (id) =>
-      resolveInModes(graph, id, modeFor, visiting, memo)
-    )
-    memo.set(variableId, result)
-    return result
-  } finally {
-    visiting.delete(variableId)
+    return resolveVariableInModes(graph, variableId, modeFor, visiting, memo)
+  } catch {
+    return undefined
   }
 }
 
@@ -96,7 +152,7 @@ export type NodeVariableResolver = (
 /** One read/reconcile operation only: equal mode contexts share results, edits start a new cache. */
 export function createBatchVariableResolver(graph: SceneGraph): NodeVariableResolver {
   const collections = [...graph.variableCollections.keys()]
-  const contexts = new Map<string, Map<string, VariableLiteral | undefined>>()
+  const contexts = new Map<string, Map<string, VariableLiteral>>()
   return (nodeId, variableId) => {
     const modes = collections.map((id) => getNodeVariableModeId(graph, nodeId, id))
     const key = JSON.stringify(modes)

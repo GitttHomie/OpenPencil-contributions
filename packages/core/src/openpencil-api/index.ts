@@ -73,7 +73,7 @@ export class OpenPencilAPI {
     const { value, resolved } = parseVariableFormula(graph, variable.id, mode.modeId, source)
     this.figma.setVariableValue(variable.id, mode.modeId, value)
     // Match the inspector: a live formula supersedes this mode's CSS-only expression.
-    if (typeof value !== 'number' && variable.expressions) {
+    if (variable.expressions) {
       variable.expressions = omit(variable.expressions, [mode.modeId])
       if (Object.keys(variable.expressions).length === 0) delete variable.expressions
     }
