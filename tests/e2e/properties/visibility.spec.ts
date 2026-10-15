@@ -106,8 +106,8 @@ test('multi-selection list add is one undo step', async () => {
 })
 
 test('appearance visibility supports repeat click and undo redo in one step', async () => {
-  const visibilityButton = propertySection(editor.page, 'Appearance').getByRole('button', {
-    name: 'Toggle visibility'
+  const visibilityButton = propertySection(editor.page, 'Appearance').getByRole('switch', {
+    name: 'Visibility'
   })
   await expect(visibilityButton).toBeVisible()
   expect(expectDefined(await getSelectedNode(editor.page), 'selected node').visible).toBe(true)

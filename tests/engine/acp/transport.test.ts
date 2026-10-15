@@ -303,7 +303,7 @@ for (const agentDef of ACP_AGENTS) {
           cwd: '/workspace',
           mcpServers: [
             {
-              name: 'open-pencil',
+              url: 'http://127.0.0.1:7600/mcp',
               headers: [{ name: 'Authorization', value: 'Bearer test-token' }]
             }
           ]

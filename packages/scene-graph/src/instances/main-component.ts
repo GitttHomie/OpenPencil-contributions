@@ -3,17 +3,19 @@ import { getInstanceOverride } from '../instance-overrides'
 import type { SceneNode } from '../types'
 
 /** Follow the source occurrence even after a local variant swap replaces componentId. */
-export function instancePropertyAssignment(
+export function instancePropertySource(
   graph: SceneGraph,
   instance: SceneNode,
   propertyId: string
-): string | undefined {
+): { value?: string; variableId?: string } | undefined {
   const seen = new Set<string>()
   let current: SceneNode | undefined = instance
   while (current?.type === 'INSTANCE' && !seen.has(current.id)) {
     seen.add(current.id)
+    if (Object.hasOwn(current.componentPropertyVariableAssignments, propertyId))
+      return { variableId: current.componentPropertyVariableAssignments[propertyId] }
     if (Object.hasOwn(current.componentPropertyAssignments, propertyId))
-      return current.componentPropertyAssignments[propertyId]
+      return { value: current.componentPropertyAssignments[propertyId] }
     const owner: SceneNode | undefined = current.parentId
       ? graph.closest(current.parentId, (node) => node.type === 'INSTANCE')
       : undefined
@@ -41,4 +43,12 @@ export function instanceMainComponent(
     current = graph.getNode(current.componentId)
   }
   return current?.type === 'COMPONENT' ? current : undefined
+}
+
+export function instancePropertyAssignment(
+  graph: SceneGraph,
+  instance: SceneNode,
+  propertyId: string
+): string | undefined {
+  return instancePropertySource(graph, instance, propertyId)?.value
 }

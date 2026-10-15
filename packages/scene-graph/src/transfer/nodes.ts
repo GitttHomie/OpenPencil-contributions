@@ -10,6 +10,7 @@ export function semanticTransferReferences(node: SceneNode): string[] {
   return [
     ...(node.componentId ? [node.componentId] : []),
     ...Object.values(node.boundVariables),
+    ...Object.entries(node.componentPropertyVariableAssignments).flat(),
     ...runs.variables,
     ...runs.styles,
     ...[
@@ -25,6 +26,7 @@ export function semanticTransferReferences(node: SceneNode): string[] {
     ...node.componentPropertyReferences.map((reference) => reference.propertyId),
     ...node.componentPropertyDefinitions.flatMap((definition) => [
       definition.id,
+      ...(definition.defaultVariableId ? [definition.defaultVariableId] : []),
       ...(definition.type === 'INSTANCE_SWAP' && definition.defaultValue
         ? [definition.defaultValue]
         : [])
@@ -107,13 +109,22 @@ export function prepareNodeTransfer(
   result.componentPropertyDefinitions = source.componentPropertyDefinitions.map((definition) => ({
     ...structuredClone(definition),
     id: property(definition.id),
-    defaultValue: propertyValue(definition.id, definition.defaultValue)
+    defaultValue: propertyValue(definition.id, definition.defaultValue),
+    ...(definition.defaultVariableId
+      ? { defaultVariableId: variable(definition.defaultVariableId) }
+      : {})
   }))
   result.componentPropertyReferences = source.componentPropertyReferences.map((reference) => ({
     ...reference,
     propertyId: property(reference.propertyId)
   }))
   result.componentPropertyAssignments = values(source.componentPropertyAssignments)
+  result.componentPropertyVariableAssignments = Object.fromEntries(
+    Object.entries(source.componentPropertyVariableAssignments).map(([id, value]) => [
+      property(id),
+      variable(value)
+    ])
+  )
   // Variant values are keyed by display names, unlike definition-ID assignments.
   result.componentPropertyValues = { ...source.componentPropertyValues }
   return result

@@ -2,10 +2,12 @@
 import { isEqual } from 'es-toolkit/predicate'
 
 import type { SceneGraph, SceneNode } from '../'
+import { visibilityVariableId } from '../components/property-variables'
 import { cloneNodeProps, copyEffects, copyFills, copyStrokes, copyStyleRuns } from '../copy'
 import type { NodeCloneMode } from '../copy'
 import {
   getInstanceOverride,
+  hasVisibilityVariableOverride,
   hasInstanceOverride as hasNodeInstanceOverride,
   createInstanceOverrideState,
   setInstanceOverride,
@@ -192,6 +194,7 @@ function cloneChildInCoordinates(
   // a new occurrence look locally overridden before the user changes anything.
   if (src.type === 'INSTANCE' && mode === 'deep') {
     props.componentPropertyAssignments = {}
+    props.componentPropertyVariableAssignments = {}
     props.instanceOverrides = createInstanceOverrideState()
   }
   return graph.createNode(src.type, targetParent.id, { ...props, componentScale })
@@ -537,8 +540,14 @@ function syncChildProperties(
     const value = enclosingAssignment(graph, instChild, reference.propertyId)
     if (value === undefined) continue
     if (reference.field === 'TEXT') updates.text = value
-    if (reference.field === 'VISIBLE') updates.visible = value === 'true'
+    if (reference.field === 'VISIBLE' && !hasVisibilityVariableOverride(graph, instChild))
+      updates.visible = value === 'true'
   }
+  const visibilityId = visibilityVariableId(graph, instChild)
+  const visibility = visibilityId
+    ? graph.resolveVariableForNode(instChild.id, visibilityId)
+    : undefined
+  if (typeof visibility === 'boolean' && driven.has('visible')) updates.visible = visibility
   syncBindingFields(instChild, selectedSource, updates, protectedField)
   const selected = swapped ? { ...source } : source
   if (swapped) {

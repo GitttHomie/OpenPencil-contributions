@@ -1,3 +1,6 @@
+import type { SceneGraph } from './index'
+import type { SceneNode } from './types'
+
 export type InstanceOverrideField = string
 
 export interface InstanceOverrideState {
@@ -133,6 +136,20 @@ export function hasInstanceOverride(
 ): boolean {
   const fields = nodeId === instanceId ? state.self : state.descendants.get(nodeId)
   return fields?.has(field) ?? false
+}
+
+/** A variable explicitly assigned on an occurrence supersedes its exposed visibility property. */
+export function hasVisibilityVariableOverride(graph: SceneGraph, node: SceneNode): boolean {
+  if (!node.boundVariables.visible) return false
+  const instance = graph.closest(node.id, (candidate) => candidate.type === 'INSTANCE')
+  return instance
+    ? hasInstanceOverride(
+        instance.instanceOverrides,
+        instance.id,
+        node.id,
+        'boundVariables/visible'
+      )
+    : false
 }
 
 export function setInstanceOverride(

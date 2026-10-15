@@ -26,8 +26,13 @@ import AISetupReview from './AISetupReview.vue'
 import AISetupRoles from './AISetupRoles.vue'
 import SetupChoice from './SetupChoice.vue'
 
-const { entry, agentsAvailable = IS_TAURI } = defineProps<{
+const {
+  entry,
+  offersTour = true,
+  agentsAvailable = IS_TAURI
+} = defineProps<{
   entry: AISetupEntry
+  offersTour?: boolean
   agentsAvailable?: boolean
 }>()
 const emit = defineEmits<{ close: []; advanced: []; tour: [] }>()
@@ -124,7 +129,7 @@ async function finish(): Promise<void> {
           <h3 :class="styles.introHeading()">{{ ai.aiSetupWelcomeAITitle }}</h3>
           <p :class="styles.introText()">{{ ai.aiSetupWelcomeAIDescription }}</p>
         </section>
-        <section :class="styles.tour()" data-test-id="ai-setup-tour">
+        <section v-if="offersTour" :class="styles.tour()" data-test-id="ai-setup-tour">
           <div>
             <h3 :class="styles.introHeading()">{{ ai.aiSetupWelcomeTourTitle }}</h3>
             <p :class="styles.introText()">{{ ai.aiSetupWelcomeTourDescription }}</p>

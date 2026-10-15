@@ -47,6 +47,7 @@ import { applySessionThinking, type ACPThinkingSelection } from './thinking'
 type TauriChild = Awaited<ReturnType<typeof spawnACPProcess>>['child']
 
 interface ACPSession {
+  promptContext?: string
   connection: ClientSideConnection
   sessionId: string
   child: TauriChild
@@ -209,12 +210,15 @@ export class ACPChatTransport implements ChatTransport<UIMessage> {
     const session = this.session
     if (probe && !session.supportsImages)
       throw new Error('This CLI connection does not accept images.')
-    const turn = getACPAgentAdapter(this.agentDef.id).createTurn?.()
+    const adapter = getACPAgentAdapter(this.agentDef.id)
+    const turn = adapter.createTurn?.()
     let text = ''
     const observation = { usedTools: false }
     session.onUpdate = ({ update }) => {
       turn?.observe(update)
-      if (update.sessionUpdate === 'tool_call') observation.usedTools = true
+      if (update.sessionUpdate === 'tool_call' && !adapter.isSetupTool?.(update)) {
+        observation.usedTools = true
+      }
       if (update.sessionUpdate === 'agent_message_chunk' && update.content.type === 'text') {
         text = (text + update.content.text).slice(0, 4096)
       }
@@ -321,7 +325,12 @@ export class ACPChatTransport implements ChatTransport<UIMessage> {
     const promptText =
       this.purpose !== 'design'
         ? text
-        : buildACPUserPrompt(requestText, !this.sentContext, this.agentDef.id)
+        : buildACPUserPrompt(
+            requestText,
+            !this.sentContext,
+            this.agentDef.id,
+            session.promptContext
+          )
     const prompt: ContentBlock[] = [{ type: 'text', text: promptText }]
     prompt.push(
       ...imagePrompt(this.purpose, session.supportsImages, lastUserMessage, this.images, this.image)
@@ -474,6 +483,9 @@ export class ACPChatTransport implements ChatTransport<UIMessage> {
     } catch (error) {
       throw startupError(error, this.agentDef)
     }
+    const adapter = getACPAgentAdapter(this.agentDef.id)
+    const adapterSession = adapter.createSession({ purpose: this.purpose, mcpServers })
+    mcpServers = adapterSession.mcpServers ?? mcpServers
     let activeSession: ACPSession | null = null
     let process: Awaited<ReturnType<typeof spawnACPProcess>>
     try {
@@ -482,6 +494,9 @@ export class ACPChatTransport implements ChatTransport<UIMessage> {
         command: this.agentDef.command,
         args: [...this.agentDef.args, ...launch.args],
         env: launch.env,
+        ...(adapter.isolateMcpOnLaunch
+          ? { mcpScope: { cwd: this.cwd, serverNames: mcpServers.map(({ name }) => name) } }
+          : {}),
         logId: this.agentDef.id,
         destroying: () => this.destroying,
         onUnexpectedClose: () => {
@@ -506,10 +521,6 @@ export class ACPChatTransport implements ChatTransport<UIMessage> {
     let onUpdate: ACPSession['onUpdate'] = null
 
     const restricted = this.purpose !== 'design'
-    const adapterSession = getACPAgentAdapter(this.agentDef.id).createSession({
-      purpose: this.purpose,
-      mcpServers
-    })
     const permissionScope = adapterSession.permissions
     const startupAbort = new AbortController()
     this.startupAbort = startupAbort
@@ -529,6 +540,9 @@ export class ACPChatTransport implements ChatTransport<UIMessage> {
 
       async sessionUpdate(params: SessionNotification): Promise<void> {
         if (activeSession && params.sessionId !== activeSession.sessionId) return
+        if (adapterSession.normalizeUpdate) {
+          params = { ...params, update: adapterSession.normalizeUpdate(params.update) }
+        }
         permissionScope.observe(params.update, params.sessionId)
         if (activeSession && params.update.sessionUpdate === 'config_option_update') {
           activeSession.models = updateSessionCatalog(
@@ -555,7 +569,8 @@ export class ACPChatTransport implements ChatTransport<UIMessage> {
       })
       const sessionResult = await connection.newSession({
         cwd: this.cwd,
-        mcpServers
+        mcpServers,
+        ...(adapterSession.meta ? { _meta: adapterSession.meta } : {})
       })
       this.assertOpen()
       const models = await applySessionModel(
@@ -568,6 +583,7 @@ export class ACPChatTransport implements ChatTransport<UIMessage> {
       this.assertOpen()
 
       const session: ACPSession = {
+        promptContext: adapterSession.promptContext,
         connection,
         sessionId: sessionResult.sessionId,
         child,

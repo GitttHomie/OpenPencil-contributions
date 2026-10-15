@@ -13,13 +13,15 @@ import canvasInstructions from './canvas-instructions.md?raw'
 export function buildACPUserPrompt(
   text: string,
   includeReference: boolean,
-  agentId?: ACPAgentID
+  agentId?: ACPAgentID,
+  sessionContext?: string
 ): string {
   return [
     canvasInstructions.trim(),
     includeReference ? SYSTEM_PROMPT : EXTERNAL_TOOL_GUIDANCE,
     includeReference ? undefined : DESIGN_COMPOSITION_GUIDANCE,
     agentId ? getACPAgentAdapter(agentId).instructions?.trim() : undefined,
+    sessionContext,
     '# Current user request',
     text
   ]

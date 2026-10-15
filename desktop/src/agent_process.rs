@@ -6,6 +6,8 @@ use tauri::{ipc::Channel, State};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
 
+mod mcp;
+
 #[derive(Default, Clone)]
 pub struct AgentProcesses(Arc<Mutex<BTreeMap<u32, CommandChild>>>);
 
@@ -138,13 +140,20 @@ pub async fn agent_process_spawn(
     processes: State<'_, AgentProcesses>,
     command: String,
     args: Vec<String>,
-    env: BTreeMap<String, String>,
+    mut env: BTreeMap<String, String>,
+    mcp_scope: Option<mcp::McpScope>,
     events: Channel<AgentEvent>,
 ) -> Result<u32, String> {
     if window.label() != "main" {
         return Err("Agent launches belong to the main window.".into());
     }
     validate(&command, &args, &env)?;
+    if let Some(scope) = mcp_scope {
+        if command != "codex-acp" {
+            return Err("This adapter does not support native MCP isolation.".into());
+        }
+        mcp::isolate_codex(&mut env, &scope).await?;
+    }
     // Validated ACP adapters can be npm .cmd shims on Windows.
     #[cfg(target_os = "windows")]
     let (command, args) = (

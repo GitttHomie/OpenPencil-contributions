@@ -73,9 +73,21 @@ export function useComponentProperties(targets?: () => SceneNode[]) {
     // Swap options scan the graph, so resolve that list once for every swap control.
     let componentNodes: SceneNode[] | null = null
     return definitions.value.map((definition) => {
-      const values = instances.value.map((instance) =>
+      let values = instances.value.map((instance) =>
         editor.getInstanceComponentPropertyValue(instance.id, definition)
       )
+      const visibilityTargets =
+        definition.type === 'BOOLEAN'
+          ? instances.value.flatMap((instance) => {
+              const target = editor.getInstanceComponentPropertyTarget(instance.id, definition.id)
+              return target
+                ? findComponentPropertyTargets(editor.graph, target.instance, target.definition.id)
+                    .filter((item) => item.field === 'VISIBLE')
+                    .map((item) => item.node)
+                : []
+            })
+          : undefined
+      if (visibilityTargets?.length) values = visibilityTargets.map((node) => String(node.visible))
       const value = mergedComponentPropertyValue(values)
       let options: ComponentPropertyOption[] = []
       if (definition.type === 'VARIANT') {
@@ -105,7 +117,9 @@ export function useComponentProperties(targets?: () => SceneNode[]) {
         name: definition.name,
         type: definition.type,
         value,
-        options
+        options,
+        visibilityTargets,
+        instances: instances.value
       }
     })
   })

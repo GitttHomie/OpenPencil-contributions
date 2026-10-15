@@ -8,6 +8,7 @@ import {
   findComponentPropertyTargets,
   instanceMainComponent,
   instancePropertyAssignment,
+  resolvedComponentPropertyValue,
   resolveComponentPropertyValue,
   setInstanceOverride
 } from '@open-pencil/scene-graph'
@@ -83,6 +84,14 @@ export function applyInstancePropertyValue(
   const visibilityChanges = targets.filter(
     ({ node, field }) => field === 'VISIBLE' && node.visible !== (value === 'true')
   )
+  if (!inherited && Object.hasOwn(instance.componentPropertyVariableAssignments, definition.id))
+    graph.updateNode(instanceId, {
+      componentPropertyVariableAssignments: Object.fromEntries(
+        Object.entries(instance.componentPropertyVariableAssignments).filter(
+          ([id]) => id !== definition.id
+        )
+      )
+    })
   if (!applyPropertyValue({ graph }, instanceId, definition, value)) return false
   for (const { node } of visibilityChanges) invalidateDerivedLayout(graph, node.id)
   if (inherited) {
@@ -223,8 +232,7 @@ export function createComponentPropertyActions(
       const component = instanceMainComponent(ctx.graph, instance)
       return component?.componentPropertyValues[definition.name] ?? definition.defaultValue
     }
-    const value =
-      instancePropertyAssignment(ctx.graph, instance, definition.id) ?? definition.defaultValue
+    const value = resolvedComponentPropertyValue(ctx.graph, instance, definition)
     return definition.type === 'INSTANCE_SWAP' ? (swapTargetId(ctx, value) ?? value) : value
   }
 
@@ -283,6 +291,7 @@ export function createComponentPropertyActions(
     }
 
     const previousAssignments = { ...instance.componentPropertyAssignments }
+    const previousVariables = { ...instance.componentPropertyVariableAssignments }
     const previousOverrides = cloneInstanceOverrideState(instance.instanceOverrides)
 
     const targets = findComponentPropertyTargets(ctx.graph, instance, propertyId).map((target) => ({
@@ -311,6 +320,7 @@ export function createComponentPropertyActions(
         if (live) {
           ctx.graph.updateNode(instanceId, {
             componentPropertyAssignments: previousAssignments,
+            componentPropertyVariableAssignments: previousVariables,
             instanceOverrides: cloneInstanceOverrideState(previousOverrides)
           })
           for (const target of targets) {

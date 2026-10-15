@@ -193,6 +193,7 @@ export function createDefaultNode(
     componentPropertyDefinitions: [],
     componentPropertyReferences: [],
     componentPropertyAssignments: {},
+    componentPropertyVariableAssignments: {},
     componentPropertyValues: {},
     componentKey: null,
     sourceLibraryKey: null,

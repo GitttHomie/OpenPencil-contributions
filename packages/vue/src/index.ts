@@ -280,7 +280,8 @@ export {
   instanceSwapOptions,
   mergedComponentPropertyValue,
   useComponentPropertyAuthoring,
-  useComponentProperties
+  useComponentProperties,
+  useComponentPropertyVariableProvider
 } from '#vue/controls/component-props'
 export {
   slotInstanceOptions,

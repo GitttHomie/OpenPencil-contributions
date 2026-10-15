@@ -6,6 +6,8 @@ const bindingFieldTheme = {
     field: [panelFieldBase, 'flex min-h-6 flex-1 items-center'],
     control:
       'h-full w-full min-w-0 rounded-none border-0 bg-transparent p-0 hover:bg-transparent focus:bg-transparent focus-within:bg-transparent',
+    // Matches the content and action padding around numeric field mode selectors.
+    selectChevron: 'ml-2',
     content: 'flex h-full min-w-0 flex-1 items-center px-1',
     actions: 'flex h-full shrink-0 items-center pr-1 [&>[role=combobox]]:px-1',
     pill: 'flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden rounded-sm bg-component/10 px-1 text-component outline-none',

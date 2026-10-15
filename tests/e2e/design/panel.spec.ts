@@ -281,8 +281,8 @@ test('mask action toggles mask section and mask type control', async () => {
 })
 
 test('visibility toggle in appearance section works', async () => {
-  const visBtn = propertySection(editor.page, 'Appearance').getByRole('button', {
-    name: 'Toggle visibility'
+  const visBtn = propertySection(editor.page, 'Appearance').getByRole('switch', {
+    name: 'Visibility'
   })
   await expect(visBtn).toBeVisible()
 

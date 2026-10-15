@@ -28,6 +28,8 @@ export type DiagnosticEventName =
   | 'storage.operation.failed'
   | 'mcp.connection.failed'
   | 'acp.transport.failed'
+  | 'mcp.request.trace'
+  | 'mcp.runtime.state'
 
 export type DiagnosticEvent = {
   id: string

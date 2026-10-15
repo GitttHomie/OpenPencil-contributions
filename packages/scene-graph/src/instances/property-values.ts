@@ -1,4 +1,6 @@
 import type { ComponentPropertyReferenceField, SceneGraph, SceneNode } from '../'
+import { visibilityVariableId } from '../components/property-variables'
+import { hasVisibilityVariableOverride } from '../instance-overrides'
 import { instanceMainComponent, instancePropertyAssignment } from './main-component'
 
 /** SLOT_CONTENT is absent because it drives children, which `ownsSlotContent` keeps instead. */
@@ -63,8 +65,13 @@ function hasEnclosingAssignment(graph: SceneGraph, node: SceneNode, propertyId: 
 export function applyEnclosingAssignments(graph: SceneGraph, clone: SceneNode): void {
   for (const reference of clone.componentPropertyReferences) {
     const field = PROPERTY_REFERENCE_FIELDS[reference.field]
-    if (!field) continue
-    const value = enclosingAssignment(graph, clone, reference.propertyId)
+    if (!field || (field === 'visible' && hasVisibilityVariableOverride(graph, clone))) continue
+    const variableId = field === 'visible' ? visibilityVariableId(graph, clone) : undefined
+    const resolved = variableId ? graph.resolveVariableForNode(clone.id, variableId) : undefined
+    const value =
+      typeof resolved === 'boolean'
+        ? String(resolved)
+        : enclosingAssignment(graph, clone, reference.propertyId)
     if (value === undefined) continue
     if (field === 'visible' && clone.visible !== (value === 'true'))
       graph.updateNode(clone.id, { visible: value === 'true' })
@@ -94,7 +101,12 @@ export function propertyDrivenFields(
   const driven = new Set<string>()
   for (const reference of compChild.componentPropertyReferences) {
     const field = PROPERTY_REFERENCE_FIELDS[reference.field]
-    if (field && hasEnclosingAssignment(graph, instChild, reference.propertyId)) driven.add(field)
+    if (
+      field &&
+      (hasEnclosingAssignment(graph, instChild, reference.propertyId) ||
+        (field === 'visible' && visibilityVariableId(graph, instChild)))
+    )
+      driven.add(field)
   }
   return driven
 }

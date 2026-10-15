@@ -1,4 +1,5 @@
 - Preserve text, fill, and stroke style assignments when reopening variable-backed designs.
+- Open Figma components with Boolean variables bound to visibility through IS_TRUTHY, preserving live bindings and instance-specific variable modes when saving and reopening.
 - Hide empty and resource-only internal canvases from the page list while preserving variables, shared styles, and access to embedded component pages.
 - Selection colors refresh when clicking a frame or switching selections, without requiring a second edit to reveal the palette.
 - Focusing and leaving negative numeric values preserves their exact value and variable binding; arrow-key edits no longer reinterpret displayed negatives as subtraction.
@@ -35,6 +36,8 @@
 - Calculate text contrast through translucent ancestor fills and group opacity; avoid numeric claims for unknown image, gradient, or unsupported-blend backdrops.
 - Keep existing canvas content visible while AI edits load fonts, and refresh cached tiles when font loading completes.
 - Keep queued AI permissions visible until an explicit decision; group Kiro reasoning coherently and support session approval for canvas tools. Recognize successful Codex results containing `error: null` and unavailable-model errors even when an adapter reports a completed turn.
+- Preserve underlying CLI tool errors in chat and session logs, including canvas timeouts and approval-review failures.
 - Remove partial nodes after failed render calls so retries do not duplicate components, and preserve replacement placement and fragment results through MCP.
 - Keep active-document Undo/Redo available after switching tabs, update layer names immediately, and reveal selected layers after reparenting them into collapsed containers.
+- Keep tab switching and closing responsive when the browser loses an idle canvas GPU context.
 - Open external desktop links once without a spurious shell permission error, keep circular loading indicators centered throughout their rotation, and use consistent composer gaps and control sizes.

@@ -156,7 +156,7 @@ function hydrateCuratedCapabilities(
     const connection = connections.find((candidate) => candidate.id === profile.connectionId)
     if (!connection) continue
     const capabilities = curatedModelCapabilities(connection.providerID, profile.modelID)
-    if (capabilities) profile.capabilities = [...new Set(capabilities)]
+    if (capabilities) profile.capabilities = uniq(capabilities)
   }
 }
 
@@ -461,7 +461,7 @@ export function saveModelProfileDraft(draft: AIModelProfileDraft): AIModelProfil
     thinkingLevel: draft.thinkingLevel,
     ...agentSettings,
     imageSupport: draft.imageSupport,
-    capabilities: [...new Set(draft.capabilities)]
+    capabilities: uniq(draft.capabilities)
   }
   const index = aiModelSettings.value.models.findIndex((model) => model.id === profile.id)
   if (index === -1) aiModelSettings.value.models.push(profile)

@@ -1,5 +1,7 @@
 import {
   cloneInstanceOverrideState,
+  deleteInstanceOverride,
+  setInstanceOverride,
   findInstanceAncestor,
   variableBindingOwner,
   isNumericVariableBindingField,
@@ -21,14 +23,17 @@ export function createVariableBindingActions(ctx: EditorContext) {
   function changeBinding(nodeId: string, path: string, variableId?: string) {
     const node = ctx.graph.getNode(nodeId)
     if (!node || (variableId === undefined && !(path in node.boundVariables))) return
-    const previous = {
+    const previous: Pick<SceneNode, 'boundVariables' | 'variableBindingScales'> &
+      Partial<SceneNode> = {
       boundVariables: { ...node.boundVariables },
       variableBindingScales: { ...node.variableBindingScales },
       fontFamily: node.fontFamily,
       fontWeight: node.fontWeight,
-      textStyleId: node.textStyleId,
-      ...(isNumericVariableBindingField(path) ? { [path]: node[path as keyof SceneNode] } : {})
+      textStyleId: node.textStyleId
     }
+    if (path === 'visible') previous.visible = node.visible
+    else if (isNumericVariableBindingField(path))
+      Object.assign(previous, { [path]: node[path as keyof SceneNode] })
     const owner = variableBindingOwner(ctx.graph, node)
     const nearest = findInstanceAncestor(ctx.graph, nodeId)
     const owners = new Map(
@@ -37,8 +42,39 @@ export function createVariableBindingActions(ctx: EditorContext) {
       )
     )
     const apply = () => {
-      if (variableId === undefined) ctx.graph.unbindVariable(nodeId, path)
-      else ctx.graph.bindVariable(nodeId, path, variableId)
+      if (variableId === undefined) {
+        ctx.graph.unbindVariable(nodeId, path)
+        if (
+          path === 'visible' &&
+          nearest?.componentId &&
+          node.componentPropertyReferences.some((reference) => reference.field === 'VISIBLE')
+        ) {
+          ctx.graph.syncInstance(nearest.id)
+        } else if (path === 'visible') {
+          for (const id of owners.keys()) {
+            const instance = ctx.graph.getNode(id)
+            if (instance?.type !== 'INSTANCE') continue
+            ctx.graph.willChangeNode(instance)
+            setInstanceOverride(
+              instance.instanceOverrides,
+              instance.id,
+              nodeId,
+              'visible',
+              node.visible
+            )
+          }
+        }
+      } else {
+        ctx.graph.bindVariable(nodeId, path, variableId)
+        if (path === 'visible') {
+          for (const id of owners.keys()) {
+            const instance = ctx.graph.getNode(id)
+            if (instance?.type !== 'INSTANCE') continue
+            ctx.graph.willChangeNode(instance)
+            deleteInstanceOverride(instance.instanceOverrides, instance.id, nodeId, 'visible')
+          }
+        }
+      }
       refreshBindings(nodeId)
     }
     apply()

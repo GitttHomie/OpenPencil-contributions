@@ -13,6 +13,7 @@ import { usePanelMessages, useRetainedActivity, useRetainedPopup } from '@open-p
 
 import AppButton from '@/components/ui/button/AppButton.vue'
 import { useMenuUI } from '@/components/ui/menu/menu'
+import MenuScrollArea from '@/components/ui/menu/MenuScrollArea.vue'
 import PanelFieldGroup from '@/components/ui/panel/PanelFieldGroup.vue'
 
 import PropertyNameForm from './PropertyNameForm.vue'
@@ -55,12 +56,14 @@ function start() {
     </DropdownMenuTrigger>
     <DropdownMenuPortal v-if="portalActive">
       <DropdownMenuContent align="start" :side-offset="4" :class="menu.content">
-        <DropdownMenuItem :class="menu.item" @select="start">
-          <icon-lucide-plus class="size-3.5" />New property
-        </DropdownMenuItem>
-        <DropdownMenuItem :class="menu.item" @select="creating = 'nested'">
-          <icon-lucide-link class="size-3.5" />Expose nested property
-        </DropdownMenuItem>
+        <MenuScrollArea>
+          <DropdownMenuItem :class="menu.item" @select="start">
+            <icon-lucide-plus class="size-3.5" />New property
+          </DropdownMenuItem>
+          <DropdownMenuItem :class="menu.item" @select="creating = 'nested'">
+            <icon-lucide-link class="size-3.5" />Expose nested property
+          </DropdownMenuItem>
+        </MenuScrollArea>
       </DropdownMenuContent>
     </DropdownMenuPortal>
   </DropdownMenuRoot>

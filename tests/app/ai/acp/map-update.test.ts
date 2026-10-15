@@ -134,6 +134,67 @@ describe('mapUpdate', () => {
     expect(result.chunks).toEqual([])
   })
 
+  test.each([
+    { error: { message: 'Approval review timed out' } },
+    { result: { content: [{ type: 'text', text: '{"error":"RPC timeout (20s)"}' }] }, error: null }
+  ])('failed calls retain the error from rawOutput: %j', (rawOutput) => {
+    const result = mapUpdate(
+      {
+        sessionUpdate: 'tool_call_update',
+        toolCallId: 'failed-raw',
+        status: 'failed',
+        rawOutput
+      },
+      TEXT_ID,
+      false
+    )
+    expect(result.chunks.at(-1)).toMatchObject({
+      type: 'tool-output-error',
+      errorText:
+        'error' in rawOutput && rawOutput.error ? 'Approval review timed out' : 'RPC timeout (20s)'
+    })
+  })
+
+  test('failed calls omit payloads, redact credentials and bound error text', () => {
+    for (const [rawOutput, expected] of [
+      [
+        { result: { content: [{ type: 'image', data: 'encoded-image' }] }, error: null },
+        'Tool call failed'
+      ],
+      [
+        {
+          error: { message: 'Unauthorized Bearer private-credential' },
+          headers: { secret: 'hidden' }
+        },
+        'Unauthorized Bearer [redacted]'
+      ]
+    ] as const) {
+      const result = mapUpdate(
+        {
+          sessionUpdate: 'tool_call_update',
+          toolCallId: 'failed-safe',
+          status: 'failed',
+          rawOutput
+        },
+        TEXT_ID,
+        false
+      )
+      expect(result.chunks.at(-1)).toMatchObject({ errorText: expected })
+    }
+    const result = mapUpdate(
+      {
+        sessionUpdate: 'tool_call_update',
+        toolCallId: 'failed-large',
+        status: 'failed',
+        rawOutput: { message: 'failure '.repeat(2000) }
+      },
+      TEXT_ID,
+      false
+    )
+    const last = result.chunks.at(-1)
+    expect(last?.type === 'tool-output-error' && last.errorText.length).toBeLessThanOrEqual(4000)
+  })
+
   test('unhandled update type produces no chunks', () => {
     const update = {
       sessionUpdate: 'available_commands_update',

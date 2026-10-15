@@ -17,6 +17,9 @@ import { resolveEffectiveBindingValue } from './resolution'
 
 export interface OpenPencilBindingProviderOptions<V> {
   type: VariableType
+  getBindingId?(editor: Editor, target: BindingTarget): string | undefined
+  bind?(editor: Editor, target: BindingTarget, variableId: string): void
+  unbind?(editor: Editor, target: BindingTarget): void
   accepts?(editor: Editor, variable: Variable): boolean
   bindingTarget?(editor: Editor, target: BindingTarget): BindingTarget
   prepareTargets?(editor: Editor, targets: BindingTarget[]): void
@@ -70,26 +73,27 @@ export function createOpenPencilBindingProvider<V>(
     return variables().filter((variable) => contains(variable.name, term))
   }
 
+  const bindingId = (target: BindingTarget) =>
+    options.getBindingId
+      ? options.getBindingId(editor, target)
+      : editor.getNode(target.nodeId)?.boundVariables[target.path]
+
   function getBound(target: BindingTarget): Variable | undefined {
     void revision?.value
     target = options.bindingTarget?.(editor, target) ?? target
-    const variableId = editor.getNode(target.nodeId)?.boundVariables[target.path]
+    const variableId = bindingId(target)
     return variableId ? editor.getVariable(variableId) : undefined
   }
 
   function getState(targets: BindingTarget[]): BindingState {
     targets = targets.map((target) => options.bindingTarget?.(editor, target) ?? target)
     if (targets.length === 0) return 'unbound'
-    const variableIds = new Set(
-      targets.map(
-        (target) => editor.getNode(target.nodeId)?.boundVariables[target.path] ?? undefined
-      )
-    )
+    const variableIds = new Set(targets.map((target) => bindingId(target) ?? undefined))
     // Identity takes precedence: an explicit mixed edit can detach the selection.
     // edit-variable still requires every bound destination to prepare successfully.
     if (variableIds.size > 1) return 'mixed'
     const unresolved = targets.some((target) => {
-      const id = editor.getNode(target.nodeId)?.boundVariables[target.path]
+      const id = bindingId(target)
       return (
         id !== undefined &&
         (resolveEffectiveBindingValue(editor, id, target) === undefined ||
@@ -99,7 +103,7 @@ export function createOpenPencilBindingProvider<V>(
     if (unresolved) return 'unresolved'
     if (variableIds.has(undefined)) return 'unbound'
     const values = targets.map((target) => {
-      const id = editor.getNode(target.nodeId)?.boundVariables[target.path]
+      const id = bindingId(target)
       return id ? options.resolve(editor, id, target) : undefined
     })
     if (values.some((value) => value === undefined)) return 'unresolved'
@@ -113,7 +117,7 @@ export function createOpenPencilBindingProvider<V>(
     filterVariables,
     getBindingId: (target) => {
       target = options.bindingTarget?.(editor, target) ?? target
-      return editor.getNode(target.nodeId)?.boundVariables[target.path]
+      return bindingId(target)
     },
     getBound,
     getState,
@@ -126,8 +130,14 @@ export function createOpenPencilBindingProvider<V>(
     prepareTargets: options.prepareTargets
       ? (targets) => options.prepareTargets?.(editor, targets)
       : undefined,
-    bind: (target, variableId) => editor.bindVariable(target.nodeId, target.path, variableId),
-    unbind: (target) => editor.unbindVariable(target.nodeId, target.path),
+    bind: (target, variableId) =>
+      options.bind
+        ? options.bind(editor, target, variableId)
+        : editor.bindVariable(target.nodeId, target.path, variableId),
+    unbind: (target) =>
+      options.unbind
+        ? options.unbind(editor, target)
+        : editor.unbindVariable(target.nodeId, target.path),
     create: options.create
       ? (target, value, name) => options.create?.(editor, target, value, name)
       : undefined,

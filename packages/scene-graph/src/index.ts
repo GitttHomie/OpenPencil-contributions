@@ -28,7 +28,11 @@ export * from './components/properties'
 export { isInComponent } from './components/ancestry'
 export * from './components/variants'
 export * from './slots/frames'
-export { instanceMainComponent, instancePropertyAssignment } from './instances/main-component'
+export {
+  instanceMainComponent,
+  instancePropertyAssignment,
+  instancePropertySource
+} from './instances/main-component'
 export { canCreateInstance, createsComponentCycle, cycleSafeParent } from './instances/cycles'
 export {
   nestedPropertyId,
@@ -1034,3 +1038,5 @@ export * from './icons/schema'
 export * from './icons/model'
 export * from './icons/glyph'
 export * from './behaviours/layers'
+
+export * from './components/property-variables'

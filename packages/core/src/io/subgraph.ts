@@ -143,6 +143,10 @@ function collectReferencedResources(source: SceneGraph, graph: SceneGraph) {
     }
     const bound = [
       ...Object.values(node.boundVariables),
+      ...Object.values(node.componentPropertyVariableAssignments),
+      ...node.componentPropertyDefinitions.flatMap((definition) =>
+        definition.defaultVariableId ? [definition.defaultVariableId] : []
+      ),
       ...styleRunReferences(node.styleRuns).variables
     ]
     for (const variableId of bound) collectVariableClosure(source, variableId, variableIds)

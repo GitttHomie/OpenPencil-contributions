@@ -34,6 +34,9 @@ export function captureClipboardVariables(
   }
   for (const node of nodes) {
     for (const id of Object.values(node.boundVariables)) visit(id)
+    for (const id of Object.values(node.componentPropertyVariableAssignments)) visit(id)
+    for (const definition of node.componentPropertyDefinitions)
+      if (definition.defaultVariableId) visit(definition.defaultVariableId)
     for (const id of styleRunReferences(node.styleRuns).variables) visit(id)
   }
   const activeModes: Array<[string, string]> = []
@@ -105,6 +108,21 @@ export function remapClipboardVariableBindings(
 ): void {
   node.boundVariables = Object.fromEntries(
     Object.entries(node.boundVariables).map(([field, id]) => [field, variables.get(id) ?? id])
+  )
+  node.componentPropertyVariableAssignments = Object.fromEntries(
+    Object.entries(node.componentPropertyVariableAssignments).map(([propertyId, id]) => [
+      propertyId,
+      variables.get(id) ?? id
+    ])
+  )
+  node.componentPropertyDefinitions = node.componentPropertyDefinitions.map((definition) =>
+    definition.defaultVariableId
+      ? {
+          ...definition,
+          defaultVariableId:
+            variables.get(definition.defaultVariableId) ?? definition.defaultVariableId
+        }
+      : definition
   )
   node.variableModes = Object.fromEntries(
     Object.entries(node.variableModes).map(([id, mode]) => [

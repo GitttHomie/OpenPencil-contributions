@@ -392,7 +392,10 @@ export function createChatSessionManager({
     designCheckState(store).supportsImages = false
     const thinking = role === 'design' ? acpChatThinkingState(store, runtime.role.profile) : null
     const model = runtime.role.profile.customModelID || runtime.role.profile.modelID
-    const canvas = createCanvasSession(store)
+    const canvas = createCanvasSession(store, () => {
+      const runId = context.runId
+      return (type, data) => recordSessionEvent(runId, type, data)
+    })
     const activity = createACPCanvasActivity(store, model || runtime.role.profile.name)
     try {
       const transport = await createACPTransport(runtime.role.connection.providerID, model, {

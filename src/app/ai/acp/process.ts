@@ -7,10 +7,16 @@ export type TauriChild = {
   kill(): Promise<void>
 }
 
+export type ACPMCPScope = {
+  cwd: string
+  serverNames: string[]
+}
+
 type ACPProcessOptions = {
   command: string
   args: string[]
   env?: Record<string, string>
+  mcpScope?: ACPMCPScope
   logId: string
   destroying: () => boolean
   onUnexpectedClose: () => void
@@ -20,6 +26,7 @@ export async function spawnACPProcess({
   command: commandName,
   args,
   env,
+  mcpScope,
   logId,
   destroying,
   onUnexpectedClose
@@ -57,7 +64,15 @@ export async function spawnACPProcess({
     }
   }
 
-  const child = await startAgentProcess({ command: commandName, args, env, stdout, stderr, close })
+  const child = await startAgentProcess({
+    command: commandName,
+    args,
+    env,
+    mcpScope,
+    stdout,
+    stderr,
+    close
+  })
 
   const output = new ReadableStream<Uint8Array>({
     async pull(controller) {

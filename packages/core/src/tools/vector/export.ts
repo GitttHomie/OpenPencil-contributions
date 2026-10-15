@@ -127,8 +127,10 @@ export const exportImage = defineTool({
     const format = args.format.toUpperCase() as RasterExportFormat
     const requestedScale = args.scale
     const maxEdge = args.maxEdge
+    const missing = ids.find((id) => !figma.getNodeById(id))
+    if (missing) return { error: `Node "${missing}" not found` }
     const nodes = ids.map((id) => figma.getNodeById(id)).filter((node) => node !== null)
-    if (nodes.length === 0) return { error: 'No visible nodes to export' }
+    if (!nodes.some((node) => node.visible)) return { error: 'No visible nodes to export' }
     const bounds = nodes.reduce(
       (result, node) => {
         const box = node.absoluteBoundingBox
@@ -169,7 +171,9 @@ export const exportImage = defineTool({
           'Preview is too large. Export a smaller region, or supply path to save the requested image to a file.'
       }
     }
-    if (!data || data.length === 0) return { error: 'No visible nodes to export' }
+    if (!data || data.length === 0) {
+      return { error: 'The renderer returned no image for these nodes' }
+    }
     const base64 = fromUint8Array(data)
     const mimeMap = { PNG: 'image/png', JPG: 'image/jpeg', WEBP: 'image/webp' } as const
     return {

@@ -5,7 +5,8 @@ import {
   nestedPropertyId,
   orderComponentProperties,
   OPEN_PENCIL_PLUGIN_DATA,
-  readPluginData
+  readPluginData,
+  resolvedComponentPropertyValue
 } from '@open-pencil/scene-graph'
 
 import { useEditor } from '#vue/editor/context'
@@ -47,7 +48,9 @@ export function useComponentPropertyAuthoring() {
           )
           return {
             ...definition,
+            defaultValue: resolvedComponentPropertyValue(editor.graph, owner, definition),
             ownerId: owner.id,
+            owner,
             bindings,
             bindingGroups,
             variants: variants.value
@@ -90,6 +93,7 @@ export function useComponentPropertyAuthoring() {
     const selected = context.value
     if (!selected?.editable || !selected.fields.includes(field)) return
     if (selected.node.componentPropertyReferences.some((item) => item.field === field)) return
+    if (field === 'VISIBLE' && selected.node.boundVariables.visible) return
     if (field === 'VISIBLE')
       editor.updateNodeWithUndo(selected.node.id, { visible: value === 'true' })
     else if (field === 'TEXT') editor.updateNodeWithUndo(selected.node.id, { text: value })
@@ -132,6 +136,7 @@ export function useComponentPropertyAuthoring() {
                 name: `${candidate.name} / ${definition.name}`,
                 definition,
                 nodeId: candidate.id,
+                node: editor.graph.getNode(candidate.id),
                 componentName: candidate.name,
                 value: editor.getInstanceComponentPropertyValue(candidate.id, definition),
                 options

@@ -3,12 +3,13 @@ import { ACP_AGENTS } from '@open-pencil/core/constants'
 import { lookupAgents } from '@/app/ai/agents/native'
 import { resolvePlatformCommand } from '@/app/tauri/command'
 
-import type { TauriChild } from './process'
+import type { ACPMCPScope, TauriChild } from './process'
 
 type ProcessStartOptions = {
   command: string
   args: string[]
   env?: Record<string, string>
+  mcpScope?: ACPMCPScope
   stdout: (data: Uint8Array | number[]) => void
   stderr: (data: Uint8Array | number[] | string) => void
   close: () => void
@@ -21,6 +22,7 @@ export async function startAgentProcess(options: ProcessStartOptions): Promise<T
   const agent = ACP_AGENTS.find((candidate) => candidate.command === options.command)
   if (!agent) throw new Error('Unknown ACP executable.')
   const configured =
+    options.mcpScope !== undefined ||
     Object.keys(options.env ?? {}).length > 0 ||
     options.args.length !== agent.args.length ||
     options.args.some((arg, index) => arg !== agent.args[index])
@@ -34,6 +36,7 @@ export async function startAgentProcess(options: ProcessStartOptions): Promise<T
       command: options.command,
       args: options.args,
       env: options.env ?? {},
+      ...(options.mcpScope ? { mcpScope: options.mcpScope } : {}),
       events
     })
     return {

@@ -4,8 +4,10 @@ import * as v from 'valibot'
 import type { WebSocket } from 'ws'
 
 import { isAuthorized } from '#mcp/auth'
+import { RPCProgress, RPCTraceConfig } from '#mcp/diagnostics'
 import type { RPCJSONObject } from '#mcp/json'
 import type { PendingRequest } from '#mcp/rpc-types'
+import { createRPCTraceJournal } from '#mcp/transport/rpc-trace'
 
 const RPC_TIMEOUT = 20_000
 const APP_WAIT_TIMEOUT = 10_000
@@ -18,6 +20,8 @@ type BrowserRPCBridgeOptions = {
   onConnectionChange: () => void
   /** How long an RPC waits for the app to register before failing with APP_NOT_CONNECTED. Defaults to 10 s. */
   appWaitTimeoutMs?: number
+  /** Injectable for transport tests; production keeps the normal request deadline. */
+  rpcTimeoutMs?: number
 }
 
 type ConnectionListener = (connected: boolean) => void
@@ -31,7 +35,10 @@ const BrowserEnvelopeJSON = v.pipe(
   )
 )
 
-const HandshakeMessage = v.looseObject({ token: v.optional(v.nullable(v.string())) })
+const HandshakeMessage = v.looseObject({
+  token: v.optional(v.nullable(v.string())),
+  traceEnabled: v.optional(v.boolean())
+})
 
 const RequestMessage = v.looseObject({
   type: v.literal('request'),
@@ -83,7 +90,8 @@ function createSettler<T>(resolve: (value: T) => void, reject: (error: Error) =>
 export function createBrowserRPCBridge({
   authToken,
   onConnectionChange,
-  appWaitTimeoutMs = APP_WAIT_TIMEOUT
+  appWaitTimeoutMs = APP_WAIT_TIMEOUT,
+  rpcTimeoutMs = RPC_TIMEOUT
 }: BrowserRPCBridgeOptions) {
   const pending = new Map<string, PendingRequest>()
   const clients = new Set<WebSocket>()
@@ -96,6 +104,9 @@ export function createBrowserRPCBridge({
   let browserWs: WebSocket | null = null
   let browserRegistered = false
   let bridgeClosed = false
+  const trace = createRPCTraceJournal((event) => {
+    if (browserWs && browserRegistered) sendJSON(browserWs, event)
+  })
 
   function isConnected(): boolean {
     return Boolean(browserWs && browserRegistered)
@@ -163,7 +174,8 @@ export function createBrowserRPCBridge({
   }
 
   function rejectAllPending(reason: string) {
-    for (const [, req] of pending) {
+    for (const [id, req] of pending) {
+      trace.emit(id, 'disconnected')
       clearTimeout(req.timer)
       req.reject(new Error(reason))
     }
@@ -189,25 +201,32 @@ export function createBrowserRPCBridge({
 
   function sendRPC(body: Record<string, unknown>): Promise<unknown> {
     if (bridgeClosed) return Promise.reject(new Error('Server shutting down'))
+    const id = randomUUID()
+    trace.begin(id, body)
     return new Promise((resolve, reject) => {
       const doSend = () => {
         const ws = browserWs
         if (!ws || ws.readyState !== ws.OPEN || !browserRegistered) {
+          trace.emit(id, 'disconnected')
           reject(new Error(APP_NOT_CONNECTED_MESSAGE))
           return
         }
-        const id = randomUUID()
+        // Logging may have been enabled by the app's handshake while this call waited.
+        trace.begin(id, body)
         const settle = createSettler(resolve, reject)
         const timer = setTimeout(() => {
           pending.delete(id)
-          settle.reject(new Error(`RPC timeout (${Math.round(RPC_TIMEOUT / 1000)}s)`))
-        }, RPC_TIMEOUT)
+          trace.emit(id, 'timeout')
+          settle.reject(new Error(trace.timeoutMessage(id, rpcTimeoutMs)))
+        }, rpcTimeoutMs)
         pending.set(id, { resolve: settle.resolve, reject: settle.reject, timer })
         try {
           ws.send(JSON.stringify({ ...body, type: 'request', id }))
+          trace.emit(id, 'sent')
         } catch (e) {
           clearTimeout(timer)
           pending.delete(id)
+          trace.emit(id, 'failed')
           if (!settle.isSettled()) {
             settle.reject(e instanceof Error ? e : new Error(String(e)))
           }
@@ -217,7 +236,12 @@ export function createBrowserRPCBridge({
       if (browserWs && browserWs.readyState === browserWs.OPEN && browserRegistered) {
         doSend()
       } else {
-        void waitForConnection().then(doSend).catch(reject)
+        void waitForConnection()
+          .then(doSend)
+          .catch((error: unknown) => {
+            trace.emit(id, 'disconnected')
+            reject(error instanceof Error ? error : new Error(String(error)))
+          })
       }
     })
   }
@@ -236,7 +260,7 @@ export function createBrowserRPCBridge({
     }
   }
 
-  function registerBrowser(ws: WebSocket, token: string | null) {
+  function registerBrowser(ws: WebSocket, token: string | null, traceEnabled?: boolean) {
     if (bridgeClosed) return
     if (!isAuthorized(token, authToken)) {
       ws.close()
@@ -247,6 +271,7 @@ export function createBrowserRPCBridge({
     const previousBrowserWs = browserWs
     browserWs = ws
     browserRegistered = true
+    if (traceEnabled !== undefined) trace.configure(traceEnabled)
     if (previousBrowserWs && previousBrowserWs !== ws) {
       // Reject in-flight requests to the old browser. Without this, pending
       // requests sit in the pending map until RPC_TIMEOUT (20s), because
@@ -265,12 +290,17 @@ export function createBrowserRPCBridge({
   function handleBrowserResponse(msg: v.InferOutput<typeof ResponseMessage>, ws: WebSocket) {
     if (!browserRegistered || browserWs !== ws) return
     const req = pending.get(msg.id)
-    if (!req) return
+    if (!req) {
+      trace.emit(msg.id, 'late-response')
+      return
+    }
     pending.delete(msg.id)
     clearTimeout(req.timer)
     if (msg.ok === false) {
+      trace.emit(msg.id, 'failed')
       req.reject(new Error(msg.error ?? 'RPC failed'))
     } else {
+      trace.emit(msg.id, 'completed')
       req.resolve(stripEnvelope(msg))
     }
   }
@@ -300,10 +330,10 @@ export function createBrowserRPCBridge({
         ws.close()
         return
       }
-      const { token } = handshake.output
+      const { token, traceEnabled } = handshake.output
       if (token === undefined) return
       if (msg.type === 'register') {
-        registerBrowser(ws, token)
+        registerBrowser(ws, token, traceEnabled)
       } else if (isAuthorized(token, authToken)) {
         authenticatedClients.add(ws)
       } else {
@@ -318,6 +348,18 @@ export function createBrowserRPCBridge({
     if (!authenticatedClients.has(ws)) {
       ws.close()
       return
+    }
+    if (ws === browserWs) {
+      const config = v.safeParse(RPCTraceConfig, msg)
+      if (config.success) {
+        trace.configure(config.output.enabled)
+        return
+      }
+      const progress = v.safeParse(RPCProgress, msg)
+      if (progress.success) {
+        trace.progress(progress.output.id, progress.output.stage, progress.output.timestamp)
+        return
+      }
     }
     const request = v.safeParse(RequestMessage, msg)
     if (request.success) {
@@ -365,6 +407,7 @@ export function createBrowserRPCBridge({
     clients.clear()
     authenticatedClients.clear()
     connectionListeners.clear()
+    trace.clear()
   }
 
   return {

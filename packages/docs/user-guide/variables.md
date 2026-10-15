@@ -117,6 +117,28 @@ Booleans; CSS and DTCG export report formulas as unsupported instead of silently
 
 ## Tips
 
+Use the diamond beside **Appearance → Visibility** to assign a Boolean variable to frames,
+text, component instances, or nested layers. The picker previews `true` (visible) and `false`
+(hidden); mixed selections can share one binding. While bound, the toggle displays the resolved
+value and is read-only. Choose **Detach variable** in the picker to restore manual control.
+
+The same diamond appears beside exposed visibility controls in an instance's **Component properties**,
+including properties forwarded from nested instances. Assigning a variable there controls all layers
+linked to that property in the selected instances, leaving the main component unchanged.
+
+In the main component, expand a Boolean property and use the diamond beside **Default value**.
+You can use a literal toggle value or a Boolean variable, including for a property exposed from a
+nested component. Exposing a layer whose visibility already uses a variable preserves that variable
+as the property's default. Instances resolve inherited defaults in their own variable modes.
+
+In an instance's Component properties, **Detach variable** keeps the current value as a local literal
+override. The reset arrow (**Use shared default**) removes the override and resumes inheritance.
+Changing the default does not replace an instance's explicit literal or variable choice.
+
+Replacing an exposed component-property link from Appearance requires confirmation. A variable
+assigned to an individual instance layer overrides its property there; detaching that layer binding
+restores the exposed property's control.
+
 Numeric property fields show both the bound variable's name and its current value. Use the variable
 picker beside **Appearance → Corner smoothing** to bind smoothing, including across a selection.
 Smoothing variables store a fraction from 0 to 1: `0.6` displays as **60%**. Creating a variable from

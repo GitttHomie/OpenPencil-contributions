@@ -21,6 +21,7 @@ export function useBindingFieldUI(options: BindingFieldUIOptions = {}, ui?: Bind
     root: styles.root({ class: ui?.root }),
     field: styles.field({ class: ui?.field }),
     control: styles.control({ class: ui?.control }),
+    selectChevron: styles.selectChevron({ class: ui?.selectChevron }),
     content: styles.content({ class: ui?.content }),
     actions: styles.actions({ class: ui?.actions }),
     pill: styles.pill({ class: ui?.pill }),

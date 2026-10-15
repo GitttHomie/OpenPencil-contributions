@@ -102,22 +102,26 @@ function commit() {
     </div>
     <CollapsibleContent :class="collapsibleContentMotion">
       <div class="border-t border-border p-2" :data-property-type="kind">
-        <PanelFieldGroup :label="kind === 'BOOLEAN' ? undefined : panels.componentPropertyDefault">
-          <div class="flex items-center gap-2">
-            <span v-if="kind === 'BOOLEAN'" class="flex-1 text-xs text-muted">{{
-              panels.componentPropertyDefault
-            }}</span>
-            <PropertyValueField
-              :focus-request="focusRequest"
-              :kind="kind"
-              :value="value"
-              :label="panels.componentPropertyDefault"
-              :options="options"
-              :disabled="disabled"
-              @update="$emit('update', $event)"
-            />
-          </div>
-        </PanelFieldGroup>
+        <slot name="value">
+          <PanelFieldGroup
+            :label="kind === 'BOOLEAN' ? undefined : panels.componentPropertyDefault"
+          >
+            <div class="flex items-center gap-2">
+              <span v-if="kind === 'BOOLEAN'" class="flex-1 text-xs text-muted">{{
+                panels.componentPropertyDefault
+              }}</span>
+              <PropertyValueField
+                :focus-request="focusRequest"
+                :kind="kind"
+                :value="value"
+                :label="panels.componentPropertyDefault"
+                :options="options"
+                :disabled="disabled"
+                @update="$emit('update', $event)"
+              />
+            </div>
+          </PanelFieldGroup>
+        </slot>
       </div>
       <div v-if="$slots.default" class="flex flex-col gap-1 border-t border-border p-2">
         <slot />

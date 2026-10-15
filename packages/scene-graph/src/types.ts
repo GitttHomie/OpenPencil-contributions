@@ -684,6 +684,7 @@ export interface SceneNode {
   componentPropertyDefinitions: ComponentPropertyDefinition[]
   componentPropertyReferences: ComponentPropertyReference[]
   componentPropertyAssignments: Record<string, string>
+  componentPropertyVariableAssignments: Record<string, string>
   componentPropertyValues: Record<string, string>
   componentKey: string | null
   sourceLibraryKey: string | null
@@ -758,6 +759,8 @@ export interface ComponentPropertyDefinition {
   name: string
   type: ComponentPropertyType
   defaultValue: string
+  /** Boolean variable used as the default; defaultValue retains the literal fallback. */
+  defaultVariableId?: string
   variantOptions?: string[]
   preferredValues?: string[]
   description?: string

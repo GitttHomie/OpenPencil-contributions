@@ -2,6 +2,7 @@ import {
   AgentSideConnection,
   ndJsonStream,
   PROTOCOL_VERSION,
+  type McpServer,
   type NewSessionRequest,
   type PromptResponse,
   type RequestPermissionResponse,
@@ -12,6 +13,7 @@ import {
 import type { ACPAgentDef } from '@open-pencil/core/constants'
 
 import type { ACPModelCatalog } from '@/app/ai/acp/models'
+import type { spawnACPProcess } from '@/app/ai/acp/process'
 import type { ACPThinkingSelection } from '@/app/ai/acp/thinking'
 import { ACPChatTransport } from '@/app/ai/acp/transport'
 import { createDeferred } from '@/app/runtime/deferred'
@@ -24,8 +26,10 @@ export function createConnectedAgent(
   supportsImages = false,
   modelOptions: {
     modelId?: string
+    mcpServers?: McpServer[]
     purpose?: 'catalog' | 'verification' | 'vision'
     responseText?: string
+    updates?: SessionUpdate[]
     images?: Array<{ data: string; mimeType: string }>
     integration?: ConstructorParameters<typeof ACPChatTransport>[0]['integration']
     sessionValues?: ConstructorParameters<typeof ACPChatTransport>[0]['sessionValues']
@@ -64,6 +68,7 @@ export function createConnectedAgent(
   const started = createDeferred<undefined>()
   const spawning = createDeferred<undefined>()
   const sessions: NewSessionRequest[] = []
+  const launches: Parameters<typeof spawnACPProcess>[0][] = []
   const prompts: string[] = []
   const images: string[] = []
   const permissions: RequestPermissionResponse[] = []
@@ -162,6 +167,9 @@ export function createConnectedAgent(
           )
         }
         await client.extNotification('_kiro/mcp/status', { sessionId, servers: [] })
+        for (const update of modelOptions.updates ?? []) {
+          await client.sessionUpdate({ sessionId, update })
+        }
         await client.sessionUpdate({
           sessionId,
           update: {
@@ -198,24 +206,27 @@ export function createConnectedAgent(
     },
     {
       spawn: async (options) => {
+        launches.push(options)
         spawning.resolve(undefined)
         await beforeSpawn
         unexpectedClose = options.onUnexpectedClose
         return { child, input: clientInput, output: clientOutput }
       },
-      mcpServers: async () => [
-        {
-          type: 'http',
-          name: 'open-pencil',
-          url: 'http://127.0.0.1:7600/mcp',
-          headers: [{ name: 'Authorization', value: 'Bearer test-token' }]
-        }
-      ]
+      mcpServers: async () =>
+        modelOptions.mcpServers ?? [
+          {
+            type: 'http',
+            name: 'open-pencil',
+            url: 'http://127.0.0.1:7600/mcp',
+            headers: [{ name: 'Authorization', value: 'Bearer test-token' }]
+          }
+        ]
     }
   )
   return {
     transport,
     sessions,
+    launches,
     prompts,
     images,
     permissions,

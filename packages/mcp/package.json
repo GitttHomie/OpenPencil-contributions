@@ -1,6 +1,6 @@
 {
   "name": "@open-pencil/mcp",
-  "version": "0.16.0-beta.3",
+  "version": "0.16.0",
   "license": "MIT",
   "type": "module",
   "imports": {
@@ -12,6 +12,12 @@
   },
   "main": "./dist/server.mjs",
   "exports": {
+    "./diagnostics": {
+      "types": "./dist/diagnostics.d.mts",
+      "bun": "./src/diagnostics.ts",
+      "import": "./dist/diagnostics.mjs",
+      "default": "./dist/diagnostics.mjs"
+    },
     ".": {
       "types": "./dist/server.d.mts",
       "import": "./dist/server.mjs",

@@ -61,7 +61,9 @@ export function createKeyboardActions({
         store.textEditor?.selectAll()
         store.requestRender()
       })
+      return
     }
+    runCommand('selection.selectChildren')
   }
 
   function escapeOrDeselect() {

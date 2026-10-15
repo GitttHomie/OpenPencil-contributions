@@ -1,3 +1,4 @@
+import { visibilityVariableId, visibilityPropertySource } from '../components/property-variables'
 import { copyFills, copyStrokes } from '../copy'
 import type { SceneGraph } from '../index'
 import { hasInstanceOverride } from '../instances'
@@ -129,7 +130,14 @@ export function resolvedValueBindings(
   const family = node.type === 'TEXT' ? resolve('fontFamily') : undefined
   if (typeof family === 'string' && family.trim() && family !== node.fontFamily)
     updates.fontFamily = family
-  const visible = resolve('visible')
+  const visibilityId = visibilityVariableId(graph, node)
+  const property = visibilityPropertySource(graph, node)
+  let visible = resolve('visible')
+  if (visibilityId && property) {
+    visible = resolveVariable
+      ? resolveVariable(node.id, visibilityId)
+      : graph.resolveVariableForNode(node.id, visibilityId, fallback)
+  }
   if (typeof visible === 'boolean' && visible !== node.visible) updates.visible = visible
   return updates
 }
@@ -173,9 +181,12 @@ export function resolvedRunBindings(
 }
 
 /** The variables a node binds, its own and its characters'. */
-function boundVariableIds(node: SceneNode): string[] {
+function boundVariableIds(graph: SceneGraph, node: SceneNode): string[] {
   return [
     ...Object.values(node.boundVariables),
+    visibilityVariableId(graph, node),
+    ...node.componentPropertyDefinitions.map((definition) => definition.defaultVariableId),
+    ...Object.values(node.componentPropertyVariableAssignments),
     ...node.styleRuns.flatMap((run) => Object.values(run.style.boundVariables ?? {}))
   ].filter((id): id is string => typeof id === 'string')
 }
@@ -270,7 +281,7 @@ function subtreeNodes(graph: SceneGraph, roots: Iterable<string>): SceneNode[] {
  * those the bound variables alias, so a mode set on the subtrees can change what they show.
  */
 export function collectionsBoundIn(graph: SceneGraph, roots: Iterable<string>): Set<string> {
-  const pending = subtreeNodes(graph, roots).flatMap(boundVariableIds)
+  const pending = subtreeNodes(graph, roots).flatMap((node) => boundVariableIds(graph, node))
   const seen = new Set<string>()
   const collections = new Set<string>()
   for (let id = pending.pop(); id !== undefined; id = pending.pop()) {
@@ -293,7 +304,7 @@ export function collectionsBoundIn(graph: SceneGraph, roots: Iterable<string>): 
 export function layersUsingVariables(graph: SceneGraph, ids: Iterable<string>): SceneNode[] {
   const variables = variablesResolvingThrough(graph, ids)
   return [...graph.getAllNodes()].filter((node) =>
-    boundVariableIds(node).some((id) => variables.has(id))
+    boundVariableIds(graph, node).some((id) => variables.has(id))
   )
 }
 

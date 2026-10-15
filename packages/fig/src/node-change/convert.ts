@@ -10,9 +10,9 @@ import {
 import { createDefaultSourceMetadata } from '@open-pencil/scene-graph/node-defaults'
 import { POINT_COUNT_RANGE } from '@open-pencil/scene-graph/polygon'
 import { parseVariantName } from '@open-pencil/scene-graph/variant-name'
-/* eslint-disable max-lines -- kiwi↔scene conversion helpers are tightly coupled */
 
 import { importCanvasGuides } from './canvas-guides'
+/* eslint-disable max-lines -- kiwi↔scene conversion helpers are tightly coupled */
 import { convertFigmaDerivedTextGlyphs } from './derived-text/glyphs'
 import { convertFontFeatures } from './font/features'
 import { convertFontVariations } from './font/variations'
@@ -40,6 +40,7 @@ import {
   isFigmaAutoLineHeight,
   mapTextDecoration
 } from './text/values'
+import { linearVariableExpression } from './variable/expression'
 import {
   alignGeometryWindingRules,
   resolveGeometryPaths,
@@ -53,7 +54,7 @@ export { importStyleRuns } from './style/runs'
 export { convertLetterSpacing, convertLineHeight, mapTextDecoration } from './text/values'
 export { resolveGeometryPaths } from './vector/geometry'
 
-import type { NodeChange } from '@open-pencil/kiwi/fig/codec'
+import type { VariableDataEntry, NodeChange } from '@open-pencil/kiwi/fig/codec'
 import type {
   SceneNode,
   NodeType,
@@ -746,6 +747,7 @@ export function nodeChangeToProps(
     componentPropertyDefinitions: nodeType === 'INSTANCE' ? [] : extractComponentPropertyDefs(nc),
     componentPropertyReferences: extractComponentPropertyRefs(nc),
     componentPropertyAssignments: extractComponentPropertyAssignments(nc),
+    componentPropertyVariableAssignments: extractComponentPropertyVariableAssignments(nc),
     componentPropertyValues: extractComponentPropertyValues(nc),
     ...extractComponentMetadata(nc)
   }
@@ -798,6 +800,7 @@ interface RawComponentPropDef {
   name?: string
   type?: string
   initialValue?: unknown
+  varValue?: VariableDataEntry
   description?: string
   preferredValues?: {
     stringValues?: string[]
@@ -838,19 +841,28 @@ interface RawComponentPropValue {
 interface RawComponentPropAssignment {
   defID?: GUID
   value?: RawComponentPropValue
-  varValue?: {
-    value?: {
-      boolValue?: boolean
-      textValue?: string
-      textDataValue?: { characters?: string }
-      symbolIdValue?: { guid?: GUID }
-    }
-  }
+  varValue?: VariableDataEntry & { value?: { textDataValue?: { characters?: string } } }
 }
 
 interface RawSymbolData {
   symbolOverrides?: unknown[]
   uniformScaleFactor?: number
+}
+
+function propertyVariableReference(value: VariableDataEntry | undefined): GUID | undefined {
+  if (value?.dataType === 'ALIAS') return value.value?.alias?.guid
+  if (value?.value?.expressionValue?.expressionFunction === 'IS_TRUTHY')
+    return linearVariableExpression(value)?.reference?.guid
+  return undefined
+}
+
+function propertyDefaultVariable(
+  def: RawComponentPropDef,
+  type: ComponentPropertyDefinition['type']
+): string | undefined {
+  if (type !== 'BOOLEAN') return undefined
+  const guid = propertyVariableReference(def.varValue)
+  return guid ? guidToString(guid) : undefined
 }
 
 function extractComponentPropertyDefs(nc: NodeChange): ComponentPropertyDefinition[] {
@@ -873,6 +885,8 @@ function extractComponentPropertyDefs(nc: NodeChange): ComponentPropertyDefiniti
               .filter((value): value is string => value !== undefined)
           : undefined
     }
+    const variable = propertyDefaultVariable(def, propType)
+    if (variable) definition.defaultVariableId = variable
     if (def.description) definition.description = def.description
     if (propType === 'SLOT' && def.slotPropConfig)
       definition.slotSettings = slotSettings(def.slotPropConfig)
@@ -918,12 +932,31 @@ function componentPropertyAssignmentValue(assignment: RawComponentPropAssignment
   return variableValue?.textDataValue?.characters ?? ''
 }
 
+function booleanPropertyVariable(assignment: RawComponentPropAssignment): GUID | undefined {
+  if (
+    assignment.varValue?.resolvedDataType !== 'BOOLEAN' &&
+    assignment.value?.boolValue === undefined
+  )
+    return undefined
+  return propertyVariableReference(assignment.varValue)
+}
+
+function extractComponentPropertyVariableAssignments(nc: NodeChange): Record<string, string> {
+  const assignments = nc.componentPropAssignments as RawComponentPropAssignment[] | undefined
+  return Object.fromEntries(
+    (assignments ?? []).flatMap((assignment) => {
+      const id = booleanPropertyVariable(assignment)
+      return assignment.defID && id ? [[guidToString(assignment.defID), guidToString(id)]] : []
+    })
+  )
+}
+
 function extractComponentPropertyAssignments(nc: NodeChange): Record<string, string> {
   const assignments = nc.componentPropAssignments as RawComponentPropAssignment[] | undefined
   if (!assignments?.length) return {}
   return Object.fromEntries(
     assignments.flatMap((assignment) =>
-      assignment.defID
+      assignment.defID && !booleanPropertyVariable(assignment)
         ? [[guidToString(assignment.defID), componentPropertyAssignmentValue(assignment)]]
         : []
     )

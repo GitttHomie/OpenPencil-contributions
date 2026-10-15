@@ -91,12 +91,17 @@ export function linkInstanceSourceChildren(
       // Only the nearest owner supplies the source used to inherit assignments.
       // An outer occurrence can share a value that is an override in this scope.
       if (targetNode.type === 'INSTANCE' && sourceNode.type === 'INSTANCE' && inOwnerScope) {
-        targetNode.componentPropertyAssignments = Object.fromEntries(
-          Object.entries(targetNode.componentPropertyAssignments).filter(([id]) => {
-            const declaredBy = child.assignmentOwners?.[id]
-            return !declaredBy || declaredBy !== counterpart.assignmentOwners?.[id]
-          })
-        )
+        for (const field of [
+          'componentPropertyAssignments',
+          'componentPropertyVariableAssignments'
+        ] as const) {
+          targetNode[field] = Object.fromEntries(
+            Object.entries(targetNode[field]).filter(([id]) => {
+              const declaredBy = child.assignmentOwners?.[id]
+              return !declaredBy || declaredBy !== counterpart.assignmentOwners?.[id]
+            })
+          )
+        }
       }
       links.push({ owner, target: targetNode, source: sourceNode })
       // Slot content is the instance's own; its instances are owners in their own right.

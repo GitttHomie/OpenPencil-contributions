@@ -2,9 +2,11 @@ import { describe, expect, test, afterEach } from 'bun:test'
 import { randomUUID } from 'node:crypto'
 import { createServer, type Server } from 'node:http'
 
+import * as v from 'valibot'
 import { WebSocket, WebSocketServer } from 'ws'
 
 import { createBrowserRPCBridge } from '#mcp/browser-rpc'
+import { RPCTrace } from '#mcp/diagnostics'
 
 const AUTH_TOKEN = 'test-bridge-token'
 const RPC_BODY = { command: 'get_current_page' }
@@ -135,6 +137,141 @@ describe('BrowserRpcBridge reconnection', () => {
   function track(srv: { httpServer: Server; wss: WebSocketServer }) {
     servers.push(srv)
   }
+
+  test('traces a request already waiting when the app enables logging in its handshake', async () => {
+    const pair = await setupWsPair()
+    track(pair)
+    const bridge = createBrowserRPCBridge({
+      authToken: AUTH_TOKEN,
+      onConnectionChange: () => undefined,
+      rpcTimeoutMs: 100
+    })
+    let stage: string | undefined
+    pair.clientWs.on('message', (data) => {
+      const parsed = v.safeParse(v.pipe(v.string(), v.parseJson(), RPCTrace), data.toString())
+      if (parsed.success && parsed.output.phase === 'sent') {
+        stage = parsed.output.phase
+        bridge.handleMessage(
+          JSON.stringify({ type: 'response', id: parsed.output.requestId, ok: true }),
+          pair.serverWs
+        )
+      }
+    })
+    const pending = bridge.sendRPC(RPC_BODY)
+    bridge.handleConnection(pair.serverWs)
+    bridge.handleMessage(
+      JSON.stringify({ type: 'register', token: AUTH_TOKEN, traceEnabled: true }),
+      pair.serverWs
+    )
+    await expect(pending).resolves.toEqual({ ok: true })
+    expect(stage).toBe('sent')
+    bridge.close()
+    pair.clientWs.close()
+  })
+
+  test('only the authenticated current app can configure tracing or acknowledge execution', async () => {
+    const pair = await setupWsPair()
+    track(pair)
+    const other = await setupWsPair()
+    track(other)
+    const bridge = createBrowserRPCBridge({
+      authToken: AUTH_TOKEN,
+      onConnectionChange: () => undefined,
+      rpcTimeoutMs: 100
+    })
+    await registerBrowser(pair.serverWs, pair.clientWs, bridge)
+    bridge.handleConnection(other.serverWs)
+    bridge.handleMessage(JSON.stringify({ type: 'auth', token: AUTH_TOKEN }), other.serverWs)
+    bridge.handleMessage(JSON.stringify({ type: 'trace_config', enabled: true }), other.serverWs)
+    await expect(bridge.sendRPC(RPC_BODY)).rejects.toThrow('tracing disabled')
+    bridge.handleMessage(JSON.stringify({ type: 'trace_config', enabled: true }), pair.serverWs)
+    pair.clientWs.on('message', (data) => {
+      const parsed = v.safeParse(v.pipe(v.string(), v.parseJson(), RPCTrace), data.toString())
+      if (parsed.success && parsed.output.phase === 'sent') {
+        bridge.handleMessage(
+          JSON.stringify({
+            type: 'progress',
+            id: parsed.output.requestId,
+            stage: 'executing',
+            timestamp: Date.now()
+          }),
+          other.serverWs
+        )
+      }
+    })
+    await expect(bridge.sendRPC(RPC_BODY)).rejects.toThrow('no acknowledgement')
+    bridge.close()
+    pair.clientWs.close()
+    other.clientWs.close()
+  })
+
+  test('traces app acknowledgement, timeout, late response and authenticated reconnect replay', async () => {
+    const pair = await setupWsPair()
+    track(pair)
+    let onConnected: () => void = () => undefined
+    const bridge = createBrowserRPCBridge({
+      authToken: AUTH_TOKEN,
+      onConnectionChange: () => onConnected(),
+      rpcTimeoutMs: 100
+    })
+    await registerBrowser(pair.serverWs, pair.clientWs, bridge)
+    const traces: v.InferOutput<typeof RPCTrace>[] = []
+    let requestId = ''
+    const late = new Promise<void>((resolve) => {
+      pair.clientWs.on('message', (data) => {
+        const parsed = v.safeParse(v.pipe(v.string(), v.parseJson(), RPCTrace), data.toString())
+        if (!parsed.success) return
+        traces.push(parsed.output)
+        if (parsed.output.phase === 'sent') {
+          requestId = parsed.output.requestId
+          bridge.handleMessage(
+            JSON.stringify({
+              type: 'progress',
+              id: requestId,
+              stage: 'executing',
+              timestamp: 123
+            }),
+            pair.serverWs
+          )
+        }
+        if (parsed.output.phase === 'late-response') resolve()
+      })
+    })
+    bridge.handleMessage(JSON.stringify({ type: 'trace_config', enabled: true }), pair.serverWs)
+    await expect(bridge.sendRPC(RPC_BODY)).rejects.toThrow('last app stage: executing')
+    bridge.handleMessage(
+      JSON.stringify({ type: 'response', id: requestId, ok: true }),
+      pair.serverWs
+    )
+    await late
+    expect(traces.map((event) => event.phase)).toEqual([
+      'received',
+      'sent',
+      'progress',
+      'timeout',
+      'late-response'
+    ])
+    expect(new Set(traces.map((event) => event.requestId)).size).toBe(1)
+
+    const next = await setupWsPair()
+    track(next)
+    const connected = new Promise<void>((resolve) => {
+      onConnected = resolve
+    })
+    await registerBrowser(next.serverWs, next.clientWs, bridge)
+    await connected
+    const replay = new Promise<v.InferOutput<typeof RPCTrace>>((resolve) => {
+      next.clientWs.on('message', (data) => {
+        const parsed = v.safeParse(v.pipe(v.string(), v.parseJson(), RPCTrace), data.toString())
+        if (parsed.success && parsed.output.phase === 'timeout') resolve(parsed.output)
+      })
+    })
+    bridge.handleMessage(JSON.stringify({ type: 'trace_config', enabled: true }), next.serverWs)
+    expect((await replay).requestId).toBe(requestId)
+    bridge.close()
+    pair.clientWs.close()
+    next.clientWs.close()
+  })
 
   test('rejects pending requests from a disconnected browser on reconnect', async () => {
     const pairA = await setupWsPair()

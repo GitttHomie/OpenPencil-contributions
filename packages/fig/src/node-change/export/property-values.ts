@@ -1,5 +1,6 @@
 import type { SceneNode } from '@open-pencil/scene-graph'
 
+import { variableAlias } from '../variable/bindings'
 import {
   getOrCreateNodeGuid,
   getOrCreatePropertyGuid,
@@ -53,8 +54,16 @@ export function componentPropertyAssignments(
   context: SceneNodeToKiwiContext,
   localIdCounter: { value: number }
 ) {
-  return Object.entries(node.componentPropertyAssignments)
-    .map(([propertyId, value]) => {
+  const ids = new Set([
+    ...Object.keys(node.componentPropertyAssignments),
+    ...Object.keys(node.componentPropertyVariableAssignments)
+  ])
+  return [...ids]
+    .map((propertyId) => {
+      const value = Object.hasOwn(node.componentPropertyAssignments, propertyId)
+        ? node.componentPropertyAssignments[propertyId]
+        : (context.componentPropertyDefinitionsById.get(propertyId)?.defaultValue ?? 'false')
+      const variableId = node.componentPropertyVariableAssignments[propertyId]
       const definition = context.componentPropertyDefinitionsById.get(propertyId)
       if (!definition) return null
       if (definition.type === 'SLOT')
@@ -68,7 +77,13 @@ export function componentPropertyAssignments(
       return {
         defID: getOrCreatePropertyGuid(context, propertyId, localIdCounter),
         value: componentPropertyValue(definition.type, value, context, localIdCounter),
-        varValue: componentPropertyVariableValue(definition.type, value, context, localIdCounter)
+        varValue: variableId
+          ? {
+              dataType: 'ALIAS',
+              resolvedDataType: 'BOOLEAN',
+              value: { alias: variableAlias(context.graph, variableId, context.varIdToGuid) }
+            }
+          : componentPropertyVariableValue(definition.type, value, context, localIdCounter)
       }
     })
     .filter((assignment): assignment is NonNullable<typeof assignment> => assignment !== null)

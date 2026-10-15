@@ -10,7 +10,11 @@ import type {
   SceneGraph,
   SceneNode
 } from '@open-pencil/scene-graph'
-import { DEFAULT_STROKE_MITER_LIMIT, DEFAULT_STROKE_WEIGHT } from '@open-pencil/scene-graph'
+import {
+  DEFAULT_STROKE_MITER_LIMIT,
+  DEFAULT_STROKE_WEIGHT,
+  hasVisibilityVariableOverride
+} from '@open-pencil/scene-graph'
 import { layoutGridCount } from '@open-pencil/scene-graph/layout'
 import { siblingOrderKeys } from '@open-pencil/scene-graph/order-keys'
 import type { GUID, Matrix, Vector } from '@open-pencil/scene-graph/primitives'
@@ -29,6 +33,7 @@ import {
   upsertPluginData
 } from '../plugin-data'
 import { applyTextRunReferences } from '../text/run-references'
+import { variableAlias } from '../variable/bindings'
 import {
   applyColorVariableBinding,
   createFillPaints,
@@ -136,6 +141,15 @@ function serializeVariableModes(
     return [{ variableSetID: { guid: collectionGuid }, variableModeID: modeGuid }]
   })
   return entries.length > 0 ? { entries } : undefined
+}
+
+function applyVariableModes(
+  context: SceneNodeToKiwiContext,
+  node: SceneNode,
+  record: KiwiNodeChange
+): void {
+  const modes = serializeVariableModes(node, context.varIdToGuid, context.modeIdToGuid)
+  if (modes) record.variableModeBySetMap = modes
 }
 
 const FIGMA_PAYLOAD_VARIABLE_MAP_FIELDS = new Set([
@@ -488,7 +502,8 @@ function applyInstancePayload(
   }
   if (
     node.source.fig.componentPropAssignments.length > 0 &&
-    !node.source.editedFields.includes('componentPropertyAssignments')
+    !node.source.editedFields.includes('componentPropertyAssignments') &&
+    !node.source.editedFields.includes('componentPropertyVariableAssignments')
   ) {
     nc.componentPropAssignments = materializeFigmaPayload(
       node.source.fig.componentPropAssignments,
@@ -657,12 +672,15 @@ function applyComponentMetadata(
         context,
         localIdCounter
       )
-      record.varValue = componentPropertyVariableValue(
-        def.type,
-        def.defaultValue,
-        context,
-        localIdCounter
-      )
+      record.varValue = def.defaultVariableId
+        ? {
+            dataType: 'ALIAS',
+            resolvedDataType: 'BOOLEAN',
+            value: {
+              alias: variableAlias(context.graph, def.defaultVariableId, context.varIdToGuid)
+            }
+          }
+        : componentPropertyVariableValue(def.type, def.defaultValue, context, localIdCounter)
     }
     if (def.description) record.description = def.description
     return record
@@ -671,10 +689,17 @@ function applyComponentMetadata(
     nc.componentPropDefs = componentPropDefs
   }
 
-  const parameterRefs = node.componentPropertyReferences.map((ref) => ({
-    defID: getOrCreatePropertyGuid(context, ref.propertyId, localIdCounter),
-    componentPropNodeField: componentPropertyNodeField(ref.field)
-  }))
+  const parameterRefs = node.componentPropertyReferences
+    .filter(
+      (ref) =>
+        ref.field !== 'VISIBLE' ||
+        !context.graph ||
+        !hasVisibilityVariableOverride(context.graph, node)
+    )
+    .map((ref) => ({
+      defID: getOrCreatePropertyGuid(context, ref.propertyId, localIdCounter),
+      componentPropNodeField: componentPropertyNodeField(ref.field)
+    }))
   // Figma binds a slot frame only through its parameter map, never a legacy property ref.
   const componentPropRefs = parameterRefs.filter(
     (ref) => ref.componentPropNodeField !== 'SLOT_CONTENT_ID'
@@ -936,6 +961,7 @@ export function overridableNodeFields(
   applyNodeStateProps(node, nc)
   applyNodeVisualProps({ ...context, fontDigestMap: undefined }, node, nc)
   context.serializeLayoutProps(node, nc)
+  applyVariableModes(context, node, nc)
   return nc
 }
 
@@ -989,12 +1015,7 @@ export function sceneNodeToKiwiWithContext(
   context.serializeVariableBindings(node, nc, context.graph, context.varIdToGuid)
   mergeParameterBindings(nc)
   applyRawFigmaNodeFields(context, node, nc)
-  const variableModeBySetMap = serializeVariableModes(
-    node,
-    context.varIdToGuid,
-    context.modeIdToGuid
-  )
-  if (variableModeBySetMap) nc.variableModeBySetMap = variableModeBySetMap
+  applyVariableModes(context, node, nc)
 
   applyExportSettingsPluginData(node)
   applyLibrarySourcePluginData(node)

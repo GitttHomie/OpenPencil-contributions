@@ -1,4 +1,4 @@
-import { isEqual } from 'es-toolkit'
+import { isEqual, omit } from 'es-toolkit'
 
 import {
   removeComponentProperty,
@@ -6,13 +6,15 @@ import {
   instanceExposureIssue,
   resolveComponentPropertyValue,
   OPEN_PENCIL_PLUGIN_DATA,
-  readPluginData
+  readPluginData,
+  resolvedComponentPropertyValue
 } from '@open-pencil/scene-graph'
 import type { ComponentPropertyDefinition, SceneNode } from '@open-pencil/scene-graph'
 
 import { assertNodeEditable } from '#core/editor/capabilities'
 import { reorderPropertyDefinitions } from '#core/editor/components/variants/order'
 import type { EditorContext } from '#core/editor/types'
+import { reconcileVariableLayouts } from '#core/layout/variables'
 import { randomHex } from '#core/random'
 
 import {
@@ -32,6 +34,7 @@ type PropertyMetadata = Pick<
   | 'componentPropertyDefinitions'
   | 'componentPropertyReferences'
   | 'componentPropertyAssignments'
+  | 'componentPropertyVariableAssignments'
   | 'pluginData'
 >
 
@@ -40,6 +43,7 @@ function metadata(node: SceneNode): PropertyMetadata {
     componentPropertyDefinitions: node.componentPropertyDefinitions,
     componentPropertyReferences: node.componentPropertyReferences,
     componentPropertyAssignments: node.componentPropertyAssignments,
+    componentPropertyVariableAssignments: node.componentPropertyVariableAssignments,
     pluginData: node.pluginData
   })
 }
@@ -96,17 +100,24 @@ export function createComponentAuthoringActions(
     const variantDefaults =
       readPluginData(component.pluginData, OPEN_PENCIL_PLUGIN_DATA.componentVariantDefaults) ?? {}
     const defaultValue = definition
-      ? (variantDefaults[definition.id] ?? definition.defaultValue)
+      ? (variantDefaults[definition.id] ??
+        resolvedComponentPropertyValue(ctx.graph, context.owner, definition, node.id))
       : ''
     if (definition && !sourceValues.accepts(node, field, defaultValue)) return false
     const references = node.componentPropertyReferences.filter((item) => item.field !== field)
     if (propertyId) references.push({ propertyId, field })
-    if (isEqual(references, node.componentPropertyReferences)) return true
+    const replaceVisibilityVariable =
+      field === 'VISIBLE' && propertyId && node.boundVariables.visible
+    if (isEqual(references, node.componentPropertyReferences) && !replaceVisibilityVariable)
+      return true
 
     ctx.undo.runBatch(
       propertyId ? 'Expose component property' : 'Unbind component property',
       () => {
-        patch(nodeId, { componentPropertyReferences: references }, 'Bind component property')
+        const changes: Partial<SceneNode> = { componentPropertyReferences: references }
+        if (replaceVisibilityVariable)
+          changes.boundVariables = omit(node.boundVariables, ['visible'])
+        patch(nodeId, changes, 'Bind component property')
         if (definition) {
           sourceValues.apply(node, field, defaultValue)
           ctx.graph.syncInstances(component.id)
@@ -164,7 +175,11 @@ export function createComponentAuthoringActions(
         COMPONENT_FIELD_TYPES[field],
         componentFieldValue(context.node, field)
       )
-      if (id) bindComponentProperty(nodeId, field, id)
+      if (id) {
+        const variableId = field === 'VISIBLE' ? context.node.boundVariables.visible : undefined
+        bindComponentProperty(nodeId, field, id)
+        if (variableId) setComponentPropertyDefaultVariable(context.owner.id, id, variableId)
+      }
     })
     return id
   }
@@ -239,7 +254,9 @@ export function createComponentAuthoringActions(
         ownerId,
         {
           componentPropertyDefinitions: owner.componentPropertyDefinitions.map((item) =>
-            item.id === propertyId ? { ...item, defaultValue: value } : item
+            item.id === propertyId
+              ? { ...item, defaultValue: value, defaultVariableId: undefined }
+              : item
           )
         },
         'Change property default'
@@ -248,6 +265,47 @@ export function createComponentAuthoringActions(
         if (variantDefaultForSource(ctx.graph, node.id, propertyId) === undefined)
           sourceValues.apply(node, field, value)
       }
+    })
+    return true
+  }
+
+  function setComponentPropertyDefaultVariable(
+    ownerId: string,
+    propertyId: string,
+    variableId: string | null
+  ): boolean {
+    const editable = editableProperty(ownerId, propertyId)
+    if (editable?.definition.type !== 'BOOLEAN') return false
+    if (variableId === null)
+      return setComponentPropertyDefault(
+        ownerId,
+        propertyId,
+        resolvedComponentPropertyValue(ctx.graph, editable.owner, editable.definition)
+      )
+    if (ctx.graph.variables.get(variableId)?.type !== 'BOOLEAN') return false
+    const targets = componentPropertySources(ctx.graph, ownerId, propertyId)
+    for (const { node } of targets) assertNodeEditable(ctx.graph, node.id)
+    const definition = { ...editable.definition, defaultVariableId: variableId }
+    ctx.undo.runBatch('Bind component property default', () => {
+      patch(
+        ownerId,
+        {
+          componentPropertyDefinitions: editable.owner.componentPropertyDefinitions.map((item) =>
+            item.id === propertyId ? definition : item
+          )
+        },
+        'Bind property default'
+      )
+      for (const { node, field } of targets) {
+        if (variantDefaultForSource(ctx.graph, node.id, propertyId) === undefined)
+          sourceValues.apply(
+            node,
+            field,
+            resolvedComponentPropertyValue(ctx.graph, editable.owner, definition, node.id)
+          )
+      }
+      reconcileVariableLayouts(ctx.graph, { variables: [variableId] })
+      ctx.requestRender()
     })
     return true
   }
@@ -273,6 +331,7 @@ export function createComponentAuthoringActions(
         node.id === ownerId ||
         node.componentPropertyReferences.some((reference) => reference.propertyId === propertyId) ||
         Object.hasOwn(node.componentPropertyAssignments, propertyId) ||
+        Object.hasOwn(node.componentPropertyVariableAssignments, propertyId) ||
         Object.hasOwn(
           readPluginData(node.pluginData, OPEN_PENCIL_PLUGIN_DATA.componentVariantDefaults) ?? {},
           propertyId
@@ -355,6 +414,7 @@ export function createComponentAuthoringActions(
     bindComponentProperty,
     renameComponentProperty,
     setComponentPropertyDefault,
+    setComponentPropertyDefaultVariable,
     setComponentPropertyVariantDefault,
     deleteComponentProperty
   }

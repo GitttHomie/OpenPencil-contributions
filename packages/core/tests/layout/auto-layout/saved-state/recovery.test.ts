@@ -42,7 +42,10 @@ async function savedWithStalePadding(horizontal = false) {
     height: horizontal ? 24 : 72
   })
   graph.createInstance(main.id, page.id, { name: 'Copy', x: 500 })
-  return exportFigFile(graph)
+  // Exercise the legacy archive that needs recovery, not today's metadata writer.
+  const entries = unzipSync(await exportFigFile(graph))
+  entries['meta.json'] = new TextEncoder().encode('{"app":"OpenPencil"}')
+  return zipSync(entries)
 }
 
 function named(graph: SceneGraph, name: string): SceneNode {

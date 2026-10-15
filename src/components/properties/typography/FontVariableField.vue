@@ -35,7 +35,7 @@ const targets = computed(() => nodes.map((node) => ({ nodeId: node.id, path: fie
               ? `${binding.variable.name} · ${binding.resolvedValue ?? panels.unresolvedVariable}`
               : panels.unresolvedVariable
           "
-          :ui="{ trigger: styles.control }"
+          :ui="{ trigger: styles.control, chevron: styles.selectChevron }"
         />
       </div>
       <span :class="styles.actions">

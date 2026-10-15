@@ -75,3 +75,25 @@ test('environment-only overrides also pass through native validation', async () 
     onUnexpectedClose: vi.fn()
   })
 })
+
+test('MCP isolation uses the native launcher even without model overrides', async () => {
+  const scope = { cwd: '/workspace', serverNames: ['open-pencil', 'team-assets'] }
+  await mockTauriIPC((command, args) => {
+    expect(command).toBe('agent_process_spawn')
+    expect(args).toMatchObject({
+      command: 'codex-acp',
+      args: [],
+      env: {},
+      mcpScope: scope
+    })
+    return 74
+  })
+  await spawnACPProcess({
+    command: 'codex-acp',
+    args: [],
+    mcpScope: scope,
+    logId: 'scoped',
+    destroying: () => true,
+    onUnexpectedClose: vi.fn()
+  })
+})

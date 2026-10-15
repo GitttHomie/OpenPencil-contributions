@@ -2,7 +2,7 @@ import { symbolOverridesOf, type SymbolOverride } from '#fig/instance-overrides/
 import { variableConsumptionEntries } from '#fig/node-change/variable/bindings'
 import { visitVariableReferences } from '#fig/node-change/variable/expression'
 
-import type { GUID, NodeChange } from '@open-pencil/kiwi/fig/codec'
+import type { GUID, NodeChange, VariableDataEntry } from '@open-pencil/kiwi/fig/codec'
 import { guidToString, stringToGuid } from '@open-pencil/kiwi/fig/guid'
 
 import { normalizeComponentPropertyRecords } from '../property-records'
@@ -49,6 +49,11 @@ function createRecordNormalizer(resolve: ReturnType<typeof createResourceResolve
     }
     const visit = (node: NodeChange, path: readonly GUID[]): void => {
       normalizeComponentPropertyRecords(node)
+      for (const field of ['componentPropDefs', 'componentPropAssignments'] as const) {
+        for (const entry of (node[field] as { varValue?: VariableDataEntry }[] | undefined) ?? []) {
+          visitVariableReferences(entry.varValue, (reference) => normalize(reference, field, path))
+        }
+      }
       for (const entry of variableConsumptionEntries(node)) {
         visitVariableReferences(entry.variableData, (reference) =>
           normalize(reference, entry.variableField ?? 'unknown', path)

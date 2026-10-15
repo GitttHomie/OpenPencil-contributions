@@ -18,20 +18,24 @@ type GLHandle = ReturnType<CanvasKit['GetWebGLContext']>
 export type CanvasGLContext = GLContext
 export type CanvasGLHandle = GLHandle
 
-const parkingHandles = new WeakMap<CanvasKit, GLHandle>()
+const parkingCanvases = new WeakMap<CanvasKit, HTMLCanvasElement>()
 
-/** A 1×1 offscreen WebGL context that stays registered, so another context can become current. */
-function parkingHandle(ck: CanvasKit): GLHandle | null {
-  const existing = parkingHandles.get(ck)
-  if (existing !== undefined) return existing
-  if (typeof document === 'undefined') return null
-  const canvas = document.createElement('canvas')
-  canvas.width = 1
-  canvas.height = 1
+/** Leave CanvasKit pointing at a tiny detached canvas without creating Skia GPU resources. */
+function parkWebGLContext(ck: CanvasKit): void {
+  if (typeof document === 'undefined') return
+  let canvas = parkingCanvases.get(ck)
+  const context = canvas?.getContext('webgl2') ?? canvas?.getContext('webgl')
+  if (!canvas || !context || context.isContextLost()) {
+    canvas = document.createElement('canvas')
+    canvas.width = 1
+    canvas.height = 1
+    parkingCanvases.set(ck, canvas)
+  }
+  // GetWebGLContext makes the context current. MakeGrContext would also initialize Skia,
+  // which probes shader precision and throws if the browser has evicted this idle context.
+  // Unregister immediately: only CanvasKit's current-context reference needs parking.
   const handle = ck.GetWebGLContext(canvas)
-  if (!handle) return null
-  parkingHandles.set(ck, handle)
-  return handle
+  if (handle) ck.deleteContext(handle)
 }
 
 /**
@@ -48,8 +52,7 @@ export function releaseWebGLContext(
   const wasCurrent = context !== null && Reflect.get(ck, 'ctx') === context
   ck.deleteContext(handle)
   if (!wasCurrent) return
-  const parking = parkingHandle(ck)
-  if (parking) ck.MakeGrContext(parking)?.delete()
+  parkWebGLContext(ck)
 }
 
 export function sizeCanvas(

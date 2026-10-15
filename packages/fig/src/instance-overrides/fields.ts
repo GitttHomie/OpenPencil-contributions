@@ -39,6 +39,7 @@ export const OVERRIDE_FIELDS = {
   opacity: { scene: ['opacity'], kind: 'scalar' },
   fontSize: { scene: ['fontSize'], kind: 'scalar', length: true },
   visible: { scene: ['visible'], kind: 'visible' },
+  variableModeBySetMap: { scene: ['variableModes'], kind: 'node', absent: { entries: [] } },
   frameMaskDisabled: { scene: ['clipsContent'], kind: 'clipping' },
   textData: { scene: ['text', 'styleRuns', 'textParagraphs'], kind: 'text' },
   styleIdForText: { scene: ['textStyleId'], kind: 'text-style' },

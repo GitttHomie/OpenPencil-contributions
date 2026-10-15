@@ -6,6 +6,7 @@ import {
   isToolExposed,
   toolChangesDocument
 } from '@open-pencil/core/tools'
+import type { RPCStage } from '@open-pencil/mcp/diagnostics'
 import type { JSONObject } from '@open-pencil/scene-graph/primitives'
 
 import {
@@ -107,10 +108,19 @@ export function createAutomationToolHandler(makeFigma: FigmaFactory) {
     return { ok: true, result }
   }
 
-  return async function handleTool(target: AutomationTarget, args: unknown, chatId?: string) {
+  return async function handleTool(
+    target: AutomationTarget,
+    args: unknown,
+    chatId?: string,
+    progress?: (stage: RPCStage) => void
+  ) {
     const name = (args as { name?: string }).name
     const def = ALL_TOOLS.find((tool) => tool.name === name && isToolExposed(tool, 'mcp'))
-    const execute = () => executeTool(target, args, chatId)
+    progress?.('queued')
+    const execute = () => {
+      progress?.('executing')
+      return executeTool(target, args, chatId)
+    }
     return def ? captureCanvasTool(chatId, target.store, target.pageId, def, execute) : execute()
   }
 }

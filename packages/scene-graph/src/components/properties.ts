@@ -1,7 +1,6 @@
 import type { SceneGraph } from '../index'
-import { setInstanceOverride } from '../instance-overrides'
+import { hasVisibilityVariableOverride, setInstanceOverride } from '../instance-overrides'
 import { findInstanceAncestor } from '../instances'
-import { instanceMainComponent } from '../instances/main-component'
 import { walkInstanceSources } from '../instances/source-walk'
 import { readPluginData, withPluginData } from '../plugin-data/field'
 import { OPEN_PENCIL_PLUGIN_DATA } from '../plugin-data/fields'
@@ -18,34 +17,7 @@ export interface ComponentPropertyTarget {
   source: SceneNode
 }
 
-export function componentPropertyOwners(graph: SceneGraph, instance: SceneNode): SceneNode[] {
-  if (instance.type !== 'INSTANCE') return []
-  const component = instanceMainComponent(graph, instance)
-  if (!component) return []
-  const parent = component.parentId ? graph.getNode(component.parentId) : null
-  return parent?.type === 'COMPONENT_SET' ? [parent, component] : [component]
-}
-
-export function componentPropertyDefinitions(
-  graph: SceneGraph,
-  instance: SceneNode
-): ComponentPropertyDefinition[] {
-  const definitions = new Map<string, ComponentPropertyDefinition>()
-  for (const owner of componentPropertyOwners(graph, instance)) {
-    for (const definition of owner.componentPropertyDefinitions) {
-      if (!definitions.has(definition.id)) definitions.set(definition.id, definition)
-    }
-  }
-  const component = instanceMainComponent(graph, instance)
-  const defaults = component
-    ? (readPluginData(component.pluginData, OPEN_PENCIL_PLUGIN_DATA.componentVariantDefaults) ?? {})
-    : {}
-  return [...definitions.values()].map((definition) =>
-    Object.hasOwn(defaults, definition.id)
-      ? { ...definition, defaultValue: defaults[definition.id] }
-      : definition
-  )
-}
+export { componentPropertyOwners, componentPropertyDefinitions } from './definitions'
 
 export function resolveComponentPropertyValue(graph: SceneGraph, value: string): SceneNode | null {
   const direct = graph.getNode(value)
@@ -116,7 +88,7 @@ function applyBooleanProperty(
   value: string
 ): void {
   for (const item of targets) {
-    if (item.field !== 'VISIBLE') continue
+    if (item.field !== 'VISIBLE' || hasVisibilityVariableOverride(graph, item.node)) continue
     const instance = findInstanceAncestor(graph, item.node.id)
     graph.updateNode(item.node.id, { visible: value === 'true' })
     if (instance) {
@@ -220,6 +192,15 @@ function removePropertyFromNode(graph: SceneGraph, node: SceneNode, propertyId: 
     graph.updateNode(node.id, {
       componentPropertyReferences: node.componentPropertyReferences.filter(
         (reference) => reference.propertyId !== propertyId
+      )
+    })
+  }
+  if (Object.hasOwn(node.componentPropertyVariableAssignments, propertyId)) {
+    graph.updateNode(node.id, {
+      componentPropertyVariableAssignments: Object.fromEntries(
+        Object.entries(node.componentPropertyVariableAssignments).filter(
+          ([id]) => id !== propertyId
+        )
       )
     })
   }

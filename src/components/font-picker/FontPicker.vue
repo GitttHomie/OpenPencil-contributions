@@ -25,7 +25,7 @@ const {
 } = defineProps<{
   label?: string
   placeholder?: string
-  ui?: Pick<SelectUI, 'trigger' | 'item'>
+  ui?: Pick<SelectUI, 'trigger' | 'item' | 'chevron'>
 }>()
 const label = computed(() => labelProp ?? panels.value.fontFamily)
 const modelValue = defineModel<string>({ required: true })
@@ -37,7 +37,7 @@ const cls = usePopoverUI({
 const selectCls = computed(() =>
   useSelectUI({
     ...uiOverrides,
-    trigger: ['w-full rounded px-2 py-1 text-xs', uiOverrides?.trigger].filter(Boolean).join(' '),
+    trigger: ['w-full rounded px-2 py-1', uiOverrides?.trigger].filter(Boolean).join(' '),
     item: ['h-9 w-full gap-2 px-3 py-2 text-sm leading-tight', uiOverrides?.item]
       .filter(Boolean)
       .join(' ')
@@ -88,7 +88,7 @@ const localFontAccess = {
             modelValue || placeholder
           }}</span>
         </slot>
-        <icon-lucide-chevron-down class="size-3 shrink-0 text-muted" />
+        <icon-lucide-chevron-down :class="selectCls.chevron" />
       </button>
     </template>
 

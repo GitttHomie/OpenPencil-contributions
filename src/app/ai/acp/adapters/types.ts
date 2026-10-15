@@ -1,4 +1,11 @@
-import type { Client, McpServer, PromptResponse, SessionUpdate } from '@agentclientprotocol/sdk'
+import type {
+  Client,
+  McpServer,
+  NewSessionRequest,
+  PromptResponse,
+  SessionUpdate,
+  ToolCall
+} from '@agentclientprotocol/sdk'
 
 import type { ACPAgentID } from '@open-pencil/core/constants'
 import type { useAIMessages } from '@open-pencil/vue'
@@ -17,6 +24,10 @@ export type ACPToolPresentation = {
 }
 
 export type ACPAdapterSession = {
+  meta?: NewSessionRequest['_meta']
+  mcpServers?: McpServer[]
+  promptContext?: string
+  normalizeUpdate?: (update: SessionUpdate) => SessionUpdate
   permissions: CanvasPermissionScope
   notification?: NonNullable<Client['extNotification']>
   ready?: (sessionId: string, signal: AbortSignal) => Promise<void>
@@ -29,8 +40,12 @@ export type ACPAdapterTurn = {
 
 export type ACPAgentAdapter = {
   id: ACPAgentID
+  /** The native launcher filters inherited MCP configuration for this adapter. */
+  isolateMcpOnLaunch?: boolean
   instructions?: string
   toolPresentation?: Readonly<Record<string, ACPToolPresentation>>
+  /** CLI housekeeping reported as a tool event, rather than a model-requested operation. */
+  isSetupTool?: (tool: ToolCall) => boolean
   createTurn?: () => ACPAdapterTurn
   prepareLaunch?: (
     options: ReturnType<typeof resolveIntegration>

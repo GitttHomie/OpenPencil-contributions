@@ -14,6 +14,7 @@ import { usePanelMessages, useRetainedPopup } from '@open-pencil/vue'
 
 import AppButton from '@/components/ui/button/AppButton.vue'
 import { useMenuUI } from '@/components/ui/menu/menu'
+import MenuScrollArea from '@/components/ui/menu/MenuScrollArea.vue'
 import { panelFieldLabelText } from '@/theme/panel/field-group'
 
 import PropertyNameForm from './PropertyNameForm.vue'
@@ -28,6 +29,7 @@ const {
   propertyId,
   suggestedName,
   disabled,
+  valueDisabled,
   expose,
   bind,
   changeValue
@@ -39,6 +41,7 @@ const {
   propertyId?: string
   suggestedName: string
   disabled?: boolean
+  valueDisabled?: boolean
   expose: (name: string) => string | null
   bind: (propertyId: string | null) => boolean
   changeValue: (value: string) => void
@@ -83,7 +86,7 @@ function startCreate() {
         :kind="kind"
         :value="displayedValue"
         :label="label"
-        :disabled="disabled || !!propertyId"
+        :disabled="disabled || valueDisabled || !!propertyId"
         @update="changeValue"
       />
       <p v-else class="m-0 truncate text-xs text-muted">{{ value }}</p>
@@ -106,23 +109,25 @@ function startCreate() {
         </DropdownMenuTrigger>
         <DropdownMenuPortal v-if="portalActive">
           <DropdownMenuContent align="end" :side-offset="4" :class="menu.content">
-            <DropdownMenuItem :class="menu.item" @select="startCreate">{{
-              panels.createComponentProperty
-            }}</DropdownMenuItem>
-            <DropdownMenuSeparator v-if="definitions.length" :class="menu.separator" />
-            <DropdownMenuItem
-              v-for="item in definitions"
-              :key="item.id"
-              :class="menu.item"
-              @select="bind(item.id)"
-            >
-              <span>{{ item.name }}</span
-              ><icon-lucide-check v-if="item.id === propertyId" class="size-3" />
-            </DropdownMenuItem>
-            <DropdownMenuSeparator v-if="propertyId" :class="menu.separator" />
-            <DropdownMenuItem v-if="propertyId" :class="menu.item" @select="bind(null)">{{
-              panels.unbindComponentProperty
-            }}</DropdownMenuItem>
+            <MenuScrollArea>
+              <DropdownMenuItem :class="menu.item" @select="startCreate">{{
+                panels.createComponentProperty
+              }}</DropdownMenuItem>
+              <DropdownMenuSeparator v-if="definitions.length" :class="menu.separator" />
+              <DropdownMenuItem
+                v-for="item in definitions"
+                :key="item.id"
+                :class="menu.item"
+                @select="bind(item.id)"
+              >
+                <span>{{ item.name }}</span
+                ><icon-lucide-check v-if="item.id === propertyId" class="size-3" />
+              </DropdownMenuItem>
+              <DropdownMenuSeparator v-if="propertyId" :class="menu.separator" />
+              <DropdownMenuItem v-if="propertyId" :class="menu.item" @select="bind(null)">{{
+                panels.unbindComponentProperty
+              }}</DropdownMenuItem>
+            </MenuScrollArea>
           </DropdownMenuContent>
         </DropdownMenuPortal>
       </DropdownMenuRoot>

@@ -7,6 +7,7 @@ import { createComponentFocusActions } from './components/focus'
 import { createComponentInstanceActions } from './components/instances'
 import { createNestedPropertyActions } from './components/nested-properties'
 import { createComponentPropertyActions } from './components/properties'
+import { createComponentPropertyVariableActions } from './components/property-variables'
 import { createSlotActions } from './components/slots'
 import { createSlotAuthoringActions } from './components/slots/authoring'
 import { createVariantActions } from './components/variants'
@@ -76,6 +77,10 @@ export function createComponentActions(
     ...focusActions,
     ...variantActions,
     ...componentPropertyActions,
+    ...createComponentPropertyVariableActions(
+      ctx,
+      componentPropertyActions.getInstanceComponentPropertyTarget
+    ),
     ...createNestedPropertyActions(
       ctx,
       componentPropertyActions.getInstanceComponentPropertyDefinitions

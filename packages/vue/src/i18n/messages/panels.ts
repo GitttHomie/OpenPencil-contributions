@@ -127,6 +127,10 @@ export const panelMessageDefaults = {
   propertyOff: 'Off',
   textContent: 'Text content',
   layerVisibility: 'Visibility',
+  visibilityVariable: 'Visibility variable',
+  replaceVisibilityLink: 'Use a variable for visibility?',
+  replaceVisibilityLinkDescription:
+    'The variable will control visibility instead of the exposed component property. On a main component this changes its instances; on an instance it affects only that instance.',
   nestedInstance: 'Nested instance',
   nestedInstances: 'Nested instances',
   hideNestedInstance: params('Stop exposing {name}'),

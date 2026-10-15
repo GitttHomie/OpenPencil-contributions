@@ -14,7 +14,10 @@ interface CanvasSession {
   generation: number
   pageId: string
   acquire: ReturnType<typeof createMutex>
+  logger?: () => CanvasSessionLogger
 }
+
+export type CanvasSessionLogger = (type: string, data: unknown) => void
 
 const sessions = new Map<string, CanvasSession>()
 
@@ -23,14 +26,15 @@ function isCurrentTurn(session: CanvasSession, generation: number): boolean {
 }
 
 /** A connection identity, supplied by the app rather than by model-generated tool arguments. */
-export function createCanvasSession(store: EditorStore) {
+export function createCanvasSession(store: EditorStore, logger?: () => CanvasSessionLogger) {
   const id = crypto.randomUUID()
   const session: CanvasSession = {
     store,
     generation: 0,
     active: false,
     pageId: store.state.currentPageId,
-    acquire: createMutex()
+    acquire: createMutex(),
+    logger
   }
   sessions.set(id, session)
   return {
@@ -46,6 +50,18 @@ export function createCanvasSession(store: EditorStore) {
     dispose: () => {
       sessions.delete(id)
     }
+  }
+}
+
+/** Capture a turn's logger now, so a late response cannot attach to a newer turn. */
+export function canvasSessionLogger(id?: string): CanvasSessionLogger | undefined {
+  const session = id ? sessions.get(id) : undefined
+  return session?.active ? session.logger?.() : undefined
+}
+
+export function recordCanvasRuntimeEvent(data: unknown): void {
+  for (const session of sessions.values()) {
+    if (session.active) session.logger?.()('mcp.runtime', data)
   }
 }
 

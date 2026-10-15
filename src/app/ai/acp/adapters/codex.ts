@@ -1,5 +1,6 @@
 import * as v from 'valibot'
 
+import { scopeMCPServers } from './mcp-scope'
 import { standardACPAdapter } from './standard'
 import type { ACPAdapterTurn, ACPAgentAdapter } from './types'
 
@@ -40,6 +41,13 @@ function createTurn(): ACPAdapterTurn {
 
 export const codexAdapter: ACPAgentAdapter = {
   ...standardACPAdapter('codex'),
+  isolateMcpOnLaunch: true,
+  createSession(options) {
+    return {
+      ...standardACPAdapter('codex').createSession(options),
+      ...scopeMCPServers(options.mcpServers)
+    }
+  },
   prepareLaunch({ args, env }) {
     if (!args.length) return { args, env }
     // codex-acp 2.x reads CODEX_CONFIG; unlike codex itself, it ignores -c.

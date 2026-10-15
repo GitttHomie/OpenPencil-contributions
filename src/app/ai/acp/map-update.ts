@@ -3,6 +3,8 @@ import type { UIMessageChunk } from 'ai'
 
 import type { JSONObject } from '@open-pencil/scene-graph/primitives'
 
+import { acpToolError } from './tool-error'
+
 export interface MapResult {
   chunks: UIMessageChunk[]
   textStarted: boolean
@@ -92,7 +94,7 @@ function mapToolUpdate(
     chunks.push({
       type: 'tool-output-error',
       toolCallId: update.toolCallId,
-      errorText: textFromContent(update.content ?? undefined) ?? 'Tool call failed',
+      errorText: acpToolError(update.content, update.rawOutput),
       providerExecuted: true
     })
   }

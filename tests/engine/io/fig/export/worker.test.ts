@@ -38,10 +38,9 @@ function compressInWorker(message: {
   figKiwiVersion?: number
 }): Promise<Uint8Array> {
   return new Promise((resolve, reject) => {
-    const worker = new Worker(
-      new URL('../../../../../packages/core/src/io/formats/fig/export-worker.ts', import.meta.url),
-      { type: 'module' }
-    )
+    const worker = new Worker(new URL(import.meta.resolve('#core/io/formats/fig/export/worker')), {
+      type: 'module'
+    })
     worker.onmessage = (event: MessageEvent<Uint8Array>) => {
       worker.terminate()
       resolve(event.data)

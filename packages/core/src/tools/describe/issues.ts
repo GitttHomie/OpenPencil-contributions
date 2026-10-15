@@ -1,3 +1,5 @@
+import { uniq } from 'es-toolkit'
+
 import type { SceneGraph, SceneNode } from '@open-pencil/scene-graph'
 import { colorDistance, colorToHex } from '@open-pencil/scene-graph/color'
 
@@ -380,7 +382,7 @@ function detectSpacingIssues(
     const gaps = flexChildren.map((c) => c.itemSpacing)
     if (new Set(paddings).size > 2) {
       issues.push({
-        message: `Inconsistent padding across siblings in "${node.name}" (${[...new Set(paddings)].join(', ')})`,
+        message: `Inconsistent padding across siblings in "${node.name}" (${uniq(paddings).join(', ')})`,
         suggestion: 'Use same padding for similar containers'
       })
     }

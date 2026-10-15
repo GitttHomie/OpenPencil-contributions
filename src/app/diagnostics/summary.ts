@@ -111,6 +111,16 @@ const describePreparation: Describe = (attributes, labels) => {
 
 /** Typed by event name, so a newly recorded event cannot reach Settings without a label. */
 const DESCRIBE: Record<DiagnosticEventName, Describe> = {
+  'mcp.request.trace': (attributes, labels) => [
+    labels.toolCompleted({ tool: text(attributes.tool) ?? text(attributes.command) ?? 'MCP' }),
+    [text(attributes.origin), text(attributes.phase), text(attributes.appStage)]
+      .filter(Boolean)
+      .join(' · ')
+  ],
+  'mcp.runtime.state': (attributes, labels) => [
+    labels.toolCompleted({ tool: 'MCP' }),
+    text(attributes.event)
+  ],
   'model.step.completed': (attributes, labels) => [
     labels.modelStep({ model: text(attributes.model) ?? '?' }),
     labels.modelStepTokens({

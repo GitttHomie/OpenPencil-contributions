@@ -1,3 +1,5 @@
+import { unzipSync, zipSync } from 'fflate'
+
 import { renderTree } from '@open-pencil/core/design-jsx'
 import { exportFigFile } from '@open-pencil/core/io'
 import { initCodec } from '@open-pencil/core/kiwi'
@@ -40,7 +42,9 @@ export async function savedStalePaddingScene() {
   })
   graph.createInstance(main.id, page.id, { name: 'Copy', x: 280, y: 40 })
   await initCodec()
-  return exportFigFile(graph)
+  const entries = unzipSync(await exportFigFile(graph))
+  entries['meta.json'] = new TextEncoder().encode('{"app":"OpenPencil"}')
+  return zipSync(entries)
 }
 
 export function createSavedSpacingScene(graph: SceneGraph, parentId: string) {

@@ -10,6 +10,7 @@ import PanelSection from '@/components/ui/panel/PanelSection.vue'
 import ReorderList from '@/components/ui/panel/ReorderList.vue'
 import { collapsibleContentMotion } from '@/theme/collapsible/collapsible'
 
+import BooleanPropertyField from './BooleanPropertyField.vue'
 import CreatePropertyDefinition from './CreatePropertyDefinition.vue'
 import ExposePropertyField from './ExposePropertyField.vue'
 import NestedPropertyExposure from './NestedPropertyExposure.vue'
@@ -132,7 +133,21 @@ function typeLabel(type: string) {
             @update="setNestedDefault(item.nodeId, item.definition.id, $event)"
             @remove="removeNested(item.nodeId, item.definition.id)"
             @update:open="setPropertyOpen(context.owner.id, item.id, $event)"
-          />
+          >
+            <template v-if="item.definition.type === 'BOOLEAN' && item.node" #value>
+              <BooleanPropertyField
+                :disabled="!context.editable"
+                :nodes="[item.node]"
+                :property-id="item.definition.id"
+                kind="instance"
+                :label="panels.componentPropertyDefault"
+                :state="item.value === 'true' ? 'visible' : 'hidden'"
+                @toggle="
+                  setNestedDefault(item.nodeId, item.definition.id, String(item.value !== 'true'))
+                "
+              />
+            </template>
+          </PropertyDefinitionRow>
           <template v-else>
             <template v-for="definition in [item.definition]" :key="definition.id">
               <PropertyDefinitionRow
@@ -156,6 +171,23 @@ function typeLabel(type: string) {
                 @remove="remove(definition.ownerId, definition.id)"
                 @update:open="setPropertyOpen(definition.ownerId, definition.id, $event)"
               >
+                <template v-if="definition.type === 'BOOLEAN'" #value>
+                  <BooleanPropertyField
+                    :disabled="!context.editable"
+                    :nodes="[definition.owner]"
+                    :property-id="definition.id"
+                    kind="default"
+                    :label="panels.componentPropertyDefault"
+                    :state="definition.defaultValue === 'true' ? 'visible' : 'hidden'"
+                    @toggle="
+                      setDefault(
+                        definition.ownerId,
+                        definition.id,
+                        String(definition.defaultValue !== 'true')
+                      )
+                    "
+                  />
+                </template>
                 <p v-if="variants.length" class="text-[11px] text-muted">
                   {{
                     definition.variants.length === variants.length
@@ -233,6 +265,7 @@ function typeLabel(type: string) {
     <div v-else-if="!manage" class="flex flex-col gap-field-group">
       <ExposePropertyField
         v-for="field in context.fields"
+        :value-disabled="field === 'VISIBLE' && !!context.node.boundVariables.visible"
         :key="`${context.node.id}:${field}`"
         :label="typeLabel(field)"
         :kind="fieldTypes[field]"

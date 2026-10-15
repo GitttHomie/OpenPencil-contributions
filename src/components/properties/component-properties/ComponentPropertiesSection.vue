@@ -9,8 +9,8 @@ import PanelSection from '@/components/ui/panel/PanelSection.vue'
 import type { AppPickerItem } from '@/components/ui/select/AppPicker.vue'
 import AppPickerField from '@/components/ui/select/AppPickerField.vue'
 import AppSelect from '@/components/ui/select/AppSelect.vue'
-import AppSwitch from '@/components/ui/toggle/AppSwitch.vue'
 
+import BooleanPropertyField from './BooleanPropertyField.vue'
 import ComponentPropertyTextField from './ComponentPropertyTextField.vue'
 import SlotPropertyRow from './slot/SlotPropertyRow.vue'
 import type { ComponentPropertyFocusRequest } from './usePropertyValueFocus'
@@ -35,9 +35,6 @@ const SLOT_THUMBNAIL_SIZE = 32
 const { panels, common } = useI18n()
 const componentSectionUI = { title: 'text-component' }
 const fieldId = useId()
-const toggleFieldUI = {
-  container: 'items-end'
-}
 
 function selectOptions(control: (typeof controls.value)[number]) {
   return control.value === MIXED
@@ -66,10 +63,6 @@ function swapItems(control: (typeof controls.value)[number]): AppPickerItem[] {
     disabled: option.disabled,
     group: groupOf(option.preferred)
   }))
-}
-
-function booleanValue(control: (typeof controls.value)[number]) {
-  return control.value !== MIXED && control.value === 'true'
 }
 </script>
 
@@ -100,22 +93,19 @@ function booleanValue(control: (typeof controls.value)[number]) {
     </p>
     <div class="flex flex-col gap-field-group">
       <template v-for="control in attributeControls" :key="control.id">
-        <PanelFieldGroup
+        <BooleanPropertyField
           v-if="control.type === 'BOOLEAN'"
+          :id="`${fieldId}-${control.id}`"
           :label="control.name"
-          :for="`${fieldId}-${control.id}`"
-          layout="inline"
-          :ui="toggleFieldUI"
-        >
-          <AppSwitch
-            :id="`${fieldId}-${control.id}`"
-            :model-value="booleanValue(control)"
-            :label="control.name"
-            :state="control.value === MIXED ? 'mixed' : 'idle'"
-            :data-property="control.id"
-            @update:model-value="setValue(control.id, String($event))"
-          />
-        </PanelFieldGroup>
+          :nodes="control.instances ?? []"
+          :property-id="control.id"
+          kind="instance"
+          :state="
+            control.value === MIXED ? 'mixed' : control.value === 'true' ? 'visible' : 'hidden'
+          "
+          :data-property="control.id"
+          @toggle="setValue(control.id, String(control.value !== 'true'))"
+        />
         <PanelFieldGroup
           v-else
           :label="control.name"

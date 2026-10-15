@@ -97,6 +97,7 @@ const EDITED_RAW_FIELDS: Partial<Record<string, readonly string[]>> = {
   componentPropertyDefinitions: ['componentPropDefs'],
   componentPropertyReferences: ['componentPropRefs'],
   componentPropertyAssignments: ['componentPropAssignments'],
+  componentPropertyVariableAssignments: ['componentPropAssignments'],
   variantPropSpecs: ['variantPropSpecs']
 }
 

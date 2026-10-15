@@ -1,4 +1,5 @@
 import type { FigmaAPI } from '@open-pencil/core/figma-api'
+import type { RPCStage } from '@open-pencil/mcp/diagnostics'
 
 import { canvasSessionStore, canvasSessionPage } from '@/app/ai/acp/canvas/session'
 import { endAgentSession } from '@/app/automation/agents'
@@ -59,16 +60,22 @@ export function createAutomationCommandHandlers(makeFigma: FigmaFactory) {
     target: AutomationTarget,
     command: string,
     args: UnknownRecord,
-    managedChatId?: string
+    managedChatId?: string,
+    progress?: (stage: RPCStage) => void
   ): Promise<unknown> {
+    progress?.('preparing')
     if (!(await target.store.preparePageNodes(target.pageId))) {
       throw new Error(`Page "${target.pageId}" was closed before it finished loading`)
     }
     const handler = commandHandlers[command]
     let result: unknown
-    if (command === 'tool') result = await handleTool(target, args, managedChatId)
-    else if (handler) result = await handler(target, args)
-    else result = await handleRPCFallback(target, command, args)
+    if (command === 'tool') result = await handleTool(target, args, managedChatId, progress)
+    else {
+      progress?.('executing')
+      result = handler
+        ? await handler(target, args)
+        : await handleRPCFallback(target, command, args)
+    }
     return responseWithTarget(result, target)
   }
 
@@ -76,12 +83,20 @@ export function createAutomationCommandHandlers(makeFigma: FigmaFactory) {
     store: EditorStore,
     command: string,
     args: unknown,
-    managedChatId?: string
+    managedChatId?: string,
+    progress?: (stage: RPCStage) => void
   ): Promise<unknown> {
     if (command === 'agent_session_closed') {
+      progress?.('executing')
       if (isUnknownRecord(args) && typeof args.session === 'string') endAgentSession(args.session)
       return { ok: true }
     }
+    if (
+      ['list_documents', 'get_settings', 'update_settings', 'open_file', 'new_document'].includes(
+        command
+      )
+    )
+      progress?.('executing')
     if (command === 'list_documents') {
       return { ok: true, result: { documents: listAutomationDocuments(store) } }
     }
@@ -99,7 +114,13 @@ export function createAutomationCommandHandlers(makeFigma: FigmaFactory) {
       page_id:
         rawArgs.page_id ?? (rawArgs.document_id ? undefined : canvasSessionPage(managedChatId))
     })
-    return handleTargetCommand(target, command, stripAutomationTargetArgs(rawArgs), managedChatId)
+    return handleTargetCommand(
+      target,
+      command,
+      stripAutomationTargetArgs(rawArgs),
+      managedChatId,
+      progress
+    )
   }
 
   return { handleRequest, handleTargetCommand }

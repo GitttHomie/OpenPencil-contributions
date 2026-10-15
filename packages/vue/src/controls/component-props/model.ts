@@ -25,6 +25,9 @@ export interface ComponentPropertyControl {
   type: ComponentPropertyType
   value: MixedValue<string>
   options: ComponentPropertyOption[]
+  /** Layers controlled by a Boolean property, resolved through exposed nested instances. */
+  visibilityTargets?: SceneNode[]
+  instances?: SceneNode[]
 }
 
 export function compatibleComponentPropertyDefinitions(

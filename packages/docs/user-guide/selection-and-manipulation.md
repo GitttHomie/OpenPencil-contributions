@@ -12,6 +12,9 @@ Select objects to move, resize, rotate, duplicate, and organize them on the canv
 - <kbd>Shift</kbd> + click to add or remove a node from the current selection
 - **Marquee drag** — drag on empty canvas to draw a selection rectangle; all intersecting nodes are selected on release
 - <kbd>⌘</kbd><kbd>A</kbd> — select all nodes on the current page
+- <kbd>Enter</kbd> — select the children of the selected layers; on a vector it edits the path and on text it edits the text
+- <kbd>Shift</kbd> + <kbd>Enter</kbd> or <kbd>\\</kbd> — select the parent of the selected layers
+- <kbd>Tab</kbd> / <kbd>Shift</kbd> + <kbd>Tab</kbd> — select the next or previous sibling, going down or up the layers panel and wrapping at the ends
 - **Click empty canvas** — deselect all
 
 ## Moving

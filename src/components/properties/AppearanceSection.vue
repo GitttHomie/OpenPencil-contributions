@@ -13,8 +13,8 @@ import NumberField from '@/components/inputs/NumberField.vue'
 import { useBlendModeGroups } from '@/components/properties/blend-mode/use'
 import MaskAction from '@/components/properties/MaskAction.vue'
 import VariableNumberField from '@/components/properties/VariableNumberField.vue'
+import VisibilityField from '@/components/properties/visibility/VisibilityField.vue'
 import IconButton from '@/components/ui/button/IconButton.vue'
-import Tip from '@/components/ui/overlay/Tip.vue'
 import PanelFieldGroup from '@/components/ui/panel/PanelFieldGroup.vue'
 import PanelGrid from '@/components/ui/panel/PanelGrid.vue'
 import PanelSection from '@/components/ui/panel/PanelSection.vue'
@@ -65,32 +65,17 @@ function blendModeGroups(value: BlendMode | typeof MIXED) {
     <PanelSection v-if="active" :label="panels.appearance">
       <template #actions>
         <MaskAction />
-        <Tip
-          v-if="visibilityLinked"
-          :label="`${panels.layerVisibility}: ${visibilityPropertyNames.join(', ')}`"
-        >
-          <span
-            role="img"
-            tabindex="0"
-            :aria-label="`${panels.layerVisibility}: ${visibilityPropertyNames.join(', ')}`"
-            class="inline-flex size-6 items-center justify-center text-accent"
-          >
-            <icon-lucide-link class="size-3.5" />
-          </span>
-        </Tip>
         <VariableModeMenu :choices="variableModes.choices.value" @set="variableModes.setMode" />
-        <IconButton
-          :label="panels.toggleVisibility"
-          :active="visibilityState === 'hidden'"
-          :disabled="visibilityLinked"
-          @click="actions.toggleVisibility"
-        >
-          <icon-lucide-eye v-if="visibilityState === 'visible'" class="size-3.5" />
-          <icon-lucide-eye-off v-else-if="visibilityState === 'hidden'" class="size-3.5" />
-          <icon-lucide-eye v-else class="size-3.5 opacity-50" />
-        </IconButton>
       </template>
 
+      <VisibilityField
+        :nodes="nodes"
+        :state="visibilityState"
+        :linked="visibilityLinked"
+        :property-names="visibilityPropertyNames"
+        class="mb-field-group"
+        @toggle="actions.toggleVisibility"
+      />
       <PanelGrid :columns="2">
         <PanelFieldGroup :label="panels.blendMode">
           <AppSelect
