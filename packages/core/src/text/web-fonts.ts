@@ -1,3 +1,4 @@
+import { uniq } from 'es-toolkit'
 import type { FontFaceData, RemoteFontSource, ResolveFontResult } from 'unifont'
 
 import { IS_BROWSER } from '#core/constants'
@@ -319,9 +320,7 @@ export class WebFontResolver {
     try {
       const unifont = await this.unifont(provider)
       const listedFamilies = await this.withFetchProxy(() => unifont.listFonts())
-      const families = listedFamilies
-        ? [...new Set(listedFamilies)].sort((a, b) => a.localeCompare(b))
-        : []
+      const families = listedFamilies ? uniq(listedFamilies).sort((a, b) => a.localeCompare(b)) : []
       this.familiesCache.set(provider, families)
       return families
     } catch {

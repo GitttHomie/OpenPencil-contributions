@@ -1,6 +1,4 @@
-import type { CanvasKit } from 'canvaskit-wasm'
-
-import { compressFigDataSync } from '@open-pencil/fig'
+import { compressFigDataSync, renameFigArchive } from '@open-pencil/fig'
 import {
   nameImagesForFigma,
   placeSlotContent,
@@ -12,18 +10,8 @@ import type { SceneGraph } from '@open-pencil/scene-graph'
 import { fractionalPosition } from '@open-pencil/scene-graph/order-keys'
 import type { GUID } from '@open-pencil/scene-graph/primitives'
 
-import type { SkiaRenderer } from '#core/canvas'
 import { withFigExportRuntime } from '#core/canvas/text/shape'
 import { IS_BROWSER, IS_TAURI } from '#core/constants'
-import {
-  exportSchema,
-  figExportRecordOptions,
-  figFileExtras,
-  prepareFigExport,
-  type FigExportSetup,
-  type KiwiNodeChange
-} from '#core/io/formats/fig/export-setup'
-import { archiveImagesNamedForFigma, writePatchedFigFile } from '#core/io/formats/fig/patch/export'
 import { sceneNodeToKiwi } from '#core/kiwi/fig/node-change/serialize'
 import { cloneSceneGraphForFigExport } from '#core/kiwi/fig/parse/transfer'
 import {
@@ -33,11 +21,17 @@ import {
 } from '#core/kiwi/fig/session/document-state'
 import { originalFigArchive } from '#core/kiwi/fig/session/original-archive'
 
+import { archiveImagesNamedForFigma, writePatchedFigFile } from './patch'
 import {
-  appendVariableNodeChanges,
-  sequentialPositions,
-  assignSharedStyleGuids
-} from './variable-export'
+  exportSchema,
+  figExportRecordOptions,
+  figFileExtras,
+  type FigFileExtrasOptions,
+  prepareFigExport,
+  type FigExportSetup,
+  type KiwiNodeChange
+} from './setup'
+import { appendVariableNodeChanges, sequentialPositions, assignSharedStyleGuids } from './variables'
 
 type InternalResourceContext = FigExportSetup & { nodeChanges: KiwiNodeChange[] }
 
@@ -103,39 +97,35 @@ function appendInternalResources(context: InternalResourceContext): void {
   }
 }
 
+/**
+ * Write `sourceGraph` as a `.fig`. A document opened from an archive and left unchanged is that
+ * archive, with only its `meta.json` renamed when `documentName` differs from the name it records.
+ */
 export async function exportFigFile(
   sourceGraph: SceneGraph,
-  ck?: CanvasKit,
-  renderer?: SkiaRenderer,
-  pageId?: string,
-  renderHeadlessThumbnail = false
+  options: FigFileExtrasOptions = {}
 ): Promise<Uint8Array> {
   // An archive whose images Figma cannot read is written whole rather than reused.
   const reuseArchive = await archiveImagesNamedForFigma(sourceGraph)
   const originalArchive = reuseArchive ? await originalFigArchive(sourceGraph) : null
-  if (originalArchive) return originalArchive.slice()
+  const reused =
+    originalArchive && options.documentName
+      ? renameFigArchive(originalArchive, options.documentName)
+      : originalArchive
+  if (reused) return reused === originalArchive ? reused.slice() : reused
   return withFigExportRuntime(
     sourceGraph,
-    ck,
+    options.ck,
     async (runtime) =>
-      (reuseArchive
-        ? await writePatchedFigFile(sourceGraph, runtime, {
-            ck,
-            renderer,
-            pageId,
-            renderHeadlessThumbnail
-          })
-        : null) ?? writeFigFile(sourceGraph, runtime, ck, renderer, pageId, renderHeadlessThumbnail)
+      (reuseArchive ? await writePatchedFigFile(sourceGraph, runtime, options) : null) ??
+      writeFigFile(sourceGraph, runtime, options)
   )
 }
 
 async function writeFigFile(
   sourceGraph: SceneGraph,
   runtime: FigNodeChangeExportRuntime,
-  ck: CanvasKit | undefined,
-  renderer: SkiaRenderer | undefined,
-  pageId: string | undefined,
-  renderHeadlessThumbnail: boolean
+  options: FigFileExtrasOptions
 ): Promise<Uint8Array> {
   await initCodec()
   populateFigInternalPages(sourceGraph)
@@ -198,14 +188,7 @@ async function writeFigFile(
 
   const imageNames = nameImagesForFigma(nodeChanges, graph.images)
   const kiwiData = compiled.encodeMessage(msg)
-  const extras = await figFileExtras(
-    graph,
-    imageNames,
-    pageId,
-    ck,
-    renderer,
-    renderHeadlessThumbnail
-  )
+  const extras = await figFileExtras(graph, imageNames, options)
 
   const version = graph.figKiwiVersion ?? undefined
 
@@ -234,6 +217,7 @@ async function writeFigFile(
 }
 
 export { compressFigDataSync } from '@open-pencil/fig'
+export type { FigFileExtrasOptions }
 
 function canUseWorker(): boolean {
   return typeof Worker !== 'undefined' && IS_BROWSER
@@ -248,7 +232,7 @@ function compressViaWorker(
   figKiwiVersion?: number
 ): Promise<Uint8Array> {
   return new Promise((resolve, reject) => {
-    const worker = new Worker(new URL('./export-worker.ts', import.meta.url), {
+    const worker = new Worker(new URL('./worker.ts', import.meta.url), {
       type: 'module'
     })
 

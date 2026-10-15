@@ -556,7 +556,7 @@
     },
     {
       "files": [
-        "packages/core/src/io/formats/fig/export.ts",
+        "packages/core/src/io/formats/fig/export/index.ts",
         "packages/core/src/kiwi/fig/parse/worker.ts"
       ],
       "rules": {

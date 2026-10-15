@@ -155,7 +155,7 @@ function applyVariables(target: TokenImportTarget, plan: TokenImportPlan) {
         hiddenFromPublishing: variable.hiddenFromPublishing ?? false,
         description: variable.description ?? made.description
       }
-      if (Object.keys(expressions).length > 0) fields.expressions = expressions
+      if (!isEmptyObject(expressions)) fields.expressions = expressions
       target.setTokenFields(made.id, fields)
     })
   })
