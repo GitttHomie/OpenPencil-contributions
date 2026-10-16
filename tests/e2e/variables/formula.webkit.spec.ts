@@ -1,6 +1,13 @@
 import { expect, test } from '#tests/e2e/fixtures'
 import { CanvasHelper } from '#tests/helpers/canvas'
+import { cloudDiscoveryFixture } from '#tests/helpers/cloud/discovery'
 import { formulaSceneState, seedFormulaScene } from '#tests/helpers/variables/formula'
+
+test.beforeEach(async ({ page }) => {
+  await page.route('https://cloud.openpencil.dev/.well-known/openpencil', (route) =>
+    route.fulfill({ json: cloudDiscoveryFixture('https://cloud.openpencil.dev') })
+  )
+})
 
 test('one value field replaces literals, references, formulas and CSS with validation and undo', async ({
   page
@@ -21,6 +28,7 @@ test('one value field replaces literals, references, formulas and CSS with valid
   await expect(value).toHaveText('8')
   await value.fill('{base} * 3')
   await expect(inspector.getByText('Result: 12', { exact: true })).toBeVisible()
+  expect((await formulaSceneState(page, ids)).width).toBe(8)
   await value.press('Enter')
   await expect.poll(async () => (await formulaSceneState(page, ids)).width).toBe(12)
 
@@ -133,8 +141,15 @@ test('references are removable atomic pills with editable operators and plain so
   await expect(inspector.getByText('Result: 5', { exact: true })).toBeVisible()
   await value.press('Meta+Shift+z')
   await expect(inspector.getByText('Result: 14', { exact: true })).toBeVisible()
+  await value.press('Home')
+  await page.keyboard.type('2 * ')
+  await expect(inspector.getByText('Result: 18', { exact: true })).toBeVisible()
+  await value.press('Home')
+  await value.press('Delete')
+  await page.keyboard.type('3')
+  await expect(inspector.getByText('Result: 22', { exact: true })).toBeVisible()
   await value.press('Enter')
-  expect((await formulaSceneState(page, ids)).width).toBe(14)
+  expect((await formulaSceneState(page, ids)).width).toBe(22)
   await inspector.screenshot({ path: test.info().outputPath('formula-pills.png') })
   canvas.assertNoErrors()
 })

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computedAsync } from '@vueuse/core'
 import { tv } from 'tailwind-variants'
-import { computed, nextTick, ref, useId, useTemplateRef, watch } from 'vue'
+import { computed, ref, useId, useTemplateRef, watch } from 'vue'
 
 import { loadTokenValidator } from '@open-pencil/dom-css/export'
 import type { Variable } from '@open-pencil/scene-graph'
@@ -38,20 +38,28 @@ const draft = ref('')
 const commitError = ref('')
 const field = useTemplateRef<InstanceType<typeof TokenFormulaField>>('field')
 const selection = ref<FormulaSelection | null>(null)
-let insertionCaret: number | null = null
-let applying = false
+const insertionCaret = ref<number | null>(null)
+const submitted = ref<string | null>(null)
 const validator = computedAsync(loadTokenValidator, null)
 const saved = computed(() => tokenEditorText(variable, modeId, formula))
 watch(
-  () => [variable.id, modeId, saved.value],
+  [() => variable.id, () => modeId],
   () => {
-    // A blur commit must not normalize the source and lose the picker insertion range.
-    if (applying) return
     draft.value = saved.value
     selection.value = null
+    insertionCaret.value = null
+    submitted.value = null
   },
   { immediate: true }
 )
+watch(saved, (value) => {
+  // Acknowledging our own commit preserves the authored spelling and picker selection.
+  if (value !== submitted.value) {
+    draft.value = value
+    selection.value = null
+  }
+  submitted.value = null
+})
 watch(draft, () => {
   commitError.value = ''
 })
@@ -69,20 +77,18 @@ const pickerItems = computed(() =>
     }
   })
 )
-const resolveReference = computed(() => {
-  const items = new Map(pickerItems.value.map((candidate) => [candidate.id, candidate]))
-  return (source: string) => {
-    try {
-      const { value } = formula.parse(modeId, source)
-      if (typeof value !== 'object' || !('aliasId' in value)) return
-      const candidate = items.get(value.aliasId)
-      if (candidate) return { label: candidate.name, displayValue: candidate.text }
-    } catch {
-      // Incomplete or invalid references remain editable source text.
-      return undefined
-    }
+const candidatesById = computed(() => new Map(pickerItems.value.map((item) => [item.id, item])))
+function resolveReference(source: string) {
+  try {
+    const { value } = formula.parse(modeId, source)
+    if (typeof value !== 'object' || !('aliasId' in value)) return
+    const candidate = candidatesById.value.get(value.aliasId)
+    if (candidate) return { label: candidate.name, displayValue: candidate.text }
+  } catch {
+    // Incomplete or invalid references remain editable source text.
+    return undefined
   }
-})
+}
 function parse() {
   return parseTokenEditorText(
     variable,
@@ -101,15 +107,23 @@ const preview = computed(() => {
     return { result: undefined, error: error instanceof Error ? error.message : String(error) }
   }
 })
+const error = computed(() => commitError.value || preview.value.error)
+const fieldState = computed(() => {
+  if (error.value) return 'invalid'
+  return alias.value ? 'bound' : 'idle'
+})
+const resultText = computed(
+  () =>
+    error.value ||
+    `${variables.value.formulaResult}: ${tokenValueText(variable, preview.value.result?.resolved)}`
+)
+const resultClass = computed(() => (error.value ? ui.error() : ui.hint()))
 function apply() {
   if (draft.value === saved.value) return true
   try {
     const edit = parse()
-    applying = true
+    submitted.value = edit.expression?.css ?? formula.format(edit.value)
     emit('apply', edit)
-    void nextTick(() => {
-      applying = false
-    })
     return true
   } catch (error) {
     commitError.value = error instanceof Error ? error.message : String(error)
@@ -132,13 +146,13 @@ function insert(id: string) {
   const range =
     literal || !selection.value ? { start: 0, end: draft.value.length } : selection.value
   draft.value = draft.value.slice(0, range.start) + reference + draft.value.slice(range.end)
-  insertionCaret = range.start + reference.length
+  insertionCaret.value = range.start + reference.length
 }
 function restoreInputFocus(event: Event) {
-  if (insertionCaret === null) return
+  if (insertionCaret.value === null) return
   event.preventDefault()
-  const caret = insertionCaret
-  insertionCaret = null
+  const caret = insertionCaret.value
+  insertionCaret.value = null
   field.value?.focus()
   field.value?.setSelectionRange(caret, caret)
   selection.value = { start: caret, end: caret }
@@ -163,9 +177,9 @@ function detach() {
         v-model="draft"
         :aria-label="label"
         :resolve="resolveReference"
-        :aria-invalid="Boolean(commitError || preview.error)"
+        :aria-invalid="Boolean(error)"
         :aria-describedby="`${fieldId}-result`"
-        :state="commitError || preview.error ? 'invalid' : alias ? 'bound' : 'idle'"
+        :state="fieldState"
         @change="apply"
         @enter="done"
         @cancel="cancel"
@@ -184,16 +198,8 @@ function detach() {
         @close-auto-focus="restoreInputFocus"
       />
     </div>
-    <p
-      :id="`${fieldId}-result`"
-      :class="preview.error || commitError ? ui.error() : ui.hint()"
-      aria-live="polite"
-    >
-      {{
-        commitError ||
-        preview.error ||
-        `${variables.formulaResult}: ${tokenValueText(variable, preview.result?.resolved)}`
-      }}
+    <p :id="`${fieldId}-result`" :class="resultClass" aria-live="polite">
+      {{ resultText }}
     </p>
     <span v-if="preview.result?.kind === 'css'" :class="ui.hint()">{{
       variables.expressionHint

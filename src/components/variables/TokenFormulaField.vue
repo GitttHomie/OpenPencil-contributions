@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useManualRefHistory } from '@vueuse/core'
 import { tv } from 'tailwind-variants'
-import { onMounted, shallowRef, useTemplateRef, watch } from 'vue'
+import { computed, ref, shallowRef, useTemplateRef, watch, watchPostEffect } from 'vue'
 
 import { useI18n } from '@open-pencil/vue'
 
@@ -11,9 +11,10 @@ import tokensPanelTheme from '@/theme/tokens-panel'
 import {
   formulaFieldSelection,
   formulaFieldText,
-  renderFormulaField,
+  formulaSegments,
   selectFormulaField,
   type FormulaPill,
+  type FormulaSegment,
   type FormulaSelection
 } from './formula-field'
 
@@ -29,7 +30,6 @@ const emit = defineEmits<{
   selection: [range: FormulaSelection]
 }>()
 const field = useTemplateRef<HTMLDivElement>('field')
-const icon = useTemplateRef<HTMLSpanElement>('icon')
 const ui = tv(tokensPanelTheme)()
 const inputUI = tv(inputTheme)
 const { variables } = useI18n()
@@ -38,54 +38,51 @@ const historyValue = shallowRef({
   range: { start: model.value.length, end: model.value.length }
 })
 const history = useManualRefHistory(historyValue, { capacity: 100 })
-let composing = false
-let updating = false
+const composing = ref(false)
+const revision = ref(0)
+const pendingSelection = shallowRef<FormulaSelection | null>(null)
+const source = ref(model.value)
+const segments = computed(() => formulaSegments(source.value, resolve))
 
 function remember() {
   if (!field.value) return
   const range = formulaFieldSelection(field.value)
   if (range) emit('selection', range)
 }
-function draw(range?: FormulaSelection | null, source = model.value) {
-  const root = field.value
-  if (!root || composing) return
-  renderFormulaField(
-    root,
-    source,
-    resolve,
-    (name) => variables.value.removeReference({ name }),
-    icon.value?.firstElementChild ?? null,
-    {
-      pill: ui.formulaPill(),
-      label: ui.formulaPillLabel(),
-      value: ui.formulaPillValue(),
-      remove: ui.formulaPillRemove()
-    }
-  )
-  if (range) selectFormulaField(root, range.start, range.end)
+function restoreSelection(range: FormulaSelection) {
+  pendingSelection.value = range
 }
-function update(source: string, range: FormulaSelection) {
-  updating = true
-  if (source !== historyValue.value.source) {
-    historyValue.value = { source, range }
+watchPostEffect(() => {
+  const range = pendingSelection.value
+  if (!range || !field.value) return
+  field.value.focus()
+  selectFormulaField(field.value, range.start, range.end)
+  pendingSelection.value = null
+  emit('selection', range)
+})
+function update(value: string, range: FormulaSelection) {
+  if (value !== historyValue.value.source) {
+    historyValue.value = { source: value, range }
     history.commit()
   }
-  model.value = source
-  draw(range, source)
-  updating = false
+  source.value = value
+  model.value = value
+  // Native editing mutates the DOM. Replace that subtree before Vue renders the pills again.
+  revision.value++
+  restoreSelection(range)
   emit('selection', range)
 }
 function input() {
-  if (composing || !field.value) return
+  if (composing.value || !field.value) return
   const source = formulaFieldText(field.value)
   const range = formulaFieldSelection(field.value) ?? { start: source.length, end: source.length }
   update(source, range)
 }
 function startComposition() {
-  composing = true
+  composing.value = true
 }
 function endComposition() {
-  composing = false
+  composing.value = false
   input()
 }
 function replace(text: string) {
@@ -109,27 +106,12 @@ function clipboard(event: ClipboardEvent, cut = false) {
   if (cut) replace('')
 }
 function blur(event: FocusEvent) {
+  if (pendingSelection.value) return
   if (event.relatedTarget instanceof Node && field.value?.contains(event.relatedTarget)) return
   emit('change')
 }
-function preserveEditingFocus(event: PointerEvent) {
-  if (event.target instanceof Element && event.target.closest('[data-remove-reference]'))
-    event.preventDefault()
-}
-function remove(event: Event) {
-  const button =
-    event.target instanceof Element ? event.target.closest('[data-remove-reference]') : null
-  const pill = button?.parentElement
-  const root = field.value
-  if (!pill || !root || pill.parentElement !== root) return
-  let start = 0
-  for (const child of root.childNodes) {
-    if (child === pill) break
-    start += formulaFieldText(child).length
-  }
-  const end = start + formulaFieldText(pill).length
-  root.focus()
-  update(model.value.slice(0, start) + model.value.slice(end), { start, end: start })
+function remove({ start, end }: FormulaSegment) {
+  update(source.value.slice(0, start) + source.value.slice(end), { start, end: start })
 }
 function editSelection(event: KeyboardEvent, root: HTMLElement, range: FormulaSelection) {
   if (event.code === 'Home' || event.code === 'End') {
@@ -146,35 +128,20 @@ function editSelection(event: KeyboardEvent, root: HTMLElement, range: FormulaSe
       replace('')
       return true
     }
-    let start = 0
-    for (const child of root.childNodes) {
-      const end = start + formulaFieldText(child).length
-      if (
-        child instanceof HTMLElement &&
-        child.dataset.reference !== undefined &&
-        (event.code === 'Backspace' ? range.start === end : range.start === start)
-      ) {
-        event.preventDefault()
-        update(model.value.slice(0, start) + model.value.slice(end), { start, end: start })
-        return true
-      }
-      start = end
+    const segment = segments.value.find(
+      ({ pill, start, end }) =>
+        pill && (event.code === 'Backspace' ? range.start === end : range.start === start)
+    )
+    if (segment) {
+      event.preventDefault()
+      remove(segment)
+      return true
     }
   }
   return false
 }
 function keydown(event: KeyboardEvent) {
-  if (composing || event.isComposing) return
-  if (
-    event.target instanceof Element &&
-    event.target.closest('[data-remove-reference]') &&
-    (event.code === 'Enter' || event.code === 'Space')
-  ) {
-    event.preventDefault()
-    event.stopPropagation()
-    remove(event)
-    return
-  }
+  if (composing.value || event.isComposing) return
   if ((event.metaKey || event.ctrlKey) && (event.code === 'KeyZ' || event.code === 'KeyY')) {
     event.preventDefault()
     event.stopPropagation()
@@ -193,26 +160,15 @@ function keydown(event: KeyboardEvent) {
     else emit('cancel')
   }
 }
-watch(
-  () => [model.value, resolve],
-  () => {
-    if (model.value !== historyValue.value.source) {
-      historyValue.value = {
-        source: model.value,
-        range: { start: model.value.length, end: model.value.length }
-      }
-      history.commit()
-    }
-    if (!updating)
-      draw(
-        field.value && document.activeElement === field.value
-          ? formulaFieldSelection(field.value)
-          : null
-      )
-  },
-  { flush: 'sync' }
-)
-onMounted(() => draw())
+watch(model, (value) => {
+  if (value === source.value) return
+  const range = field.value ? formulaFieldSelection(field.value) : null
+  source.value = value
+  historyValue.value = { source: value, range: { start: value.length, end: value.length } }
+  history.commit()
+  revision.value++
+  if (range) restoreSelection(range)
+})
 defineExpose({
   focus: () => field.value?.focus(),
   blur: () => {
@@ -221,7 +177,7 @@ defineExpose({
     if (root && formulaFieldSelection(root)) root.ownerDocument.getSelection()?.removeAllRanges()
   },
   setSelectionRange: (start: number, end: number) => {
-    if (field.value) selectFormulaField(field.value, start, end)
+    restoreSelection({ start, end })
   }
 })
 defineOptions({ inheritAttrs: false })
@@ -229,8 +185,8 @@ defineOptions({ inheritAttrs: false })
 
 <template>
   <div class="min-w-0">
-    <span ref="icon" class="hidden" aria-hidden="true"><icon-lucide-x class="size-3" /></span>
     <div
+      :key="revision"
       ref="field"
       v-bind="$attrs"
       role="textbox"
@@ -244,14 +200,36 @@ defineOptions({ inheritAttrs: false })
       @mouseup="remember"
       @keyup="remember"
       @keydown="keydown"
-      @click="remove"
-      @pointerdown="preserveEditingFocus"
       @paste.prevent="replace($event.clipboardData?.getData('text/plain') ?? '')"
       @copy="clipboard"
       @cut="clipboard($event, true)"
       @drop.prevent
       @compositionstart="startComposition"
       @compositionend="endComposition"
-    />
+    >
+      <template v-for="segment in segments" :key="segment.start">
+        <span
+          v-if="segment.pill"
+          contenteditable="false"
+          :data-reference="segment.source"
+          :class="ui.formulaPill()"
+        >
+          <span :class="ui.formulaPillLabel()">{{ segment.pill.label }}</span>
+          <span :class="ui.formulaPillValue()">{{ segment.pill.displayValue }}</span>
+          <button
+            type="button"
+            :class="ui.formulaPillRemove()"
+            :aria-label="variables.removeReference({ name: segment.pill.label })"
+            @pointerdown.prevent
+            @click.stop="remove(segment)"
+            @keydown.enter.stop.prevent="remove(segment)"
+            @keydown.space.stop.prevent="remove(segment)"
+          >
+            <icon-lucide-x class="size-3" />
+          </button>
+        </span>
+        <template v-else>{{ segment.source }}</template>
+      </template>
+    </div>
   </div>
 </template>

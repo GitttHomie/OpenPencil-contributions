@@ -12,7 +12,8 @@ export interface FormulaSelection {
 export function formulaFieldText(node: Node): string {
   if (node instanceof HTMLElement && node.dataset.reference !== undefined)
     return node.dataset.reference
-  if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? ''
+  // Contenteditable inserts non-breaking spaces to preserve typed whitespace.
+  if (node.nodeType === Node.TEXT_NODE) return (node.textContent ?? '').replaceAll('\u00a0', ' ')
   if (node.nodeName === 'BR') return '\n'
   return [...node.childNodes].map(formulaFieldText).join('')
 }
@@ -31,17 +32,21 @@ export function formulaFieldSelection(root: HTMLElement): FormulaSelection | nul
 }
 
 export function selectFormulaField(root: HTMLElement, start: number, end = start) {
-  const locate = (offset: number): [Node, number] => {
+  const locate = (offset: number, parent: Node = root): [Node, number] => {
     let remaining = offset
-    for (const [index, child] of [...root.childNodes].entries()) {
+    for (const [index, child] of [...parent.childNodes].entries()) {
       const length = formulaFieldText(child).length
       if (remaining <= length) {
         if (child.nodeType === Node.TEXT_NODE) return [child, remaining]
-        return [root, index + (remaining > 0 ? 1 : 0)]
+        if (child instanceof HTMLElement && child.dataset.reference !== undefined)
+          return [parent, index + (remaining > 0 ? 1 : 0)]
+        if (child.nodeName === 'BR') return [parent, index + (remaining > 0 ? 1 : 0)]
+        if (child.childNodes.length) return locate(remaining, child)
+        if (length === 0) continue
       }
       remaining -= length
     }
-    return [root, root.childNodes.length]
+    return [parent, parent.childNodes.length]
   }
   const range = root.ownerDocument.createRange()
   range.setStart(...locate(start))
@@ -51,43 +56,27 @@ export function selectFormulaField(root: HTMLElement, start: number, end = start
   selection?.addRange(range)
 }
 
-/** Rebuild only this editor's DOM, using text nodes so pasted source never becomes markup. */
-export function renderFormulaField(
-  root: HTMLElement,
+export interface FormulaSegment extends FormulaSelection {
+  source: string
+  pill?: FormulaPill
+}
+
+/** Keep offsets in source coordinates, even when a reference is displayed as a pill. */
+export function formulaSegments(
   source: string,
-  resolve: (reference: string) => FormulaPill | undefined,
-  removeLabel: (name: string) => string,
-  removeIcon: Element | null,
-  classes: { pill: string; label: string; value: string; remove: string }
+  resolve: (reference: string) => FormulaPill | undefined
 ) {
-  const document = root.ownerDocument
-  const children: Node[] = []
-  let offset = 0
+  const segments: FormulaSegment[] = []
+  let start = 0
   for (const match of source.matchAll(/\{[^{}]+\}/g)) {
-    const reference = match[0]
-    const pill = resolve(reference)
+    const pill = resolve(match[0])
     if (!pill) continue
-    children.push(document.createTextNode(source.slice(offset, match.index)))
-    const element = document.createElement('span')
-    element.contentEditable = 'false'
-    element.dataset.reference = reference
-    element.className = classes.pill
-    const label = document.createElement('span')
-    label.className = classes.label
-    label.textContent = pill.label
-    const value = document.createElement('span')
-    value.className = classes.value
-    value.textContent = pill.displayValue
-    const remove = document.createElement('button')
-    remove.type = 'button'
-    remove.className = classes.remove
-    remove.setAttribute('aria-label', removeLabel(pill.label))
-    remove.dataset.removeReference = ''
-    if (removeIcon) remove.append(removeIcon.cloneNode(true))
-    element.append(label, value, remove)
-    children.push(element)
-    offset = match.index + reference.length
+    if (start < match.index)
+      segments.push({ source: source.slice(start, match.index), start, end: match.index })
+    const end = match.index + match[0].length
+    segments.push({ source: match[0], start: match.index, end, pill })
+    start = end
   }
-  children.push(document.createTextNode(source.slice(offset)))
-  root.replaceChildren(...children)
+  segments.push({ source: source.slice(start), start, end: source.length })
+  return segments
 }
