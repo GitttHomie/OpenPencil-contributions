@@ -164,7 +164,7 @@ watch(model, (value) => {
   if (value === source.value) return
   const range = field.value ? formulaFieldSelection(field.value) : null
   source.value = value
-  historyValue.value = { source: value, range: { start: value.length, end: value.length } }
+  historyValue.value = { source: value, range: range ?? { start: value.length, end: value.length } }
   history.commit()
   revision.value++
   if (range) restoreSelection(range)

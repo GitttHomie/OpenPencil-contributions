@@ -46,3 +46,19 @@ export async function formulaSceneState(
     }
   }, ids)
 }
+
+/** Apply a document update without moving focus out of the value editor. */
+export async function updateFormulaNumber(
+  page: Page,
+  ids: Awaited<ReturnType<typeof seedFormulaScene>>,
+  value: number
+) {
+  await page.evaluate(
+    ({ width, mode, value }) => {
+      const editor = window.openPencil?.getStore?.()
+      if (!editor) throw new Error('Editor unavailable')
+      editor.updateVariableValue(width, mode, value)
+    },
+    { ...ids, value }
+  )
+}

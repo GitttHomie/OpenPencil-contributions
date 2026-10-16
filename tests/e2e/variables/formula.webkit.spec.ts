@@ -1,7 +1,11 @@
 import { expect, test } from '#tests/e2e/fixtures'
 import { CanvasHelper } from '#tests/helpers/canvas'
 import { cloudDiscoveryFixture } from '#tests/helpers/cloud/discovery'
-import { formulaSceneState, seedFormulaScene } from '#tests/helpers/variables/formula'
+import {
+  formulaSceneState,
+  seedFormulaScene,
+  updateFormulaNumber
+} from '#tests/helpers/variables/formula'
 
 test.beforeEach(async ({ page }) => {
   await page.route('https://cloud.openpencil.dev/.well-known/openpencil', (route) =>
@@ -180,5 +184,37 @@ test('reference picker and pills show the numeric value of the edited mode', asy
   await expect(dense.locator('[data-reference]')).toHaveText('base2')
   await inspector.getByRole('button', { name: 'Insert variable', exact: true }).last().click()
   await expect(page.getByRole('option', { name: 'base 2', exact: true })).toBeVisible()
+  canvas.assertNoErrors()
+})
+
+test('redo preserves the selection restored after an external value update', async ({ page }) => {
+  const canvas = new CanvasHelper(page)
+  await page.goto('/?test')
+  await canvas.waitForInit()
+  const ids = await seedFormulaScene(page)
+  await updateFormulaNumber(page, ids, 1234)
+  await page
+    .getByRole('region', { name: 'Variables' })
+    .getByRole('button', { name: 'Open variables' })
+    .click()
+  const dialog = page.getByTestId('variables-dialog')
+  await dialog.locator(`[data-variable-id="${ids.width}"]`).click()
+  const value = dialog
+    .getByTestId('token-inspector')
+    .getByRole('textbox', { name: 'Value', exact: true })
+  await value.press('Home')
+  await value.press('ArrowRight')
+  await value.press('Shift+ArrowRight')
+  await updateFormulaNumber(page, ids, 5678)
+  await expect(value).toHaveText('5678')
+  await expect(value).toBeFocused()
+  await value.press('Meta+z')
+  await expect(value).toHaveText('1234')
+  await value.press('Meta+Shift+z')
+  await expect(value).toHaveText('5678')
+  await page.keyboard.insertText('9')
+  await expect(value).toHaveText('5978')
+  await value.press('Enter')
+  expect((await formulaSceneState(page, ids)).width).toBe(5978)
   canvas.assertNoErrors()
 })
