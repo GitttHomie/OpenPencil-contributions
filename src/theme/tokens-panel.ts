@@ -43,7 +43,12 @@ export default {
     cssStacked: 'truncate font-mono text-[11px] text-muted @2xl/tokens-list:hidden',
     value:
       'flex min-w-0 animate-in items-center gap-1.5 truncate font-mono text-[11px] fade-in duration-150 motion-reduce:animate-none',
-    expression: 'truncate font-mono text-[11px] text-primary',
+    /** An alias in the list: its target's name, as wide as the name, and what it gives. */
+    aliasPill: 'max-w-[65%] flex-none',
+    aliasResult: 'truncate text-muted',
+    /** Marks a value whose CSS is an expression, which its tooltip shows. */
+    expressionBadge:
+      'shrink-0 rounded-sm border border-border px-1 font-sans text-[9px] leading-3.5 font-medium text-muted',
     modeHeader: 'flex min-w-0 flex-col gap-0.5',
     /** When a mode applies: words in the UI font, a selector or query in the code font. */
     modeCondition:

@@ -297,11 +297,15 @@ function dropEdge(id: string) {
                   </Tip>
                   <span class="truncate">{{ value.css || '—' }}</span>
                 </template>
-                <span v-else-if="value.expression" :class="ui.expression()">{{
-                  value.expression
-                }}</span>
-                <BindingPill v-else-if="value.alias" :label="value.alias" />
+                <template v-else-if="value.alias">
+                  <BindingPill :class="ui.aliasPill()" :label="value.alias" />
+                  <span v-if="value.result" :class="ui.aliasResult()">{{ value.result }}</span>
+                </template>
                 <span v-else class="truncate">{{ value.css }}</span>
+                <!-- CSS writes the expression instead; the canvas, and this list, show the value. -->
+                <Tip v-if="value.expression" :label="value.expression">
+                  <span :class="ui.expressionBadge()" :aria-label="variables.expression">CSS</span>
+                </Tip>
               </template>
             </span>
           </ListboxItem>

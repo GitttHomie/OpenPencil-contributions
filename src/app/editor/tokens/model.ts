@@ -32,6 +32,8 @@ export interface TokenModeValue {
   formula?: string
   /** The aliased variable's name, when the value points at another token. */
   alias?: string
+  /** What an alias gives in this mode, in the token's unit; a color shows as its swatch. */
+  result?: string
   /** A CSS expression written instead of the stored number, such as `clamp(…)`. */
   expression?: string
 }
@@ -78,6 +80,12 @@ function colorExpressionMode(
   return { modeId, css: label, alias: label, color }
 }
 
+function aliasResult(variable: Variable, resolved: VariableValue | undefined) {
+  if (typeof resolved === 'number') return tokenNumberToCSS(resolved, variableUnit(variable))
+  if (typeof resolved === 'boolean' || typeof resolved === 'string') return String(resolved)
+  return undefined
+}
+
 function modeValue(
   graph: SceneGraph,
   variable: Variable,
@@ -95,7 +103,8 @@ function modeValue(
     return {
       modeId,
       css: result ?? '',
-      formula: printFormula(value.value, (id) => graph.variables.get(id)?.name ?? id)
+      formula: printFormula(value.value, (id) => graph.variables.get(id)?.name ?? id),
+      expression
     }
   }
   if (typeof value === 'object' && 'aliasId' in value) {
@@ -107,6 +116,7 @@ function modeValue(
       modeId,
       css: target?.name ?? value.aliasId,
       alias: target?.name,
+      result: aliasResult(variable, resolved),
       color,
       expression
     }
