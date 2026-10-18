@@ -135,10 +135,7 @@ defineOptions({ inheritAttrs: false })
           prefix
         }}</span>
         <div ref="field" :class="ui.formulaEditor()" />
-        <span v-if="suffix" :class="[ui.formulaAffix(), ui.formulaSuffix()]" aria-hidden="true"
-          >= {{ suffix }}</span
-        >
-        <span v-else-if="unit" :class="ui.formulaAffix()" aria-hidden="true">{{ unit }}</span>
+        <!-- Before the result, so its space while hidden falls in the field's empty part. -->
         <Tip v-if="!expanded" :label="variables.expandEditor">
           <button
             type="button"
@@ -151,6 +148,11 @@ defineOptions({ inheritAttrs: false })
             <icon-lucide-maximize-2 class="size-3" />
           </button>
         </Tip>
+        <span v-if="suffix" :class="[ui.formulaAffix(), ui.formulaSuffix()]" aria-hidden="true"
+          >= {{ suffix }}</span
+        >
+        <span v-else-if="unit" :class="ui.formulaAffix()" aria-hidden="true">{{ unit }}</span>
+
         <span v-if="!expanded && $slots.actions" :class="ui.formulaActions()">
           <slot name="actions" />
         </span>
