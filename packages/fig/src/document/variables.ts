@@ -6,7 +6,7 @@ import {
   VARIABLE_FORMULA_OPERATORS,
   variableFormulaSchema,
   variableColorExpressionSchema,
-  formulaOperandType,
+  formulaResultType,
   MAX_FORMULA_DEPTH,
   type SceneGraph,
   type VariableValue,
@@ -56,7 +56,7 @@ function expressionValue(
     return colorExpression(entry, resolve)
   const expression = value.expressionValue
   const operator = v.parse(v.picklist(VARIABLE_FORMULA_OPERATORS), expression?.expressionFunction)
-  const type = formulaOperandType(operator)
+  const type = formulaResultType(operator)
   if (entry.resolvedDataType && entry.resolvedDataType !== type)
     throw new Error(`Expression result type does not match ${entry.resolvedDataType}`)
   const operands = (expression?.expressionArguments ?? []).map((arg) => {

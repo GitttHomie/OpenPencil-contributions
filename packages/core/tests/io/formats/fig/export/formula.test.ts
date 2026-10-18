@@ -4,7 +4,7 @@ import { exportFigFile, initCodec, parseFigFile, SceneGraph } from '@open-pencil
 import { FigmaAPI } from '@open-pencil/core/figma-api'
 import { parseVariableFormula } from '@open-pencil/scene-graph'
 
-test('numeric and Boolean formulas survive fresh and patched .fig saves', async () => {
+test('numeric, Boolean and comparison formulas survive fresh and patched .fig saves', async () => {
   await initCodec()
   const graph = new SceneGraph()
   const collection = graph.createCollection('Tokens')
@@ -12,6 +12,7 @@ test('numeric and Boolean formulas survive fresh and patched .fig saves', async 
   const derived = graph.createVariable('derived', 'FLOAT', collection.id, 0)
   const enabled = graph.createVariable('enabled', 'BOOLEAN', collection.id, true)
   const hidden = graph.createVariable('hidden', 'BOOLEAN', collection.id, false)
+  const wide = graph.createVariable('wide', 'BOOLEAN', collection.id, false)
   const mode = collection.defaultModeId
   derived.valuesByMode[mode] = parseVariableFormula(
     graph,
@@ -23,8 +24,9 @@ test('numeric and Boolean formulas survive fresh and patched .fig saves', async 
     graph,
     hidden.id,
     mode,
-    '{enabled} NOR false'
+    'not ({enabled} or false)'
   ).value
+  wide.valuesByMode[mode] = parseVariableFormula(graph, wide.id, mode, '{base} * 2 > 12').value
   graph.createNode('FRAME', graph.getPages()[0].id, {
     name: 'Formula consumer',
     width: 10,
@@ -36,6 +38,8 @@ test('numeric and Boolean formulas survive fresh and patched .fig saves', async 
     current = await parseFigFile(Uint8Array.from(await exportFigFile(current)).buffer)
     const number = [...current.variables.values()].find((v) => v.name === 'derived')
     const boolean = [...current.variables.values()].find((v) => v.name === 'hidden')
+    const comparison = [...current.variables.values()].find((v) => v.name === 'wide')
+    expect(current.resolveVariable(comparison?.id ?? '')).toBe(i !== 0)
     expect(current.resolveVariable(number?.id ?? '')).toBe(i === 0 ? 10 : 16)
     expect(current.resolveVariable(boolean?.id ?? '')).toBe(i !== 0)
     const node = [...current.getAllNodes()].find((node) => node.name === 'Formula consumer')

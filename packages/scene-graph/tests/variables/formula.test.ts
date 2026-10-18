@@ -1,6 +1,5 @@
 import { expect, test, spyOn } from 'bun:test'
 
-import jsep from 'jsep'
 import * as v from 'valibot'
 
 import {
@@ -11,6 +10,7 @@ import {
   mapVariableValueReferences,
   variableFormulaSchema,
   collectionsBoundIn,
+  formulaTokens,
   type VariableFormulaNode,
   type VariableValue
 } from '@open-pencil/scene-graph'
@@ -37,30 +37,78 @@ test('arithmetic, precedence, unary signs, references and renaming', () => {
   set('{base} * 2')
   base.name = 'renamed'
   expect(graph.resolveVariable(derived.id)).toBe(8)
-  expect(formatVariableFormula(graph, derived.valuesByMode[mode])).toContain('{Tokens::renamed}')
+  expect(formatVariableFormula(graph, derived.valuesByMode[mode])).toBe('{renamed} * 2')
   base.valuesByMode[mode] = 6
   expect(graph.resolveVariable(derived.id)).toBe(12)
 })
 
 test.each([
-  ['true AND false', false],
+  ['true and false', false],
   ['true OR false', true],
-  ['NOT true', false],
-  ['true XOR true', false],
-  ['true XOR false', true],
-  ['true NAND true', false],
-  ['false NOR false', true],
-  ['true NOR false', false],
-  ['true OR true AND false', true],
-  ['NOT ({base} AND false)', true]
+  ['not true', false],
+  ['!true || false', false],
+  ['true and not false', true],
+  ['true or true and false', true],
+  ['not ({base} and false)', true],
+  ['{base} == true', true],
+  ['{base} != false', true]
 ] as const)('Boolean logic %s', (source, expected) => {
   const { parse } = setup('BOOLEAN')
   expect(parse(source).resolved).toBe(expected)
 })
 
+test.each([
+  ['{width} > 600', true],
+  ['{width} <= 600', false],
+  ['{width} * 2 >= 1280 and {width} < 1000', true],
+  ['{width} == 640', true],
+  ['{width} != 640 or {width} < 0', false],
+  ['not {width} > 600', 'needs true or false']
+] as const)('number comparisons give Booleans: %s', (source, expected) => {
+  const { graph, collection, parse } = setup('BOOLEAN')
+  graph.createVariable('width', 'FLOAT', collection.id, 640)
+  if (typeof expected === 'string') expect(() => parse(source)).toThrow(expected)
+  else expect(parse(source).resolved).toBe(expected)
+})
+
+test.each([
+  ['{base} * 2 + 3', '{base} * 2 + 3'],
+  ['({base} * 2) + 3', '{base} * 2 + 3'],
+  ['({base} + 2) * 3', '({base} + 2) * 3'],
+  ['{base} - ({base} - 1)', '{base} - ({base} - 1)'],
+  ['({base} - {base}) - 1', '{base} - {base} - 1'],
+  ['{base} / ({base} * 2)', '{base} / ({base} * 2)'],
+  ['{base} + ({base} + 1)', '{base} + {base} + 1'],
+  ['-({base})', '-{base}'],
+  ['-({base} + 1)', '-({base} + 1)'],
+  ['- 4 * {base}', '-4 * {base}'],
+  ['-(-{base})', '-(-{base})']
+] as const)('numbers print with only the parentheses they need: %s', (source, printed) => {
+  const { graph, parse } = setup()
+  expect(formatVariableFormula(graph, parse(source).value)).toBe(printed)
+})
+
+test.each([
+  ['NOT ({base} AND false)', 'not ({base} and false)'],
+  ['({base} OR false) AND true', '({base} or false) and true'],
+  ['{width} > 1 AND {width} < 2', '{width} > 1 and {width} < 2'],
+  ['({width} > 1) == true', '({width} > 1) == true'],
+  ['not not {base}', 'not (not {base})']
+] as const)('Booleans print with only the parentheses they need: %s', (source, printed) => {
+  const { graph, collection, parse } = setup('BOOLEAN')
+  graph.createVariable('width', 'FLOAT', collection.id, 640)
+  expect(formatVariableFormula(graph, parse(source).value)).toBe(printed)
+})
+
+test('bare names resolve like braced ones, and unknown names say so', () => {
+  const { parse } = setup()
+  expect(parse('base * 3').resolved).toBe(12)
+  expect(() => parse('md * 2')).toThrow('No variable named md')
+  expect(() => parse('{space/md}')).toThrow('No variable named space/md')
+})
+
 test('invalid drafts keep the saved definition intact and restore the shared parser grammar', () => {
   const { parse, derived, mode } = setup()
-  const operators = { ...jsep.binary_ops }
   for (const source of [
     '{missing} * 2',
     '{derived} + 1',
@@ -75,31 +123,34 @@ test('invalid drafts keep the saved definition intact and restore the shared par
     '1 ** 2',
     'a = 3',
     '$reference0 + {base}',
+    '1 < 2 < 3',
+    '{base',
+    '{}',
+    '1 +',
+    '(1 + 2',
+    '1 2',
     '('.repeat(10000)
   ])
     expect(() => parse(source)).toThrow()
   expect(derived.valuesByMode[mode]).toBe(0)
-  expect(jsep.binary_ops).toEqual(operators)
 })
 
 test('cycles through other formulas are rejected even in Boolean branches that would short circuit', () => {
   const { base, derived, mode, parse } = setup('BOOLEAN')
   base.valuesByMode[mode] = { aliasId: derived.id }
-  expect(() => parse('false AND {base}')).toThrow('Circular')
+  expect(() => parse('false and {base}')).toThrow('Circular')
 })
 
 test.each([
-  [false, false, false, false, false, true, true],
-  [false, true, false, true, true, true, false],
-  [true, false, false, true, true, true, false],
-  [true, true, true, true, false, false, false]
-] as const)('Boolean truth table for %s and %s', (left, right, and, or, xor, nand, nor) => {
+  [false, false, false, false, true, false],
+  [false, true, false, true, false, true],
+  [true, false, false, true, false, true],
+  [true, true, true, true, true, false]
+] as const)('Boolean truth table for %s and %s', (left, right, and, or, equals, notEqual) => {
   const { parse } = setup('BOOLEAN')
   expect(
-    ['AND', 'OR', 'XOR', 'NAND', 'NOR'].map(
-      (operator) => parse(`${left} ${operator} ${right}`).resolved
-    )
-  ).toEqual([and, or, xor, nand, nor])
+    ['and', 'or', '==', '!='].map((operator) => parse(`${left} ${operator} ${right}`).resolved)
+  ).toEqual([and, or, equals, notEqual])
 })
 
 test('numeric formulas can drive imported color opacity expressions', () => {
@@ -274,4 +325,38 @@ test('collection discovery follows formulas and composed color operands transiti
   expect(collectionsBoundIn(graph, [node.id])).toEqual(
     new Set([colors.id, collection.id, other.id])
   )
+})
+
+test('the tokenizer reads half-typed formulas without failing, as an editor needs', () => {
+  const kinds = (source: string) =>
+    formulaTokens(source).map(({ kind, text }) => `${kind}:${text}`)
+  expect(kinds('{space/md} * 2 - base')).toEqual([
+    'reference:{space/md}',
+    'operator:*',
+    'number:2',
+    'operator:-',
+    'name:base'
+  ])
+  expect(kinds('NOT (a<=1) and True')).toEqual([
+    'keyword:NOT',
+    'paren:(',
+    'name:a',
+    'operator:<=',
+    'number:1',
+    'paren:)',
+    'keyword:and',
+    'bool:True'
+  ])
+  expect(kinds('2 * {spa {base}')).toEqual([
+    'number:2',
+    'operator:*',
+    'reference:{spa ',
+    'reference:{base}'
+  ])
+  expect(kinds('1 # 2')).toEqual(['number:1', 'invalid:#', 'number:2'])
+  expect(formulaTokens('{a} + 1').map(({ from, to }) => [from, to])).toEqual([
+    [0, 3],
+    [4, 5],
+    [6, 7]
+  ])
 })

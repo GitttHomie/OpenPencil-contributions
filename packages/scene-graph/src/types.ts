@@ -787,16 +787,22 @@ export interface VariableColorExpression {
 }
 
 export type VariableLiteral = Color | number | string | boolean
+/** Figma's `ExpressionFunction` names for the arithmetic, comparison and logic a formula uses. */
 export const VARIABLE_FORMULA_OPERATORS = [
   'ADDITION',
   'SUBTRACTION',
   'MULTIPLY',
   'DIVIDE',
   'NEGATE',
+  'EQUALS',
+  'NOT_EQUAL',
+  'LESS_THAN',
+  'LESS_THAN_OR_EQUAL',
+  'GREATER_THAN',
+  'GREATER_THAN_OR_EQUAL',
   'AND',
   'OR',
-  'NOT',
-  'NOT_EQUAL'
+  'NOT'
 ] as const
 export type VariableFormulaOperator = (typeof VARIABLE_FORMULA_OPERATORS)[number]
 export type VariableFormulaNode =

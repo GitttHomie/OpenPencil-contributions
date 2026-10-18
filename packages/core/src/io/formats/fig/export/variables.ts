@@ -11,6 +11,7 @@ import { guidToString, stringToGuid } from '@open-pencil/kiwi/fig/guid'
 import {
   modesDefaultFirst,
   MAX_FORMULA_DEPTH,
+  formulaResultType,
   variableFormulaSchema,
   variableColorExpressionSchema,
   type SceneGraph,
@@ -148,7 +149,7 @@ function variableValueToKiwi(
   if (typeof value === 'object' && 'expression' in value && value.expression === 'FORMULA') {
     const formula = v.parse(variableFormulaSchema, value)
     if (formula.type !== type) throw new Error('Formula type does not match variable type')
-    return formulaToKiwi(graph, formula.value, formula.type, ids)
+    return formulaToKiwi(graph, formula.value, ids)
   }
   if (typeof value === 'object' && 'expression' in value) {
     const expression = v.parse(variableColorExpressionSchema, value)
@@ -189,21 +190,26 @@ function variableValueToKiwi(
 function formulaToKiwi(
   graph: SceneGraph,
   node: VariableFormulaNode,
-  type: 'FLOAT' | 'BOOLEAN',
   ids: Map<string, GUID>,
   depth = 0
 ): VariableDataEntry {
   if (depth > MAX_FORMULA_DEPTH) throw new Error('Variable formula is too deeply nested')
-  if (typeof node !== 'object' || 'aliasId' in node)
+  if (typeof node === 'number') return variableValueToKiwi(graph, node, 'FLOAT', ids)
+  if (typeof node === 'boolean') return variableValueToKiwi(graph, node, 'BOOLEAN', ids)
+  if ('aliasId' in node) {
+    const type = graph.variables.get(node.aliasId)?.type
+    if (type !== 'FLOAT' && type !== 'BOOLEAN')
+      throw new Error('Formula references a missing variable')
     return variableValueToKiwi(graph, node, type, ids)
+  }
   return {
     dataType: 'EXPRESSION',
-    resolvedDataType: type,
+    resolvedDataType: formulaResultType(node.operator),
     value: {
       expressionValue: {
         expressionFunction: node.operator,
         expressionArguments: node.operands.map((operand) =>
-          formulaToKiwi(graph, operand, type, ids, depth + 1)
+          formulaToKiwi(graph, operand, ids, depth + 1)
         )
       }
     }

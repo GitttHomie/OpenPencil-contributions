@@ -1,62 +1,88 @@
-import type { SceneGraph, VariableFormulaNode, VariableValue } from '@open-pencil/scene-graph'
+import type { SceneGraph, VariableValue } from '@open-pencil/scene-graph'
 
 import { resolveVariableInModes } from '../resolution'
-import { MAX_FORMULA_DEPTH, VariableFormulaError } from './evaluate'
-import { parseFormulaSyntax } from './parse'
+import { VariableFormulaError } from './evaluate'
+import { parseFormulaSyntax, type FormulaReference } from './parse'
+import { printFormula } from './print'
+
+export { printFormula } from './print'
+export {
+  formulaTokenName,
+  formulaTokens,
+  readFormulaToken,
+  type FormulaToken,
+  type FormulaTokenKind
+} from './tokens'
 
 export {
   evaluateVariableFormula,
   formulaArity,
   formulaOperandType,
-  MAX_FORMULA_DEPTH
+  formulaResultType,
+  MAX_FORMULA_DEPTH,
+  VariableFormulaError
 } from './evaluate'
 
-const SYMBOLS = {
-  ADDITION: '+',
-  SUBTRACTION: '-',
-  MULTIPLY: '*',
-  DIVIDE: '/',
-  AND: 'AND',
-  OR: 'OR',
-  NOT_EQUAL: 'XOR',
-  NEGATE: '-',
-  NOT: 'NOT '
-} as const
+function qualifiedName(graph: SceneGraph, id: string) {
+  const variable = graph.variables.get(id)
+  if (!variable) return undefined
+  const collection = graph.variableCollections.get(variable.collectionId)
+  return `${collection?.name ?? variable.collectionId}::${variable.name}`
+}
 
 /** Qualified names disambiguate references; the stored formula uses stable IDs. */
 export function variableFormulaReference(graph: SceneGraph, id: string): string {
   const variable = graph.variables.get(id)
   if (!variable) return `{#${id}}`
-  const collection = graph.variableCollections.get(variable.collectionId)
-  const name = `${collection?.name ?? variable.collectionId}::${variable.name}`
-  const matches = [...graph.variables.values()].filter(
-    (item) =>
-      `${graph.variableCollections.get(item.collectionId)?.name ?? item.collectionId}::${item.name}` ===
-      name
+  const unique = (name: string, of: (id: string) => string | undefined) =>
+    [...graph.variables.keys()].filter((other) => of(other) === name).length === 1
+  const plain = variable.name
+  if (
+    !/[{}]/.test(plain) &&
+    plain.trim() === plain &&
+    unique(plain, (other) => graph.variables.get(other)?.name)
   )
-  return /[{}]/.test(name) || name.trim() !== name || matches.length !== 1
+    return `{${plain}}`
+  const qualified = qualifiedName(graph, id) ?? ''
+  return /[{}]/.test(qualified) || !unique(qualified, (other) => qualifiedName(graph, other))
     ? `{#${id}}`
-    : `{${name}}`
+    : `{${qualified}}`
 }
 
+/** The formula's source text, with `{name}` for each reference, as the clipboard and scripts write it. */
 export function formatVariableFormula(graph: SceneGraph, value: VariableValue): string {
-  const format = (node: VariableFormulaNode, depth = 0): string => {
-    if (depth > MAX_FORMULA_DEPTH) return '…'
-    if (typeof node !== 'object') return String(node)
-    if ('aliasId' in node) return variableFormulaReference(graph, node.aliasId)
-    const args = node.operands.map((operand) => format(operand, depth + 1))
-    const symbol = SYMBOLS[node.operator]
-    return args.length === 1 ? `${symbol}(${args[0]})` : `(${args.join(` ${symbol} `)})`
-  }
+  const reference = (id: string) => variableFormulaReference(graph, id)
   if (typeof value === 'object' && 'expression' in value && value.expression === 'FORMULA')
-    return format(value.value)
+    return printFormula(value.value, reference)
   if (
     typeof value === 'number' ||
     typeof value === 'boolean' ||
     (typeof value === 'object' && 'aliasId' in value)
   )
-    return format(value)
+    return printFormula(value, reference)
   return ''
+}
+
+/**
+ * Find the variable a reference names: `#id`, `Collection::name`, or a name, preferring the
+ * edited variable's own collection when a name appears in several.
+ */
+function resolveReference(graph: SceneGraph, collectionId: string, name: string): FormulaReference {
+  const candidates = [...graph.variables.values()].filter(
+    (candidate) =>
+      name === `#${candidate.id}` ||
+      name === qualifiedName(graph, candidate.id) ||
+      name === candidate.name
+  )
+  const local = candidates.filter((candidate) => candidate.collectionId === collectionId)
+  const matches = local.length === 1 ? local : candidates
+  const match = matches.at(0)
+  if (!match) throw new VariableFormulaError(`No variable named ${name}`)
+  if (matches.length !== 1)
+    throw new VariableFormulaError(`More than one variable is named ${name}`)
+  if (match.type !== 'FLOAT' && match.type !== 'BOOLEAN')
+    throw new VariableFormulaError(`${match.name} is not a number or true/false variable`)
+  return { id: match.id, type: match.type }
 }
 
 /** Validate a draft without changing the document. Formulas operate on stored units. */
@@ -67,35 +93,24 @@ export function parseVariableFormula(
   source: string
 ): { value: VariableValue; resolved: number | boolean } {
   const variable = graph.variables.get(variableId)
-  if (!variable || !['FLOAT', 'BOOLEAN'].includes(variable.type))
+  if (!variable || (variable.type !== 'FLOAT' && variable.type !== 'BOOLEAN'))
     throw new VariableFormulaError('Select a number or Boolean variable')
   const collection = graph.variableCollections.get(variable.collectionId)
   if (!collection?.modes.some((mode) => mode.modeId === modeId))
     throw new VariableFormulaError('Unknown variable mode')
-  const tree = parseFormulaSyntax(source, (name) => {
-    const candidates = [...graph.variables.values()].filter(
-      (candidate) =>
-        name === `#${candidate.id}` ||
-        name ===
-          `${graph.variableCollections.get(candidate.collectionId)?.name}::${candidate.name}` ||
-        name === candidate.name
+  const { node, type } = parseFormulaSyntax(source, (name) =>
+    resolveReference(graph, variable.collectionId, name)
+  )
+  if (type !== variable.type) {
+    const kind = (of: string) => (of === 'FLOAT' ? 'a number' : 'true or false')
+    throw new VariableFormulaError(
+      `This gives ${kind(type)}, but ${variable.name} holds ${kind(variable.type)}`
     )
-    const local = candidates.filter((candidate) => candidate.collectionId === variable.collectionId)
-    const matches = local.length === 1 ? local : candidates
-    const match = matches.at(0)
-    if (!match || matches.length !== 1)
-      throw new VariableFormulaError(
-        matches.length ? `Ambiguous variable: ${name}` : `Unknown variable: ${name}`
-      )
-    if (match.type !== variable.type)
-      throw new VariableFormulaError(`Incompatible variable type: ${name}`)
-    return match.id
-  })
-  const type = variable.type === 'FLOAT' ? 'FLOAT' : 'BOOLEAN'
+  }
   const value: VariableValue =
-    typeof tree === 'object' && 'operator' in tree
-      ? { expression: 'FORMULA', type, value: tree }
-      : tree
+    typeof node === 'object' && 'operator' in node
+      ? { expression: 'FORMULA', type: variable.type, value: node }
+      : node
   const resolved = resolveVariableInModes(
     graph,
     variableId,

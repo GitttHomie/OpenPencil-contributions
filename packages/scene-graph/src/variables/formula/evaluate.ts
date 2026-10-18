@@ -11,46 +11,117 @@ export class VariableFormulaError extends Error {
   override name = 'VariableFormulaError'
 }
 
-export function formulaArity(operator: VariableFormulaOperator): number {
-  return operator === 'NOT' || operator === 'NEGATE' ? 1 : 2
+export type FormulaValueType = 'FLOAT' | 'BOOLEAN'
+
+/**
+ * What each operator takes and gives. `EQUALS` and `NOT_EQUAL` compare two values of either
+ * type, so long as both are the same; the others take one type only.
+ */
+interface OperatorSignature {
+  operands: FormulaValueType | 'SAME'
+  result: FormulaValueType
+  arity: 1 | 2
+  /** How the operator is written, and the spelling the parser reads. */
+  symbol: string
+  /** Operands are checked against `operands` before this runs. */
+  apply: (a: number | boolean, b: number | boolean) => number | boolean
 }
 
-export function formulaOperandType(operator: VariableFormulaOperator): 'FLOAT' | 'BOOLEAN' {
-  return ['AND', 'OR', 'NOT', 'NOT_EQUAL'].includes(operator) ? 'BOOLEAN' : 'FLOAT'
+const SIGNATURES: Record<VariableFormulaOperator, OperatorSignature> = {
+  ADDITION: arithmetic('+', (a, b) => a + b),
+  SUBTRACTION: arithmetic('-', (a, b) => a - b),
+  MULTIPLY: arithmetic('*', (a, b) => a * b),
+  DIVIDE: arithmetic('/', (a, b) => {
+    if (b === 0) throw new VariableFormulaError('Cannot divide by zero')
+    return a / b
+  }),
+  NEGATE: { operands: 'FLOAT', result: 'FLOAT', arity: 1, symbol: '-', apply: (a) => -Number(a) },
+  EQUALS: { operands: 'SAME', result: 'BOOLEAN', arity: 2, symbol: '==', apply: (a, b) => a === b },
+  NOT_EQUAL: {
+    operands: 'SAME',
+    result: 'BOOLEAN',
+    arity: 2,
+    symbol: '!=',
+    apply: (a, b) => a !== b
+  },
+  LESS_THAN: comparison('<', (a, b) => a < b),
+  LESS_THAN_OR_EQUAL: comparison('<=', (a, b) => a <= b),
+  GREATER_THAN: comparison('>', (a, b) => a > b),
+  GREATER_THAN_OR_EQUAL: comparison('>=', (a, b) => a >= b),
+  AND: logic('and', (a, b) => a && b),
+  OR: logic('or', (a, b) => a || b),
+  NOT: { operands: 'BOOLEAN', result: 'BOOLEAN', arity: 1, symbol: 'not', apply: (a) => a !== true }
 }
 
-function apply(operator: VariableFormulaOperator, args: Array<number | boolean>): number | boolean {
-  const [a, b] = args
-  if (typeof a === 'number') {
-    if (operator === 'NEGATE') return -a
-    if (typeof b !== 'number') throw new VariableFormulaError('Expected two numbers')
-    switch (operator) {
-      case 'ADDITION':
-        return a + b
-      case 'SUBTRACTION':
-        return a - b
-      case 'MULTIPLY':
-        return a * b
-      case 'DIVIDE':
-        if (b === 0) throw new VariableFormulaError('Cannot divide by zero')
-        return a / b
-    }
-  } else {
-    switch (operator) {
-      case 'AND':
-        return a && b
-      case 'OR':
-        return a || b
-      case 'NOT':
-        return !a
-      case 'NOT_EQUAL':
-        return a !== b
-    }
+function arithmetic(symbol: string, apply: (a: number, b: number) => number): OperatorSignature {
+  return {
+    operands: 'FLOAT',
+    result: 'FLOAT',
+    arity: 2,
+    symbol,
+    apply: (a, b) => apply(Number(a), Number(b))
   }
-  throw new VariableFormulaError(`Invalid operands for ${operator}`)
 }
 
-/** Both sides are evaluated before Boolean logic, so false AND invalid never hides an error. */
+function comparison(symbol: string, apply: (a: number, b: number) => boolean): OperatorSignature {
+  return {
+    operands: 'FLOAT',
+    result: 'BOOLEAN',
+    arity: 2,
+    symbol,
+    apply: (a, b) => apply(Number(a), Number(b))
+  }
+}
+
+function logic(symbol: string, apply: (a: boolean, b: boolean) => boolean): OperatorSignature {
+  return {
+    operands: 'BOOLEAN',
+    result: 'BOOLEAN',
+    arity: 2,
+    symbol,
+    apply: (a, b) => apply(a === true, b === true)
+  }
+}
+
+export function formulaArity(operator: VariableFormulaOperator): number {
+  return SIGNATURES[operator].arity
+}
+
+/** The operand type, or `SAME` for equality, which compares either type with itself. */
+export function formulaOperandType(operator: VariableFormulaOperator): FormulaValueType | 'SAME' {
+  return SIGNATURES[operator].operands
+}
+
+export function formulaResultType(operator: VariableFormulaOperator): FormulaValueType {
+  return SIGNATURES[operator].result
+}
+
+export function formulaSymbol(operator: VariableFormulaOperator): string {
+  return SIGNATURES[operator].symbol
+}
+
+export function formulaTypeName(type: FormulaValueType) {
+  return type === 'FLOAT' ? 'numbers' : 'true or false'
+}
+
+/** Check operand types against an operator's signature; the message says what it needs. */
+export function checkFormulaOperands(
+  operator: VariableFormulaOperator,
+  types: readonly FormulaValueType[]
+) {
+  const { operands, arity, symbol } = SIGNATURES[operator]
+  if (types.length !== arity)
+    throw new VariableFormulaError(`Wrong number of operands for ${operator}`)
+  if (operands === 'SAME') {
+    if (types[0] !== types[1])
+      throw new VariableFormulaError(`${symbol} compares two numbers or two true/false values`)
+    return
+  }
+  if (types.some((type) => type !== operands))
+    throw new VariableFormulaError(`${symbol} needs ${formulaTypeName(operands)}`)
+}
+
+/** Both sides are evaluated before Boolean logic, so `false and` an invalid operand still fails. */
 export function evaluateVariableFormula(
   node: VariableFormulaNode,
   resolve: (id: string) => VariableLiteral | undefined,
@@ -64,18 +135,20 @@ export function evaluateVariableFormula(
     if (result === undefined)
       throw new VariableFormulaError(`Cannot resolve variable ${node.aliasId}`)
   } else {
-    if (node.operands.length !== formulaArity(node.operator))
-      throw new VariableFormulaError(`Wrong number of operands for ${node.operator}`)
+    if (!Object.hasOwn(SIGNATURES, node.operator))
+      throw new VariableFormulaError(`Unknown formula operator ${String(node.operator)}`)
     const args = node.operands.map((operand) =>
       evaluateVariableFormula(operand, resolve, depth + 1)
     )
-    const expected = formulaOperandType(node.operator) === 'FLOAT' ? 'number' : 'boolean'
-    if (args.some((arg) => typeof arg !== expected))
-      throw new VariableFormulaError(`${node.operator} requires ${expected} values`)
-    result = apply(node.operator, args)
+    checkFormulaOperands(
+      node.operator,
+      args.map((arg) => (typeof arg === 'number' ? 'FLOAT' : 'BOOLEAN'))
+    )
+    const [a, b] = args
+    result = SIGNATURES[node.operator].apply(a, b)
   }
   if (typeof result !== 'number' && typeof result !== 'boolean')
-    throw new VariableFormulaError('Formulas require number or Boolean variables')
+    throw new VariableFormulaError('Formulas use number and Boolean variables only')
   if (typeof result === 'number' && !Number.isFinite(result))
     throw new VariableFormulaError('Formula result must be finite')
   return result

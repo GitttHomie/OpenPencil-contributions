@@ -1,113 +1,157 @@
-import jsep from 'jsep'
-
 import type { VariableFormulaNode, VariableFormulaOperator } from '@open-pencil/scene-graph'
 
-import { MAX_FORMULA_DEPTH, MAX_FORMULA_LENGTH, VariableFormulaError } from './evaluate'
+import {
+  checkFormulaOperands,
+  formulaResultType,
+  MAX_FORMULA_DEPTH,
+  MAX_FORMULA_LENGTH,
+  VariableFormulaError,
+  type FormulaValueType
+} from './evaluate'
+import { formulaTokenName, formulaTokens, type FormulaToken } from './tokens'
+
+/** Binding strength of each binary operator; prefix operators bind tighter than all of them. */
+export const FORMULA_PRECEDENCE: Partial<Record<VariableFormulaOperator, number>> = {
+  OR: 1,
+  AND: 2,
+  EQUALS: 3,
+  NOT_EQUAL: 3,
+  LESS_THAN: 4,
+  LESS_THAN_OR_EQUAL: 4,
+  GREATER_THAN: 4,
+  GREATER_THAN_OR_EQUAL: 4,
+  ADDITION: 5,
+  SUBTRACTION: 5,
+  MULTIPLY: 6,
+  DIVIDE: 6
+}
+export const FORMULA_PREFIX_PRECEDENCE = 7
+/** Comparisons do not chain: `a < b < c` reads as a mistake, not as `(a < b) < c`. */
+export const FORMULA_NON_ASSOCIATIVE = new Set([3, 4])
 
 const BINARY = new Map<string, VariableFormulaOperator>([
   ['+', 'ADDITION'],
   ['-', 'SUBTRACTION'],
   ['*', 'MULTIPLY'],
   ['/', 'DIVIDE'],
-  ['AND', 'AND'],
-  ['OR', 'OR'],
-  ['XOR', 'NOT_EQUAL']
+  ['==', 'EQUALS'],
+  ['!=', 'NOT_EQUAL'],
+  ['<', 'LESS_THAN'],
+  ['<=', 'LESS_THAN_OR_EQUAL'],
+  ['>', 'GREATER_THAN'],
+  ['>=', 'GREATER_THAN_OR_EQUAL'],
+  ['and', 'AND'],
+  ['&&', 'AND'],
+  ['or', 'OR'],
+  ['||', 'OR']
 ])
-const WORD_PRECEDENCE: Record<string, number> = { OR: 1, NOR: 1, XOR: 2, AND: 3, NAND: 3 }
 
-/** Temporarily extend jsep only for this synchronous parse; calc's grammar stays unchanged. */
-function parseTree(source: string): jsep.Expression {
-  const saved = new Map(
-    Object.keys(WORD_PRECEDENCE).map((op) => [
-      op,
-      Object.hasOwn(jsep.binary_ops, op) ? jsep.binary_ops[op] : undefined
-    ])
-  )
-  try {
-    for (const [op, precedence] of Object.entries(WORD_PRECEDENCE)) jsep.addBinaryOp(op, precedence)
-    return jsep(source)
-  } finally {
-    for (const [op, precedence] of saved) {
-      jsep.removeBinaryOp(op)
-      if (precedence !== undefined) jsep.addBinaryOp(op, precedence)
-    }
+/** Check what the editor may leave open while typing, which a saved formula cannot hold. */
+function checkedTokens(source: string): FormulaToken[] {
+  const tokens = formulaTokens(source)
+  for (const token of tokens) {
+    if (token.kind === 'invalid') throw new VariableFormulaError(`Unexpected ${token.text}`)
+    if (token.kind !== 'reference') continue
+    if (!token.text.endsWith('}'))
+      throw new VariableFormulaError('A reference is missing its closing }')
+    if (!formulaTokenName(token)) throw new VariableFormulaError('Empty variable reference')
   }
+  return tokens
 }
 
-function convert(
-  node: jsep.Expression,
-  references: ReadonlyMap<string, string>,
-  depth = 0
-): VariableFormulaNode {
-  if (depth > MAX_FORMULA_DEPTH) throw new VariableFormulaError('Formula is too deeply nested')
-  if (node.type === 'Literal') {
-    const { value } = node as jsep.Literal
-    if (typeof value === 'boolean' || (typeof value === 'number' && Number.isFinite(value)))
-      return value
-  }
-  if (node.type === 'Identifier') {
-    const id = references.get((node as jsep.Identifier).name)
-    if (id) return { aliasId: id }
-  }
-  if (node.type === 'UnaryExpression') {
-    const { operator, argument } = node as jsep.UnaryExpression
-    const operand = convert(argument, references, depth + 1)
-    if (operator === '+') return { operator: 'MULTIPLY', operands: [1, operand] }
-    if (operator === '-' || operator === '!')
-      return { operator: operator === '-' ? 'NEGATE' : 'NOT', operands: [operand] }
-  }
-  if (node.type === 'BinaryExpression') {
-    const binary = node as jsep.BinaryExpression
-    const operands = [
-      convert(binary.left, references, depth + 1),
-      convert(binary.right, references, depth + 1)
-    ]
-    if (binary.operator === 'NAND' || binary.operator === 'NOR')
-      return {
-        operator: 'NOT',
-        operands: [{ operator: binary.operator === 'NAND' ? 'AND' : 'OR', operands }]
-      }
-    const operator = BINARY.get(binary.operator)
-    if (operator) return { operator, operands }
-  }
-  throw new VariableFormulaError(`Unsupported formula syntax: ${node.type}`)
+export interface FormulaReference {
+  id: string
+  type: FormulaValueType
 }
 
-/** Braced references are resolved before parsing; no JavaScript code is executed. */
+export interface ParsedFormula {
+  node: VariableFormulaNode
+  type: FormulaValueType
+}
+
+/**
+ * Read a formula into Figma's expression tree, checking operand types on the way. References
+ * are `{name}` or a bare name; `reference` resolves them. No code is evaluated.
+ */
 export function parseFormulaSyntax(
   source: string,
-  reference: (name: string) => string
-): VariableFormulaNode {
-  if (!source.trim()) throw new VariableFormulaError('Enter a formula')
+  reference: (name: string) => FormulaReference
+): ParsedFormula {
+  if (!source.trim()) throw new VariableFormulaError('Enter a value or formula')
   if (source.length > MAX_FORMULA_LENGTH) throw new VariableFormulaError('Formula is too long')
-  const references = new Map<string, string>()
-  const substituted = source.replace(
-    /\{([^{}]+)\}|[A-Za-z_$][\w$]*/g,
-    (match, name: string | undefined) => {
-      if (name !== undefined) {
-        const key = `$reference${references.size}`
-        references.set(key, reference(name.trim()))
-        return key
-      }
-      const word = match.toUpperCase()
-      if (word === 'TRUE' || word === 'FALSE') return word.toLowerCase()
-      if (word === 'NOT') return '!'
-      if (Object.hasOwn(WORD_PRECEDENCE, word)) return word
-      // e/E is permitted only as part of a numeric exponent, checked by jsep below.
-      if (/^[eE]\d*$/.test(match)) return match
-      throw new VariableFormulaError(`Use {${match}} to reference a variable`)
+  const tokens = checkedTokens(source)
+  let index = 0
+  const peek = () => tokens.at(index)
+  /** Operators and keywords by their lowercase spelling; operands read as nothing. */
+  const symbolAt = (token: FormulaToken | undefined) =>
+    token && ['operator', 'keyword', 'paren', 'bool'].includes(token.kind)
+      ? token.text.toLowerCase()
+      : ''
+
+  function operation(operator: VariableFormulaOperator, operands: ParsedFormula[]): ParsedFormula {
+    checkFormulaOperands(
+      operator,
+      operands.map((operand) => operand.type)
+    )
+    return {
+      node: { operator, operands: operands.map((operand) => operand.node) },
+      type: formulaResultType(operator)
     }
-  )
-  let nesting = 0
-  for (const char of substituted) {
-    if (char === '(' && ++nesting > MAX_FORMULA_DEPTH)
-      throw new VariableFormulaError('Formula is too deeply nested')
-    if (char === ')') nesting--
   }
-  try {
-    return convert(parseTree(substituted), references)
-  } catch (error) {
-    if (error instanceof VariableFormulaError) throw error
-    throw new VariableFormulaError(error instanceof Error ? error.message : 'Invalid formula')
+
+  function prefix(depth: number): ParsedFormula {
+    if (depth > MAX_FORMULA_DEPTH) throw new VariableFormulaError('Formula is too deeply nested')
+    const token = tokens.at(index++)
+    if (!token) throw new VariableFormulaError('The formula ends too early')
+    if (token.kind === 'number') return { node: Number(token.text), type: 'FLOAT' }
+    if (token.kind === 'reference' || token.kind === 'name') {
+      const { id, type } = reference(formulaTokenName(token))
+      return { node: { aliasId: id }, type }
+    }
+    switch (symbolAt(token)) {
+      case 'true':
+      case 'false':
+        return { node: symbolAt(token) === 'true', type: 'BOOLEAN' }
+      case '(': {
+        const inner = expression(0, depth + 1)
+        if (symbolAt(tokens.at(index++)) !== ')') throw new VariableFormulaError('Missing )')
+        return inner
+      }
+      case '+':
+        return prefix(depth + 1)
+      case '-': {
+        const operand = expression(FORMULA_PREFIX_PRECEDENCE, depth + 1)
+        if (typeof operand.node === 'number') return { node: -operand.node, type: 'FLOAT' }
+        return operation('NEGATE', [operand])
+      }
+      case 'not':
+      case '!':
+        return operation('NOT', [expression(FORMULA_PREFIX_PRECEDENCE, depth + 1)])
+    }
+    throw new VariableFormulaError(`Unexpected ${token.text}`)
   }
+
+  function expression(minimum: number, depth: number): ParsedFormula {
+    let left = prefix(depth)
+    for (;;) {
+      const operator = BINARY.get(symbolAt(peek()))
+      const precedence = operator ? (FORMULA_PRECEDENCE[operator] ?? 0) : 0
+      if (!operator || precedence <= minimum) return left
+      index++
+      const right = expression(precedence, depth + 1)
+      left = operation(operator, [left, right])
+      const next = BINARY.get(symbolAt(peek()))
+      if (
+        next &&
+        FORMULA_NON_ASSOCIATIVE.has(precedence) &&
+        FORMULA_PRECEDENCE[next] === precedence
+      )
+        throw new VariableFormulaError('Join comparisons with and or or')
+    }
+  }
+
+  const result = expression(0, 0)
+  const extra = peek()
+  if (extra) throw new VariableFormulaError(`Unexpected ${formulaTokenName(extra)}`)
+  return result
 }
