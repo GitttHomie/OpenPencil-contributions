@@ -32,9 +32,12 @@ function formatVariableValue(variable: Variable, graph: SceneGraph): string {
   if (typeof raw === 'object' && 'expression' in raw) {
     // A formula reads as written, with what it gives now; a composed color by its result.
     const resolved = graph.resolveVariable(variable.id, modeId)
-    let result = resolved === undefined ? '—' : String(resolved)
+    let result = '—'
     if (typeof resolved === 'object') result = colorToHex(resolved).toLowerCase()
-    return raw.expression === 'FORMULA' ? `${formatVariableFormula(graph, raw)} = ${result}` : result
+    else if (resolved !== undefined) result = String(resolved)
+    return raw.expression === 'FORMULA'
+      ? `${formatVariableFormula(graph, raw)} = ${result}`
+      : result
   }
 
   return String(raw)
