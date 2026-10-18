@@ -516,9 +516,10 @@ const groupOptions = computed(() => groupEntries.value.map((entry) => entry.path
         />
         <Transition v-bind="swapTransition" mode="out-in">
           <TokenBulkInspector v-if="bulkIds" key="bulk" v-bind="bulkInspector" />
+          <!-- One key for every token: switching rows updates the inspector in place, unanimated. -->
           <TokenInspector
             v-else-if="editedRow"
-            :key="editedRow.variable.id"
+            key="token"
             v-bind="tokenInspector"
             :row="editedRow"
             :collection="collection"

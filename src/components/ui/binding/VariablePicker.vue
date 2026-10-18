@@ -129,7 +129,7 @@ defineOptions({ inheritAttrs: false })
           {{ items.find((entry) => entry.id === item.value)?.text }}
         </span>
       </template>
-      <template #footer>
+      <template v-if="state !== 'unbound' || creating || createLabel" #footer>
         <AppButton
           v-if="state !== 'unbound'"
           size="xs"
