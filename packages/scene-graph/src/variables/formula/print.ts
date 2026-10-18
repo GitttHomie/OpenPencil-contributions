@@ -21,6 +21,11 @@ export interface PrintFormulaOptions {
    * `or`, `and`, or `+` and `-`, with the lines after the first indented.
    */
   width?: number
+  /**
+   * How a reference reads where the formula is shown, such as a pill's name, which `width`
+   * counts in place of the source spelling.
+   */
+  display?: (id: string) => string
 }
 
 function nodePrecedence(node: VariableFormulaNode) {
@@ -75,7 +80,23 @@ function printBinary(node: Operation, depth: number, print: Print, breakAt?: num
 export function printFormula(
   node: VariableFormulaNode,
   reference: (id: string) => string,
-  { width }: PrintFormulaOptions = {}
+  { width, display }: PrintFormulaOptions = {}
+): string {
+  const line = printLine(node, reference)
+  const outer = nodePrecedence(node)
+  const shown = display ? printLine(node, display) : line
+  if (width === undefined || shown.length <= width || !BREAKABLE.has(outer)) return line
+  return printWith(reference, node, outer)
+}
+
+function printLine(node: VariableFormulaNode, reference: (id: string) => string) {
+  return printWith(reference, node)
+}
+
+function printWith(
+  reference: (id: string) => string,
+  root: VariableFormulaNode,
+  rootBreak?: number
 ): string {
   const print: Print = (node, depth, breakAt) => {
     if (depth > MAX_FORMULA_DEPTH) return { text: '…', precedence: ATOM }
@@ -87,8 +108,5 @@ export function printFormula(
       ? printUnary(node, depth, print)
       : printBinary(node, depth, print, breakAt)
   }
-  const line = print(node, 0).text
-  const outer = nodePrecedence(node)
-  if (width === undefined || line.length <= width || !BREAKABLE.has(outer)) return line
-  return print(node, 0, outer).text
+  return print(root, 0, rootBreak).text
 }

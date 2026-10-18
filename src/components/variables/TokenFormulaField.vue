@@ -151,6 +151,9 @@ defineOptions({ inheritAttrs: false })
             <icon-lucide-maximize-2 class="size-3" />
           </button>
         </Tip>
+        <span v-if="!expanded && $slots.actions" :class="ui.formulaActions()">
+          <slot name="actions" />
+        </span>
       </div>
     </PopoverAnchor>
     <PopoverPortal v-if="!expanded && portalActive">

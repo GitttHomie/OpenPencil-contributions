@@ -115,7 +115,7 @@ defineExpose({ focus: () => field.value?.focus() })
 </script>
 
 <template>
-  <!-- The row's parts sit in the value grid's columns, the field under the value field. -->
+  <!-- The field and its error sit in the value grid's first column, under the value field. -->
   <div class="contents">
     <div :class="ui.expressionField()">
       <TokenFormulaField
@@ -134,20 +134,22 @@ defineExpose({ focus: () => field.value?.focus() })
         @enter="enter"
         @cancel="emit('cancel')"
         @selection="selection = $event"
-      />
+      >
+        <template #actions>
+          <VariablePicker
+            :items="pickerItems"
+            state="unbound"
+            :trigger-label="variables.useVariable"
+            :search-placeholder="variables.searchVariables"
+            :empty-label="variables.noMatchingVariables"
+            :detach-label="variables.detachVariable"
+            @select="insert"
+            @close-auto-focus="restoreFocus"
+          />
+        </template>
+      </TokenFormulaField>
     </div>
-    <div :class="ui.expressionActions()">
-      <VariablePicker
-        :items="pickerItems"
-        state="unbound"
-        :trigger-label="variables.useVariable"
-        :search-placeholder="variables.searchVariables"
-        :empty-label="variables.noMatchingVariables"
-        :detach-label="variables.detachVariable"
-        @select="insert"
-        @close-auto-focus="restoreFocus"
-      />
-    </div>
+
     <p v-if="error" :class="[ui.error(), ui.expressionField()]" role="alert">{{ error }}</p>
   </div>
 </template>

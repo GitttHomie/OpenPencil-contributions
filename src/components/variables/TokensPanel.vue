@@ -18,6 +18,7 @@ import { useI18n, useSceneComputed, useVariables } from '@open-pencil/vue'
 import {
   aliasCandidates,
   cssReferenceCandidates,
+  referencePillName,
   formulaCandidates,
   groupTree,
   inGroup,
@@ -142,8 +143,9 @@ const bulkIds = computed(
 const candidates = computed(() =>
   editedRow.value ? aliasCandidates(editor.graph, editedRow.value.variable) : []
 )
-/** Characters of source text a formula fits on one line before it breaks. */
-const FORMULA_LINE_WIDTH = 48
+/** Characters, counting each pill by its name, a formula fits on one line before it breaks. */
+const FORMULA_LINE_WIDTH = 36
+
 const referenceCandidates = computed(() =>
   editedRow.value ? formulaCandidates(editor.graph, editedRow.value.variable) : []
 )
@@ -294,7 +296,11 @@ const tokenInspector = computed(() => {
             parseVariableFormula(editor.graph, id, modeId, source),
           // A long formula reads on several lines in its field.
           format: (value: VariableValue) =>
-            formatVariableFormula(editor.graph, value, { width: FORMULA_LINE_WIDTH }),
+            formatVariableFormula(editor.graph, value, {
+              width: FORMULA_LINE_WIDTH,
+              display: (variableId) =>
+                referencePillName(editor.graph.variables.get(variableId)?.name ?? variableId)
+            }),
           reference: (id: string) => variableFormulaReference(editor.graph, id)
         }
       : undefined,

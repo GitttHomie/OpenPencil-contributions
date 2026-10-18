@@ -13,7 +13,11 @@ import { tokenNumberToCSS, variableUnit } from '@open-pencil/dom-css/export'
 import type { Variable, VariableValue } from '@open-pencil/scene-graph'
 import { useI18n } from '@open-pencil/vue'
 
-import type { AliasCandidate, TokenFormulaActions } from '@/app/editor/tokens/model'
+import {
+  referencePillName,
+  type AliasCandidate,
+  type TokenFormulaActions
+} from '@/app/editor/tokens/model'
 import { parseTokenEditorText, tokenEditorText } from '@/app/editor/tokens/value-editor'
 import { VariablePicker } from '@/components/ui/binding'
 import IconButton from '@/components/ui/button/IconButton.vue'
@@ -118,7 +122,7 @@ function resolveReference(source: string) {
   // The pill names the variable as its group row does; the tooltip gives the full path.
   if (candidate)
     return {
-      label: candidate.name.split('/').at(-1) ?? candidate.name,
+      label: referencePillName(candidate.name),
       tooltip: `${candidate.collection} · ${candidate.name} · ${candidate.text}`
     }
 }
@@ -220,6 +224,19 @@ function restoreInputFocus(event: Event) {
   field.value?.setSelectionRange(caret, caret)
   selection.value = { start: caret, end: caret }
 }
+/** The variable button sits at the field's end, or beside the switch, as in the properties panel. */
+const picker = computed(() => ({
+  items: pickerItems.value,
+  selected: alias.value,
+  state: alias.value ? ('bound' as const) : ('unbound' as const),
+  triggerLabel: variables.value.useVariable,
+  searchPlaceholder: variables.value.searchVariables,
+  emptyLabel: variables.value.noMatchingVariables,
+  detachLabel: variables.value.detachVariable,
+  onSelect: insert,
+  onDetach: detach,
+  onCloseAutoFocus: restoreInputFocus
+}))
 function detach() {
   try {
     const { resolved } = formula.parse(modeId, formula.format(value.value))
@@ -238,6 +255,7 @@ function detach() {
         :label="label"
         @update:model-value="emit('apply', $event)"
       />
+      <VariablePicker v-bind="picker" />
     </div>
     <TokenFormulaField
       v-else
@@ -257,20 +275,10 @@ function detach() {
       @enter="done"
       @cancel="cancel"
       @selection="selection = $event"
-    />
+    >
+      <template #actions><VariablePicker v-bind="picker" /></template>
+    </TokenFormulaField>
     <div :class="ui.valueActions()">
-      <VariablePicker
-        :items="pickerItems"
-        :selected="alias"
-        :state="alias ? 'bound' : 'unbound'"
-        :trigger-label="variables.useVariable"
-        :search-placeholder="variables.searchVariables"
-        :empty-label="variables.noMatchingVariables"
-        :detach-label="variables.detachVariable"
-        @select="insert"
-        @detach="detach"
-        @close-auto-focus="restoreInputFocus"
-      />
       <DropdownMenuRoot v-if="offersMenu">
         <DropdownMenuTrigger as-child>
           <IconButton

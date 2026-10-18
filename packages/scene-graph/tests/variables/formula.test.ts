@@ -372,6 +372,9 @@ test('a long formula breaks before its outermost and, or, + and -, and reads bac
   )
   expect(formatVariableFormula(graph, value, { width: 200 })).toBe(source)
   expect(parse(formatVariableFormula(graph, value, { width: 40 })).value).toEqual(value)
+  // Width counts references as they are shown, such as pills that drop the braces.
+  const shown = (id: string) => graph.variables.get(id)?.name ?? id
+  expect(formatVariableFormula(graph, value, { width: 60, display: shown })).toBe(source)
   // A chain inside parentheses, or an operator that does not break, stays on its line.
   expect(formatVariableFormula(graph, parse('{viewport} * 2 > 1000').value, { width: 5 })).toBe(
     '{viewport} * 2 > 1000'

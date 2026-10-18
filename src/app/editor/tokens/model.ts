@@ -296,6 +296,11 @@ export interface AliasCandidate {
   text?: string
 }
 
+/** A reference pill shows the last part of a variable's name, as its group row does. */
+export function referencePillName(name: string) {
+  return name.split('/').at(-1) ?? name
+}
+
 /** A number token a CSS expression can name as `var(--name)`. */
 export interface CSSReferenceCandidate {
   id: string
