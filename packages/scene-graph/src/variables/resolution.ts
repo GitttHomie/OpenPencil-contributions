@@ -150,37 +150,52 @@ function resolveInModes(
   if (cached !== undefined) return cached
   const initial = graph.variables.get(variableId)
   if (!initial) return undefined
-  const type = initial.type
   let id = variableId
   for (let depth = visiting?.size ?? 0; depth < MAX_FORMULA_DEPTH; depth++) {
     const variable = id === variableId ? initial : graph.variables.get(id)
     if (!variable || visiting?.has(id)) return undefined
     const value = variableValueInMode(graph, variable, modeFor(variable.collectionId))
-    if (value === undefined) return undefined
     if (typeof value === 'object' && 'aliasId' in value) {
       id = value.aliasId
       continue
     }
-    if (typeof value === 'object' && 'expression' in value) {
-      try {
-        // A formula shares its dependencies' values for the length of one resolution.
-        const result = evaluateDefinition(
-          graph,
-          variable,
-          value,
-          modeFor,
-          visiting ?? new Set(),
-          memo ?? new Map()
-        )
-        return typeof result === RESULT_TYPES[type] ? result : undefined
-      } catch {
-        return undefined
-      }
-    }
-    if (typeof value !== RESULT_TYPES[type]) return undefined
-    return typeof value === 'number' && !Number.isFinite(value) ? undefined : value
+    const result =
+      typeof value === 'object' && 'expression' in value
+        ? resolveExpression(graph, variable, value, modeFor, visiting, memo)
+        : value
+    return drawable(result, initial.type)
   }
   return undefined
+}
+
+/** A formula shares its dependencies' values for the length of one resolution. */
+function resolveExpression(
+  graph: SceneGraph,
+  variable: Variable,
+  value: VariableValue,
+  modeFor: (collectionId: string) => string,
+  visiting?: Set<string>,
+  memo?: Map<string, VariableLiteral>
+): VariableLiteral | undefined {
+  try {
+    return evaluateDefinition(
+      graph,
+      variable,
+      value,
+      modeFor,
+      visiting ?? new Set(),
+      memo ?? new Map()
+    )
+  } catch {
+    return undefined
+  }
+}
+
+/** A resolved value the canvas can draw for a variable of this type, or nothing. */
+function drawable(value: VariableValue | undefined, type: Variable['type']) {
+  if (value === undefined || typeof value !== RESULT_TYPES[type]) return undefined
+  if (typeof value === 'object' && !('r' in value)) return undefined
+  return typeof value === 'number' && !Number.isFinite(value) ? undefined : value
 }
 
 /** Shared mode fallback for canvas resolution and formula draft validation. */
@@ -262,10 +277,8 @@ export function resolveVariableForNode(
   variableId: string,
   fallback: VariableModeFallback = 'active'
 ): VariableLiteral | undefined {
-  return resolveInModes(
-    graph,
-    variableId,
-    (collectionId) => getNodeVariableModeId(graph, nodeId, collectionId, fallback)
+  return resolveInModes(graph, variableId, (collectionId) =>
+    getNodeVariableModeId(graph, nodeId, collectionId, fallback)
   )
 }
 
