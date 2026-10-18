@@ -129,5 +129,5 @@
   "useFormula": "Utiliser une formule",
   "formulaPlaceholder": "Valeur ou formule",
   "expandEditor": "Ouvrir un éditeur plus grand",
-  "expandEditorHint": "Entrée applique · Maj+Entrée commence une nouvelle ligne · Échap revient"
+  "newLine": "Nouvelle ligne"
 }

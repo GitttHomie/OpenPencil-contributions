@@ -90,6 +90,9 @@ export default {
     /** The larger editor, beside the inspector over the list. */
     /** Buttons at the field's end, such as the variable button, on its first line. */
     formulaActions: 'flex h-5 shrink-0 items-center self-start',
+    /** The larger editor's keys, in a quiet row under it. */
+    formulaEditorKeys: 'flex justify-end gap-3 px-0.5 text-[11px] text-muted',
+    formulaEditorKey: 'ml-1 font-sans text-surface/50',
     formulaEditorPanel:
       'z-[100] flex w-[30rem] max-w-[calc(100vw-1rem)] flex-col gap-1.5 rounded-xl bg-panel p-2 text-surface shadow-[0_0_0_1px_var(--color-border),0_8px_30px_rgb(0_0_0/0.4)] outline-none',
     /** Muted text at the field's start or end, such as CSS or the result. */

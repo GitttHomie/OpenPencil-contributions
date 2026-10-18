@@ -3,7 +3,7 @@ import { PopoverAnchor, PopoverContent, PopoverPortal, PopoverRoot } from 'reka-
 import { tv } from 'tailwind-variants'
 import { nextTick, ref, useTemplateRef } from 'vue'
 
-import { useI18n, useRetainedPopup } from '@open-pencil/vue'
+import { formatShortcut, useI18n, useRetainedPopup } from '@open-pencil/vue'
 
 import Tip from '@/components/ui/overlay/Tip.vue'
 import inputTheme from '@/theme/input/input'
@@ -55,7 +55,13 @@ const emit = defineEmits<{
 const field = useTemplateRef<HTMLDivElement>('field')
 const ui = tv(tokensPanelTheme)()
 const inputUI = tv(inputTheme)
-const { variables } = useI18n()
+const { variables, common } = useI18n()
+/** What the larger editor's keys do, shown as a menu shows shortcuts. */
+const EDITOR_KEYS = [
+  { label: () => common.value.apply, shortcut: 'Enter' },
+  { label: () => variables.value.newLine, shortcut: 'SHIFT+Enter' },
+  { label: () => common.value.back, shortcut: 'Esc' }
+]
 
 /**
  * The larger editor edits the same draft. While it is open, this field does not commit on
@@ -187,7 +193,12 @@ defineOptions({ inheritAttrs: false })
           @cancel="closeEditor('cancel')"
           @selection="emit('selection', $event)"
         />
-        <p :class="ui.hint()">{{ variables.expandEditorHint }}</p>
+        <p :class="ui.formulaEditorKeys()">
+          <span v-for="key in EDITOR_KEYS" :key="key.shortcut">
+            {{ key.label() }}
+            <kbd :class="ui.formulaEditorKey()">{{ formatShortcut(key.shortcut) }}</kbd>
+          </span>
+        </p>
       </PopoverContent>
     </PopoverPortal>
   </PopoverRoot>

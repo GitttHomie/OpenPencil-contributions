@@ -129,5 +129,5 @@
   "useFormula": "Использовать формулу",
   "formulaPlaceholder": "Значение или формула",
   "expandEditor": "Открыть большой редактор",
-  "expandEditorHint": "Enter применяет · Shift+Enter начинает новую строку · Esc возвращает"
+  "newLine": "Новая строка"
 }

@@ -129,5 +129,5 @@
   "useFormula": "数式を使用",
   "formulaPlaceholder": "値または数式",
   "expandEditor": "大きなエディタを開く",
-  "expandEditorHint": "Enter で適用 · Shift+Enter で改行 · Esc で戻る"
+  "newLine": "改行"
 }

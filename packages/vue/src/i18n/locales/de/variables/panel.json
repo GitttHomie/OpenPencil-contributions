@@ -129,5 +129,5 @@
   "useFormula": "Formel verwenden",
   "formulaPlaceholder": "Wert oder Formel",
   "expandEditor": "Größeren Editor öffnen",
-  "expandEditorHint": "Enter übernimmt · Umschalt+Enter beginnt eine neue Zeile · Esc kehrt zurück"
+  "newLine": "Neue Zeile"
 }

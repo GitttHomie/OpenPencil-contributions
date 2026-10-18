@@ -129,5 +129,5 @@
   "useFormula": "Użyj formuły",
   "formulaPlaceholder": "Wartość lub formuła",
   "expandEditor": "Otwórz większy edytor",
-  "expandEditorHint": "Enter zatwierdza · Shift+Enter zaczyna nowy wiersz · Esc wraca"
+  "newLine": "Nowy wiersz"
 }

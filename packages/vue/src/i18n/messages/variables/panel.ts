@@ -138,7 +138,7 @@ export const variablesMessageDefaults = {
   useFormula: 'Use a formula',
   formulaPlaceholder: 'Value or formula',
   expandEditor: 'Open a larger editor',
-  expandEditorHint: 'Enter applies · Shift+Enter starts a new line · Esc goes back'
+  newLine: 'New line'
 } as const
 
 export const variablesMessages = i18n('variables', variablesMessageDefaults)
