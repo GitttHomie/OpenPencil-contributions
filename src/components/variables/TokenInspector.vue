@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computedAsync } from '@vueuse/core'
+import { isEmptyObject, omit } from 'es-toolkit'
 import { tv } from 'tailwind-variants'
-import { computed, reactive, useId, watch } from 'vue'
+import { computed, nextTick, reactive, ref, useId, watch } from 'vue'
 
 import type { VariableTokenFields } from '@open-pencil/core/editor'
 import {
@@ -16,6 +17,7 @@ import {
   tokenNumberFromUnit,
   tokenNumberInUnit,
   type Color,
+  type TokenExpression,
   type Variable,
   type VariableCollection,
   type VariableScope,
@@ -24,26 +26,32 @@ import {
 import { randomHex } from '@open-pencil/scene-graph/random'
 import { useI18n } from '@open-pencil/vue'
 
-import type { AliasCandidate, TokenRow, TokenFormulaActions } from '@/app/editor/tokens/model'
+import type {
+  AliasCandidate,
+  CSSReferenceCandidate,
+  TokenFormulaActions,
+  TokenRow
+} from '@/app/editor/tokens/model'
 import { SCOPES_BY_TYPE } from '@/app/editor/tokens/scopes'
-import type { TokenValueEdit } from '@/app/editor/tokens/value-editor'
 import ColorInput from '@/components/ColorPicker/ColorInput.vue'
 import { BindingPill, VariablePicker } from '@/components/ui/binding'
 import AppButton from '@/components/ui/button/AppButton.vue'
-import IconButton from '@/components/ui/button/IconButton.vue'
 import AppInput from '@/components/ui/input/AppInput.vue'
 import AppTextarea from '@/components/ui/input/AppTextarea.vue'
+import Tip from '@/components/ui/overlay/Tip.vue'
+import FillSwatch from '@/components/ui/paint/FillSwatch.vue'
 import AppSelect from '@/components/ui/select/AppSelect.vue'
 import AppCheckbox from '@/components/ui/toggle/AppCheckbox.vue'
-import AppSwitch from '@/components/ui/toggle/AppSwitch.vue'
 import tokensPanelTheme from '@/theme/tokens-panel'
 
+import TokenCSSExpression from './TokenCSSExpression.vue'
 import TokenValueEditor from './TokenValueEditor.vue'
 
 const {
   row,
   collection,
   aliasCandidates,
+  cssCandidates = [],
   formula,
   layout = 'side'
 } = defineProps<{
@@ -51,6 +59,9 @@ const {
   collection: VariableCollection
   /** Variables of the same type a mode's value can point at. */
   aliasCandidates: AliasCandidate[]
+  /** Number tokens a CSS expression can name as `var(--name)`. */
+  cssCandidates?: CSSReferenceCandidate[]
+  /** Reads and writes number and true/false values, which may be formulas. */
   formula?: TokenFormulaActions
   /** `full` fills the panel behind a back button on narrow screens. */
   layout?: 'side' | 'full'
@@ -60,7 +71,6 @@ const emit = defineEmits<{
   rename: [name: string]
   updateToken: [patch: Partial<VariableTokenFields>]
   updateValue: [modeId: string, value: VariableValue, coalesceKey?: string]
-  updateMode: [modeId: string, edit: TokenValueEdit]
   alias: [modeId: string, variableId: string]
   detach: [modeId: string]
   remove: []
@@ -124,7 +134,8 @@ const draft = reactive({
   name: '',
   cssName: '',
   description: '',
-  values: {} as Record<string, string | number>
+  values: {} as Record<string, string>,
+  expressions: {} as Record<string, string>
 })
 
 function resetDraft(current: Variable) {
@@ -133,6 +144,7 @@ function resetDraft(current: Variable) {
   draft.description = current.description
   for (const mode of collection.modes) {
     draft.values[mode.modeId] = displayValue(current.valuesByMode[mode.modeId])
+    draft.expressions[mode.modeId] = current.expressions?.[mode.modeId]?.css ?? ''
   }
 }
 /**
@@ -148,9 +160,7 @@ watch(
       explicitCSSName(variable.value),
       description,
       valuesByMode,
-      expressions,
-      numberUnit.value,
-      collection.modes.map((mode) => mode.modeId)
+      expressions
     ])
   },
   () => resetDraft(variable.value),
@@ -166,6 +176,7 @@ function commitName() {
 /** The browser's CSS parser decides what a custom property name may be. */
 const validator = computedAsync(loadTokenValidator, null)
 const cssNameErrorId = `${useId()}-css-name`
+const cssNameHintId = `${cssNameErrorId}-hint`
 /** The name typed, without the `--` the field shows, also when `--name` or `var(--name)` is pasted. */
 const typedCSSName = computed(() => {
   const text = draft.cssName.trim()
@@ -191,7 +202,7 @@ function commitDescription() {
 }
 
 function commitValue(modeId: string) {
-  const text = String(draft.values[modeId] ?? '')
+  const text = draft.values[modeId] ?? ''
   if (variable.value.type === 'FLOAT') {
     const number = Number(text)
     if (text.trim() && Number.isFinite(number))
@@ -200,6 +211,44 @@ function commitValue(modeId: string) {
     return
   }
   emit('updateValue', modeId, text)
+}
+
+/**
+ * An expression replaces a mode's value in CSS alone; the canvas keeps drawing the value. It
+ * records a plain number, so a number edited elsewhere later shows it no longer applies.
+ */
+function commitExpression(modeId: string, css: string) {
+  addingExpression.value = null
+  if (css === (variable.value.expressions?.[modeId]?.css ?? '')) return
+  const value = variable.value.valuesByMode[modeId]
+  const others = omit(variable.value.expressions ?? {}, [modeId])
+  const expression: TokenExpression = typeof value === 'number' ? { css, resolved: value } : { css }
+  const expressions = css ? { ...others, [modeId]: expression } : others
+  emit('updateToken', { expressions: isEmptyObject(expressions) ? undefined : expressions })
+}
+
+/** The mode whose expression field was asked for, which shows until it is committed. */
+const addingExpression = ref<string | null>(null)
+const expressionId = `${useId()}-expression`
+watch(
+  () => variable.value.id,
+  () => (addingExpression.value = null)
+)
+function showsExpression(modeId: string) {
+  return addingExpression.value === modeId || Boolean(variable.value.expressions?.[modeId])
+}
+function addExpression(modeId: string) {
+  addingExpression.value = modeId
+  void nextTick(() => document.getElementById(`${expressionId}-${modeId}`)?.focus())
+}
+/** Escape restores the saved expression; a field asked for and left empty closes again. */
+function cancelExpression(modeId: string) {
+  draft.expressions[modeId] = variable.value.expressions?.[modeId]?.css ?? ''
+  addingExpression.value = null
+}
+function clearExpression(modeId: string) {
+  draft.expressions[modeId] = ''
+  commitExpression(modeId, '')
 }
 
 function hasScope(scope: VariableScope) {
@@ -214,6 +263,11 @@ function toggleScope(scope: VariableScope, on: boolean) {
 
 function alias(modeId: string) {
   return row.values.find((value) => value.modeId === modeId)?.alias
+}
+
+/** The color an aliased value resolves to, shown beside the variable as the panel does. */
+function aliasColor(modeId: string): Color | undefined {
+  return row.values.find((value) => value.modeId === modeId)?.color
 }
 
 function aliasId(modeId: string): string | undefined {
@@ -266,24 +320,26 @@ function cssNameDone(event: KeyboardEvent) {
       </label>
       <label :class="ui.field()">
         <span :class="ui.label()">{{ variables.cssName }}</span>
-        <AppInput
-          v-model="draft.cssName"
-          size="sm"
-          :placeholder="row.cssName"
-          :state="cssNameInvalid ? 'invalid' : 'idle'"
-          :aria-invalid="cssNameInvalid"
-          :aria-describedby="cssNameInvalid ? cssNameErrorId : undefined"
-          :ui="{ input: 'font-mono pl-7' }"
-          data-test-id="variables-css-name"
-          @change="commitCSSName"
-          @enter="cssNameDone"
-        >
-          <template #leading><span :class="ui.prefix()">--</span></template>
-        </AppInput>
+        <Tip :label="variables.cssNameHint">
+          <AppInput
+            v-model="draft.cssName"
+            size="sm"
+            :placeholder="row.cssName"
+            :state="cssNameInvalid ? 'invalid' : 'idle'"
+            :aria-invalid="cssNameInvalid"
+            :aria-describedby="cssNameInvalid ? cssNameErrorId : cssNameHintId"
+            :ui="{ input: 'font-mono pl-7' }"
+            data-test-id="variables-css-name"
+            @change="commitCSSName"
+            @enter="cssNameDone"
+          >
+            <template #leading><span :class="ui.prefix()">--</span></template>
+          </AppInput>
+        </Tip>
         <p v-if="cssNameInvalid" :id="cssNameErrorId" :class="ui.error()" role="alert">
           {{ variables.cssNameInvalid }}
         </p>
-        <span :class="ui.hint()">{{ variables.cssNameHint }}</span>
+        <span :id="cssNameHintId" class="sr-only">{{ variables.cssNameHint }}</span>
       </label>
       <label v-if="variable.type === 'FLOAT'" :class="ui.field()">
         <span :class="ui.label()">{{ variables.unit }}</span>
@@ -297,25 +353,44 @@ function cssNameDone(event: KeyboardEvent) {
         <span v-if="!singleMode" :class="ui.label()">{{ mode.name }}</span>
         <TokenValueEditor
           v-if="formula && (variable.type === 'FLOAT' || variable.type === 'BOOLEAN')"
-          :key="`${variable.id}:${mode.modeId}`"
           :variable="variable"
           :mode-id="mode.modeId"
           :label="singleMode ? variables.value : mode.name"
           :candidates="aliasCandidates"
           :formula="formula"
-          @apply="emit('updateMode', mode.modeId, $event)"
+          :expression="variable.type === 'FLOAT' ? showsExpression(mode.modeId) : undefined"
+          @apply="emit('updateValue', mode.modeId, $event)"
           @done="emit('done')"
-        />
+          @add-expression="addExpression(mode.modeId)"
+          @remove-expression="clearExpression(mode.modeId)"
+        >
+          <template #below>
+            <TokenCSSExpression
+              v-if="showsExpression(mode.modeId)"
+              :id="`${expressionId}-${mode.modeId}`"
+              v-model="draft.expressions[mode.modeId]"
+              :label="singleMode ? variables.expression : `${mode.name}: ${variables.expression}`"
+              :unit="numberUnit"
+              :candidates="cssCandidates"
+              :described-by="`${expressionId}-hint`"
+              @commit="commitExpression(mode.modeId, $event)"
+              @cancel="cancelExpression(mode.modeId)"
+            />
+          </template>
+        </TokenValueEditor>
         <div v-else :class="ui.valueRow()">
           <div v-if="alias(mode.modeId)" :class="ui.valueControl()">
-            <BindingPill :label="alias(mode.modeId) ?? ''" />
-            <IconButton
-              :label="variables.detachVariable"
-              data-test-id="variables-detach-variable"
-              @click="emit('detach', mode.modeId)"
-            >
-              <icon-lucide-unlink class="size-3.5" />
-            </IconButton>
+            <FillSwatch
+              v-if="aliasColor(mode.modeId)"
+              :fill="{
+                type: 'SOLID',
+                visible: true,
+                opacity: aliasColor(mode.modeId)?.a ?? 1,
+                color: aliasColor(mode.modeId) ?? { r: 0, g: 0, b: 0, a: 1 }
+              }"
+              :ui="{ root: 'size-5 shrink-0' }"
+            />
+            <BindingPill class="min-w-0 flex-1" :label="alias(mode.modeId) ?? ''" />
           </div>
           <ColorInput
             v-else-if="color(mode.modeId)"
@@ -324,17 +399,15 @@ function cssNameDone(event: KeyboardEvent) {
             @update="emit('updateValue', mode.modeId, $event, colorGesture(mode.modeId))"
             @open-change="setPickerOpen(mode.modeId, $event)"
           />
-          <div v-else-if="variable.type === 'BOOLEAN'" :class="ui.valueControl()">
-            <AppSwitch
-              :model-value="variable.valuesByMode[mode.modeId] === true"
-              :label="mode.name"
-              @update:model-value="emit('updateValue', mode.modeId, $event)"
-            />
-          </div>
+          <AppCheckbox
+            v-else-if="variable.type === 'BOOLEAN'"
+            :model-value="variable.valuesByMode[mode.modeId] === true"
+            :ariaLabel="mode.name"
+            @update:model-value="emit('updateValue', mode.modeId, $event)"
+          />
           <AppInput
             v-else
             v-model="draft.values[mode.modeId]"
-            :aria-label="mode.name"
             :type="variable.type === 'FLOAT' ? 'number' : 'text'"
             size="sm"
             @change="commitValue(mode.modeId)"
@@ -361,6 +434,7 @@ function cssNameDone(event: KeyboardEvent) {
           />
         </div>
       </div>
+      <span :id="`${expressionId}-hint`" class="sr-only">{{ variables.expressionHint }}</span>
     </section>
 
     <section v-if="scopes.length > 0" :class="ui.section()">

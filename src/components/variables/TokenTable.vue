@@ -25,8 +25,6 @@ import { VARIABLE_TYPE_ICONS } from '@/components/variables/type-icons'
 import { useConditionLabels } from '@/components/variables/useConditionLabels'
 import tokensPanelTheme from '@/theme/tokens-panel'
 
-import FormulaPreview from './formula-field/FormulaPreview.vue'
-
 const { collection, groups, labels, modeIds, groupOptions } = defineProps<{
   collection: VariableCollection
   groups: TokenGroup[]
@@ -290,7 +288,15 @@ function dropEdge(id: string) {
                   }"
                   :ui="{ root: 'size-3.5 shrink-0 rounded-sm' }"
                 />
-                <FormulaPreview v-if="value.formula" :formula="value.formula" />
+                <template v-if="value.formula">
+                  <Tip :label="value.formula">
+                    <icon-lucide-square-function
+                      :class="ui.formulaIcon()"
+                      :aria-label="variables.formula"
+                    />
+                  </Tip>
+                  <span class="truncate">{{ value.css || '—' }}</span>
+                </template>
                 <span v-else-if="value.expression" :class="ui.expression()">{{
                   value.expression
                 }}</span>

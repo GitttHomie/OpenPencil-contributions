@@ -12,7 +12,7 @@ import {
   tokenNumberFromUnit,
   tokenNumberInUnit,
   variableValueReferences,
-  formatVariableFormula,
+  printFormula,
   type Color,
   type SceneGraph,
   type Variable,
@@ -28,14 +28,10 @@ export interface TokenModeValue {
   modeId: string
   css: string
   color?: Color
-  formula?: {
-    source: string
-    references: Record<string, { label: string; displayValue: string }>
-  }
+  /** A formula as it reads, with variable names; `css` holds what it gives in this mode. */
+  formula?: string
   /** The aliased variable's name, when the value points at another token. */
   alias?: string
-  /** Resolved numeric alias value, formatted in the consuming token's unit. */
-  numericValue?: string
   /** A CSS expression written instead of the stored number, such as `clamp(…)`. */
   expression?: string
 }
@@ -49,6 +45,8 @@ export interface TokenRow {
 }
 
 export interface TokenFormulaActions {
+  /** Variables a formula can use; a true/false formula can also compare numbers. */
+  candidates: AliasCandidate[]
   parse: (modeId: string, source: string) => { value: VariableValue; resolved: number | boolean }
   format: (value: VariableValue) => string
   reference: (id: string) => string
@@ -94,22 +92,10 @@ function modeValue(
     let result: string | undefined
     if (typeof resolved === 'number') result = tokenNumberToCSS(resolved, variableUnit(variable))
     if (typeof resolved === 'boolean') result = String(resolved)
-    const formula = formatVariableFormula(graph, value)
     return {
       modeId,
-      css: result ?? formula,
-      formula: {
-        source: formula,
-        references: Object.fromEntries(
-          variableValueReferences(value).map((id) => [
-            formatVariableFormula(graph, { aliasId: id }),
-            {
-              label: graph.variables.get(id)?.name ?? id,
-              displayValue: tokenValueText(variable, graph.resolveVariable(id, modeId))
-            }
-          ])
-        )
-      }
+      css: result ?? '',
+      formula: printFormula(value.value, (id) => graph.variables.get(id)?.name ?? id)
     }
   }
   if (typeof value === 'object' && 'aliasId' in value) {
@@ -122,11 +108,7 @@ function modeValue(
       css: target?.name ?? value.aliasId,
       alias: target?.name,
       color,
-      expression,
-      numericValue:
-        typeof resolved === 'number'
-          ? tokenNumberToCSS(resolved, variableUnit(variable))
-          : undefined
+      expression
     }
   }
   if (typeof value === 'object') return { modeId, css: colorToHex(value), color: value, expression }
@@ -236,7 +218,7 @@ export function searchTokenIds(rows: readonly TokenRow[], query: string): Set<st
     css: `--${row.cssName}`,
     description: row.variable.description,
     values: row.values.flatMap((value) =>
-      compact([value.css, value.alias, value.expression, value.formula?.source])
+      compact([value.css, value.alias, value.expression, value.formula])
     )
   }))
   return new Set(fuzzyFilter(entries, TOKEN_SEARCH_KEYS, query).map((entry) => entry.id))
@@ -304,6 +286,38 @@ export interface AliasCandidate {
   text?: string
 }
 
+/** A number token a CSS expression can name as `var(--name)`. */
+export interface CSSReferenceCandidate {
+  id: string
+  name: string
+  cssName: string
+  collection: string
+  /** The token's value in its unit, as the list shows it. */
+  text: string
+}
+
+/** Every other number token, by the CSS name the stylesheet declares it under. */
+export function cssReferenceCandidates(
+  graph: SceneGraph,
+  variable: Variable
+): CSSReferenceCandidate[] {
+  const names = variableCSSNames(collectionVariables(graph))
+  return [...graph.variables.values()].flatMap((candidate) => {
+    const cssName = names.get(candidate.id)
+    if (candidate.id === variable.id || candidate.type !== 'FLOAT' || !cssName) return []
+    const number = graph.resolveNumberVariable(candidate.id)
+    return [
+      {
+        id: candidate.id,
+        name: candidate.name,
+        cssName,
+        collection: graph.variableCollections.get(candidate.collectionId)?.name ?? '',
+        text: number === undefined ? '—' : tokenNumberToCSS(number, variableUnit(candidate))
+      }
+    ]
+  })
+}
+
 /** Whether `fromId` reaches `targetId` through aliases in any mode. */
 function aliasesTo(
   graph: SceneGraph,
@@ -325,15 +339,33 @@ function aliasesTo(
  * points back at it, which would make the two resolve to nothing.
  */
 export function aliasCandidates(graph: SceneGraph, variable: Variable): AliasCandidate[] {
+  return referenceCandidates(graph, variable, [variable.type])
+}
+
+/** Variables a number or true/false formula can refer to: a true/false one compares numbers too. */
+export function formulaCandidates(graph: SceneGraph, variable: Variable): AliasCandidate[] {
+  return referenceCandidates(
+    graph,
+    variable,
+    variable.type === 'BOOLEAN' ? ['BOOLEAN', 'FLOAT'] : [variable.type]
+  )
+}
+
+function referenceCandidates(
+  graph: SceneGraph,
+  variable: Variable,
+  types: readonly Variable['type'][]
+): AliasCandidate[] {
   return [...graph.variables.values()].flatMap((candidate) => {
-    if (candidate.type !== variable.type || aliasesTo(graph, candidate.id, variable.id)) return []
-    const number = variable.type === 'FLOAT' ? graph.resolveNumberVariable(candidate.id) : undefined
+    if (!types.includes(candidate.type) || aliasesTo(graph, candidate.id, variable.id)) return []
+    const number =
+      candidate.type === 'FLOAT' ? graph.resolveNumberVariable(candidate.id) : undefined
     return [
       {
         id: candidate.id,
         name: candidate.name,
         collection: graph.variableCollections.get(candidate.collectionId)?.name ?? '',
-        color: variable.type === 'COLOR' ? graph.resolveColorVariable(candidate.id) : undefined,
+        color: candidate.type === 'COLOR' ? graph.resolveColorVariable(candidate.id) : undefined,
         text: number === undefined ? undefined : tokenNumberToCSS(number, variableUnit(candidate))
       }
     ]

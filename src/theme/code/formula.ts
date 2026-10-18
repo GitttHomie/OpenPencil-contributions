@@ -1,26 +1,75 @@
 import { EditorView } from '@codemirror/view'
 
-/** A single value field, without the gutters or panels of the full code editor. */
+/**
+ * A one-line value field in the UI font, without the gutters or panels of the code editor. Its
+ * completion list matches the variable picker: a floating surface with compact rows grouped by
+ * collection, each value at the row's end.
+ */
 export function formulaEditorTheme(dark: boolean) {
   return EditorView.theme(
     {
       '&': { fontSize: '12px' },
       '&.cm-focused': { outline: 'none' },
-      '.cm-scroller': { fontFamily: 'var(--font-mono)', overflow: 'auto' },
-      '.cm-content': { whiteSpace: 'pre-wrap', caretColor: 'var(--color-primary)' },
+      '.cm-scroller': {
+        fontFamily: 'inherit',
+        lineHeight: '20px',
+        overflow: 'hidden'
+      },
+      '.cm-content': { padding: '0', caretColor: 'var(--color-surface)' },
       '.cm-line': { padding: '0' },
-      '.cm-tooltip': {
+      '.cm-placeholder': { color: 'var(--color-muted)' },
+      '.cm-tooltip.cm-tooltip-autocomplete': {
         backgroundColor: 'var(--color-panel)',
         color: 'var(--color-surface)',
-        border: '1px solid var(--color-border)',
-        borderRadius: '4px'
+        border: 'none',
+        borderRadius: '12px',
+        boxShadow: '0 0 0 1px var(--color-border), 0 8px 30px rgb(0 0 0 / 0.4)',
+        padding: '4px',
+        marginTop: '6px'
       },
-      '.cm-tooltip-autocomplete ul li': { padding: '4px 8px' },
-      '.cm-tooltip-autocomplete ul li[aria-selected]': {
+      '.cm-tooltip.cm-tooltip-autocomplete > ul': {
+        fontFamily: 'inherit',
+        maxHeight: '15rem',
+        minWidth: '14rem',
+        maxWidth: '18rem'
+      },
+      '.cm-tooltip.cm-tooltip-autocomplete > ul > li': {
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        minHeight: '28px',
+        padding: '0 4px',
+        borderRadius: '4px',
+        fontSize: '12px'
+      },
+      '.cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected]': {
         backgroundColor: 'var(--color-hover)',
         color: 'var(--color-surface)'
       },
-      '.cm-completionDetail': { color: 'var(--color-muted)', marginLeft: '12px' }
+      '.cm-tooltip.cm-tooltip-autocomplete > ul > completion-section': {
+        display: 'block',
+        padding: '6px 4px 4px',
+        border: 'none',
+        fontSize: '10px',
+        fontWeight: '500',
+        letterSpacing: '0.025em',
+        textTransform: 'uppercase',
+        color: 'var(--color-muted)',
+        opacity: '1'
+      },
+      '.cm-completionLabel': {
+        flex: '1',
+        minWidth: '0',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis'
+      },
+      '.cm-completionMatchedText': { textDecoration: 'none', fontWeight: '600' },
+      '.cm-completionDetail': {
+        marginLeft: 'auto',
+        fontStyle: 'normal',
+        fontVariantNumeric: 'tabular-nums',
+        color: 'var(--color-muted)'
+      }
     },
     { dark }
   )

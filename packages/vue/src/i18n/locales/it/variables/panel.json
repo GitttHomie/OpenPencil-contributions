@@ -24,6 +24,12 @@
   "values": "Valori",
   "expression": "Espressione CSS",
   "expressionHint": "Scritta al posto del valore in CSS, ad esempio clamp(1rem, 4vw, 1.5rem).",
+  "addExpression": "Aggiungi espressione CSS",
+  "removeExpression": "Rimuovi l’espressione CSS",
+  "cssExpressionUnclosed": "A una funzione manca la )",
+  "cssExpressionNegated": "Per negare un token, scrivi calc(-1 * var({property}))",
+  "cssExpressionUnknownToken": "Nessun token si chiama {name}",
+  "cssExpressionInvalid": "Valore non valido per {property}",
   "scopes": "Ambiti",
   "description": "Descrizione",
   "collection": "Raccolta",
@@ -119,7 +125,7 @@
   "importMissingFile": "{file}, a cui rimanda {from}, non è stato scelto",
   "importNothing": "Questi file non contengono design token.",
   "importAction": "Importa",
-  "removeReference": "Rimuovi {name}",
-  "insertReference": "Inserisci variabile",
-  "formulaResult": "Risultato"
+  "formula": "Formula",
+  "useFormula": "Usa una formula",
+  "formulaPlaceholder": "Valore o formula"
 }

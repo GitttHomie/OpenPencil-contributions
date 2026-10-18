@@ -1,23 +1,30 @@
-import { isolateHistory } from '@codemirror/commands'
 import { Facet, StateField, type EditorState } from '@codemirror/state'
 import { Decoration, EditorView, WidgetType } from '@codemirror/view'
-import { h, nextTick, render } from 'vue'
+import { h, nextTick, render, type AppContext } from 'vue'
 
-import FormulaReferencePill from './FormulaReferencePill.vue'
+import BindingPill from '@/components/ui/binding/BindingPill.vue'
+
+import type { ReferenceRange } from './dialects/types'
 import { formulaSegments, type FormulaPill } from './source'
 
-interface ReferencePill extends FormulaPill {
-  removeLabel: string
+interface FormulaReferences {
+  pills: ReadonlyMap<string, FormulaPill>
+  /** Where the field's syntax spells finished references. */
+  ranges: (source: string) => ReferenceRange[]
+  /** The host app's context, so a pill rendered outside the component tree keeps its globals. */
+  appContext: AppContext | null
 }
 
-export const formulaReferences = Facet.define<ReadonlyMap<string, ReferencePill>>()
+export const formulaReferences = Facet.define<FormulaReferences>()
+
+/** A pill inside the line, sitting on the text like a word. */
+const PILL_UI = { pill: 'mx-px inline-flex max-w-40 flex-none align-middle' }
 
 class ReferenceWidget extends WidgetType {
   constructor(
     readonly source: string,
-    readonly start: number,
-    readonly end: number,
-    readonly pill: ReferencePill
+    readonly pill: FormulaPill,
+    readonly appContext: AppContext | null
   ) {
     super()
   }
@@ -25,11 +32,8 @@ class ReferenceWidget extends WidgetType {
   eq(other: ReferenceWidget) {
     return (
       this.source === other.source &&
-      this.start === other.start &&
-      this.end === other.end &&
       this.pill.label === other.pill.label &&
-      this.pill.displayValue === other.pill.displayValue &&
-      this.pill.removeLabel === other.pill.removeLabel
+      this.pill.tooltip === other.pill.tooltip
     )
   }
 
@@ -40,22 +44,13 @@ class ReferenceWidget extends WidgetType {
     // Vue rendering flushes watchers; defer it until CodeMirror finishes its transaction.
     void nextTick(() => {
       if (!host.isConnected) return
-      render(
-        h(FormulaReferencePill, {
-          pill: this.pill,
-          removeLabel: this.pill.removeLabel,
-          onRemove: () => {
-            view.dispatch({
-              changes: { from: this.start, to: this.end },
-              selection: { anchor: this.start },
-              annotations: isolateHistory.of('full'),
-              userEvent: 'delete'
-            })
-            view.focus()
-          }
-        }),
-        host
-      )
+      const vnode = h(BindingPill, {
+        label: this.pill.label,
+        tooltip: this.pill.tooltip,
+        ui: PILL_UI
+      })
+      vnode.appContext = this.appContext
+      render(vnode, host)
       view.requestMeasure()
     })
     return host
@@ -66,28 +61,29 @@ class ReferenceWidget extends WidgetType {
   }
 }
 
-function decorations(state: EditorState) {
-  const references = state.facet(formulaReferences)[0]
-  const ranges = []
-  for (const { source, start, end } of formulaSegments(state.doc.toString(), (source) =>
-    references?.get(source)
+function pillDecorations(state: EditorState) {
+  const references = state.facet(formulaReferences).at(0)
+  const decorations = []
+  const doc = state.doc.toString()
+  const ranges = references?.ranges(doc) ?? []
+  for (const { source, start, end, pill } of formulaSegments(doc, ranges, (reference) =>
+    references?.pills.get(reference)
   )) {
-    const pill = references?.get(source)
     if (pill)
-      ranges.push(
-        Decoration.replace({ widget: new ReferenceWidget(source, start, end, pill) }).range(
-          start,
-          end
-        )
+      decorations.push(
+        Decoration.replace({
+          widget: new ReferenceWidget(source, pill, references?.appContext ?? null)
+        }).range(start, end)
       )
   }
-  return Decoration.set(ranges)
+  return Decoration.set(decorations)
 }
 
+/** References show as variable pills that the caret, Backspace and Delete treat as one unit. */
 export const referencePills = StateField.define({
-  create: decorations,
+  create: pillDecorations,
   update: (value, transaction) =>
-    transaction.docChanged || transaction.reconfigured ? decorations(transaction.state) : value,
+    transaction.docChanged || transaction.reconfigured ? pillDecorations(transaction.state) : value,
   provide: (field) => [
     EditorView.decorations.from(field),
     EditorView.atomicRanges.of((view) => view.state.field(field))

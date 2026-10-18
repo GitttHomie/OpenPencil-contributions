@@ -2,32 +2,42 @@
 import { tv } from 'tailwind-variants'
 import { useTemplateRef } from 'vue'
 
-import { useI18n } from '@open-pencil/vue'
-
 import inputTheme from '@/theme/input/input'
 import tokensPanelTheme from '@/theme/tokens-panel'
 
-import type { FormulaCompletion } from './formula-field/completion'
+import type { ExpressionDialect, ReferenceCompletion } from './formula-field/dialects/types'
 import type { FormulaPill, FormulaSelection } from './formula-field/source'
 import { useFormulaField } from './formula-field/useFormulaField'
 
 const model = defineModel<string>({ required: true })
 const {
+  dialect,
   id,
   label,
-  invalid,
+  placeholder = '',
+  invalid = false,
   describedBy,
   resolve,
   completions,
-  state = 'idle'
+  prefix,
+  suffix,
+  unit
 } = defineProps<{
-  completions: readonly FormulaCompletion[]
+  /** The syntax the field edits; fixed for the field's lifetime. */
+  dialect: ExpressionDialect
+  completions: readonly ReferenceCompletion[]
   id: string
   label: string
-  invalid: boolean
-  describedBy: string
+  placeholder?: string
+  invalid?: boolean
+  describedBy?: string
   resolve: (source: string) => FormulaPill | undefined
-  state?: 'idle' | 'bound' | 'invalid'
+  /** What the field holds, such as CSS, shown at its start. */
+  prefix?: string
+  /** What the formula gives, shown at the field's end. */
+  suffix?: string
+  /** The unit a plain number is in, shown at the field's end in place of a result. */
+  unit?: string
 }>()
 const emit = defineEmits<{
   change: []
@@ -38,19 +48,18 @@ const emit = defineEmits<{
 const field = useTemplateRef<HTMLDivElement>('field')
 const ui = tv(tokensPanelTheme)()
 const inputUI = tv(inputTheme)
-const { variables } = useI18n()
 const editing = useFormulaField(field, model, {
+  dialect,
   label: () => label,
+  placeholder: () => placeholder,
   completions: () => completions,
   attributes: () => ({
     id,
     'aria-invalid': String(invalid),
-    'aria-describedby': describedBy,
-    'aria-multiline': 'false',
-    class: `${inputUI({ size: 'sm', state })} ${ui.formulaInput()}`
+    ...(describedBy ? { 'aria-describedby': describedBy } : {}),
+    'aria-multiline': 'false'
   }),
   resolve: (source) => resolve(source),
-  removeLabel: (name) => variables.value.removeReference({ name }),
   onChange: () => emit('change'),
   onEnter: () => emit('enter'),
   onCancel: () => emit('cancel'),
@@ -66,5 +75,18 @@ defineOptions({ inheritAttrs: false })
 </script>
 
 <template>
-  <div ref="field" class="min-w-0" />
+  <div
+    :class="[inputUI({ size: 'sm' }), ui.formulaField()]"
+    :data-invalid="invalid ? '' : undefined"
+    @pointerdown.self.prevent="editing.focus()"
+  >
+    <span v-if="prefix" :class="[ui.formulaAffix(), ui.formulaPrefix()]" aria-hidden="true">{{
+      prefix
+    }}</span>
+    <div ref="field" :class="ui.formulaEditor()" />
+    <span v-if="suffix" :class="[ui.formulaAffix(), ui.formulaSuffix()]" aria-hidden="true"
+      >= {{ suffix }}</span
+    >
+    <span v-else-if="unit" :class="ui.formulaAffix()" aria-hidden="true">{{ unit }}</span>
+  </div>
 </template>

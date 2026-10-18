@@ -17,13 +17,14 @@ import { useI18n, useSceneComputed, useVariables } from '@open-pencil/vue'
 
 import {
   aliasCandidates,
+  cssReferenceCandidates,
+  formulaCandidates,
   groupTree,
   inGroup,
   searchTokenIds,
   tokenGroups,
   type TokenGroup
 } from '@/app/editor/tokens/model'
-import { applyTokenValueEdit, type TokenValueEdit } from '@/app/editor/tokens/value-editor'
 import AppButton from '@/components/ui/button/AppButton.vue'
 import IconButton from '@/components/ui/button/IconButton.vue'
 import AppPlaceholder from '@/components/ui/feedback/AppPlaceholder.vue'
@@ -140,6 +141,12 @@ const bulkIds = computed(
 )
 const candidates = computed(() =>
   editedRow.value ? aliasCandidates(editor.graph, editedRow.value.variable) : []
+)
+const referenceCandidates = computed(() =>
+  editedRow.value ? formulaCandidates(editor.graph, editedRow.value.variable) : []
+)
+const cssCandidates = computed(() =>
+  editedRow.value ? cssReferenceCandidates(editor.graph, editedRow.value.variable) : []
 )
 
 const collectionOptions = computed(() =>
@@ -277,8 +284,10 @@ const tokenInspector = computed(() => {
   const id = editedId.value
   return {
     aliasCandidates: candidates.value,
+    cssCandidates: cssCandidates.value,
     formula: id
       ? {
+          candidates: referenceCandidates.value,
           parse: (modeId: string, source: string) =>
             parseVariableFormula(editor.graph, id, modeId, source),
           format: (value: VariableValue) => formatVariableFormula(editor.graph, value),
@@ -290,8 +299,6 @@ const tokenInspector = computed(() => {
       id && editor.updateVariableToken(id, patch),
     onUpdateValue: (modeId: string, value: VariableValue, coalesceKey?: string) =>
       id && editor.updateVariableValue(id, modeId, value, coalesceKey),
-    onUpdateMode: (modeId: string, edit: TokenValueEdit) =>
-      id && applyTokenValueEdit(editor, id, modeId, edit),
     onAlias: (modeId: string, aliasId: string) => id && actions.alias(id, modeId, aliasId),
     onDetach: (modeId: string) => id && actions.detach(id, modeId),
     onRemove: () => id && removeTokens([id]),

@@ -1,141 +1,168 @@
 <script setup lang="ts">
-import { computedAsync } from '@vueuse/core'
+import {
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuPortal,
+  DropdownMenuRoot,
+  DropdownMenuTrigger
+} from 'reka-ui'
 import { tv } from 'tailwind-variants'
-import { computed, ref, useId, useTemplateRef, watch } from 'vue'
+import { computed, nextTick, ref, useId, useTemplateRef, watch } from 'vue'
 
-import { loadTokenValidator } from '@open-pencil/dom-css/export'
-import type { Variable } from '@open-pencil/scene-graph'
+import { tokenNumberToCSS, variableUnit } from '@open-pencil/dom-css/export'
+import type { Variable, VariableValue } from '@open-pencil/scene-graph'
 import { useI18n } from '@open-pencil/vue'
 
-import {
-  tokenValueText,
-  type AliasCandidate,
-  type TokenFormulaActions
-} from '@/app/editor/tokens/model'
-import {
-  parseTokenEditorText,
-  tokenEditorText,
-  type TokenValueEdit
-} from '@/app/editor/tokens/value-editor'
+import type { AliasCandidate, TokenFormulaActions } from '@/app/editor/tokens/model'
+import { parseTokenEditorText, tokenEditorText } from '@/app/editor/tokens/value-editor'
 import { VariablePicker } from '@/components/ui/binding'
+import IconButton from '@/components/ui/button/IconButton.vue'
+import { useMenuUI } from '@/components/ui/menu/menu'
+import AppSwitch from '@/components/ui/toggle/AppSwitch.vue'
 import tokensPanelTheme from '@/theme/tokens-panel'
 
+import { formulaDialect } from './formula-field/dialects/formula'
 import type { FormulaSelection } from './formula-field/source'
 import type TokenFormulaField from './TokenFormulaField.vue'
 
-const { variable, modeId, label, candidates, formula } = defineProps<{
+const { variable, modeId, label, candidates, formula, expression } = defineProps<{
   variable: Variable
   modeId: string
   label: string
   candidates: AliasCandidate[]
   formula: TokenFormulaActions
+  /** Whether the mode has a CSS expression; left out where the value takes none. */
+  expression?: boolean
 }>()
-const emit = defineEmits<{ apply: [edit: TokenValueEdit]; done: [] }>()
+const emit = defineEmits<{
+  apply: [value: VariableValue]
+  done: []
+  addExpression: []
+  removeExpression: []
+}>()
 const { variables } = useI18n()
 const ui = tv(tokensPanelTheme)()
+const menu = useMenuUI({ content: 'w-48', item: 'justify-start gap-2' })
 const fieldId = useId()
-const draft = ref('')
-const commitError = ref('')
 const field = useTemplateRef<InstanceType<typeof TokenFormulaField>>('field')
+
+const draft = ref('')
 const selection = ref<FormulaSelection | null>(null)
 const insertionCaret = ref<number | null>(null)
-const submitted = ref<string | null>(null)
-const validator = computedAsync(loadTokenValidator, null)
+/** Errors show once a value is committed, not while it is being typed. */
+const committed = ref(false)
+const commitError = ref('')
+/** A true/false value shows a switch until the user asks to write a formula instead. */
+const writingFormula = ref(false)
+
+const value = computed(() => variable.valuesByMode[modeId])
 const saved = computed(() => tokenEditorText(variable, modeId, formula))
-watch(
-  [() => variable.id, () => modeId],
-  () => {
-    draft.value = saved.value
-    selection.value = null
-    insertionCaret.value = null
-    submitted.value = null
-  },
-  { immediate: true }
+const showsSwitch = computed(
+  () => variable.type === 'BOOLEAN' && typeof value.value === 'boolean' && !writingFormula.value
 )
-watch(saved, (value) => {
-  // Acknowledging our own commit preserves the authored spelling and picker selection.
-  if (value !== submitted.value) {
-    draft.value = value
-    selection.value = null
-  }
-  submitted.value = null
+const alias = computed(() =>
+  typeof value.value === 'object' && 'aliasId' in value.value ? value.value.aliasId : undefined
+)
+
+function reset() {
+  draft.value = saved.value
+  selection.value = null
+  insertionCaret.value = null
+  committed.value = false
+  commitError.value = ''
+}
+watch([() => variable.id, () => modeId], () => {
+  writingFormula.value = false
+  reset()
 })
+watch(saved, reset, { immediate: true })
 watch(draft, () => {
+  committed.value = false
   commitError.value = ''
 })
-const alias = computed(() => {
-  const value = variable.valuesByMode[modeId]
-  return typeof value === 'object' && 'aliasId' in value ? value.aliasId : undefined
-})
-const pickerItems = computed(() =>
-  candidates.map((candidate) => {
-    try {
-      const { resolved } = formula.parse(modeId, formula.reference(candidate.id))
-      return { ...candidate, text: tokenValueText(variable, resolved) }
-    } catch {
-      return { ...candidate, text: '—' }
-    }
-  })
-)
+
+/** A resolved value as the list shows it: a number with its unit, or true and false. */
+function resultText(resolved: VariableValue | undefined) {
+  if (typeof resolved === 'number') return tokenNumberToCSS(resolved, variableUnit(variable))
+  if (typeof resolved === 'boolean') return String(resolved)
+  return '—'
+}
+
+/** A candidate's value in this mode; one of another type, compared in a formula, shows its own. */
+function withValue(candidate: AliasCandidate) {
+  try {
+    const { resolved } = formula.parse(modeId, formula.reference(candidate.id))
+    return { ...candidate, text: resultText(resolved) }
+  } catch {
+    return { ...candidate, text: candidate.text ?? '—' }
+  }
+}
+const pickerItems = computed(() => candidates.map(withValue))
+const referenceItems = computed(() => formula.candidates.map(withValue))
 const completions = computed(() =>
-  pickerItems.value.map((item) => ({
+  referenceItems.value.map((item) => ({
     label: item.name,
-    detail: `${item.collection} · ${item.text}`,
-    source: formula.reference(item.id)
+    section: item.collection,
+    detail: item.text,
+    insert: formula.reference(item.id)
   }))
 )
-const candidatesById = computed(() => new Map(pickerItems.value.map((item) => [item.id, item])))
+const candidatesBySource = computed(
+  () => new Map(referenceItems.value.map((item) => [formula.reference(item.id), item]))
+)
+const candidatesById = computed(() => new Map(referenceItems.value.map((item) => [item.id, item])))
+
+/** A reference's pill: found by its spelling, or by resolving another spelling of the name. */
 function resolveReference(source: string) {
+  const candidate = candidatesBySource.value.get(source) ?? candidateNamed(source)
+  // The pill names the variable as its group row does; the tooltip gives the full path.
+  if (candidate)
+    return {
+      label: candidate.name.split('/').at(-1) ?? candidate.name,
+      tooltip: `${candidate.collection} · ${candidate.name} · ${candidate.text}`
+    }
+}
+function candidateNamed(source: string) {
   try {
-    const { value } = formula.parse(modeId, source)
-    if (typeof value !== 'object' || !('aliasId' in value)) return
-    const candidate = candidatesById.value.get(value.aliasId)
-    if (candidate) return { label: candidate.name, displayValue: candidate.text }
+    const parsed = formula.parse(modeId, source).value
+    if (typeof parsed === 'object' && 'aliasId' in parsed)
+      return candidatesById.value.get(parsed.aliasId)
   } catch {
-    // Incomplete or invalid references remain editable source text.
+    // Incomplete or invalid references stay editable source text.
     return undefined
   }
 }
-function parse() {
-  return parseTokenEditorText(
-    variable,
-    modeId,
-    draft.value,
-    formula,
-    (text) =>
-      validator.value?.declaration('value', text) === true &&
-      ['width', 'opacity', 'z-index'].some((property) => CSS.supports(property, text))
-  )
-}
+
 const preview = computed(() => {
   try {
-    return { result: parse(), error: '' }
+    return { edit: parseTokenEditorText(variable, modeId, draft.value, formula), error: '' }
   } catch (error) {
-    return { result: undefined, error: error instanceof Error ? error.message : String(error) }
+    return { edit: undefined, error: error instanceof Error ? error.message : String(error) }
   }
 })
-const error = computed(() => commitError.value || preview.value.error)
-const fieldState = computed(() => {
-  if (error.value) return 'invalid'
-  return alias.value ? 'bound' : 'idle'
+const error = computed(() => commitError.value || (committed.value ? preview.value.error : ''))
+const suffix = computed(() => {
+  const edit = preview.value.edit
+  return edit && edit.kind !== 'literal' ? resultText(edit.resolved) : undefined
 })
-const resultText = computed(
-  () =>
-    error.value ||
-    `${variables.value.formulaResult}: ${tokenValueText(variable, preview.value.result?.resolved)}`
-)
-const resultClass = computed(() => (error.value ? ui.error() : ui.hint()))
+/** A plain number reads in its unit, as the number field showed it. */
+const unit = computed(() => {
+  const literal = !draft.value.trim() || preview.value.edit?.kind === 'literal'
+  const name = variableUnit(variable)
+  return variable.type === 'FLOAT' && literal && name !== 'none' ? name : undefined
+})
+
 function apply() {
-  if (draft.value === saved.value) return true
-  try {
-    const edit = parse()
-    submitted.value = edit.expression?.css ?? formula.format(edit.value)
-    emit('apply', edit)
+  committed.value = true
+  if (draft.value === saved.value) {
+    if (typeof value.value === 'boolean') writingFormula.value = false
     return true
-  } catch (error) {
-    commitError.value = error instanceof Error ? error.message : String(error)
-    return false
   }
+  const edit = preview.value.edit
+  if (!edit) return false
+  emit('apply', edit.value)
+  if (typeof edit.value === 'boolean') writingFormula.value = false
+  return true
 }
 function done() {
   if (!apply()) return
@@ -143,15 +170,44 @@ function done() {
   emit('done')
 }
 function cancel() {
-  draft.value = saved.value
-  commitError.value = ''
+  reset()
+  writingFormula.value = false
   field.value?.blur()
 }
+
+/** Where focus goes once the menu closes, when an action moves it to a field. */
+const menuFocus = ref<'formula' | 'expression' | null>(null)
+const offersFormula = computed(() => showsSwitch.value)
+const offersMenu = computed(() => offersFormula.value || expression !== undefined)
+function writeFormula() {
+  writingFormula.value = true
+  menuFocus.value = 'formula'
+}
+/** The menu hands focus back to its button on closing; a field an action opened takes it instead. */
+function focusAfterMenu(event: Event) {
+  const target = menuFocus.value
+  menuFocus.value = null
+  if (!target) return
+  event.preventDefault()
+  if (target === 'expression') {
+    emit('addExpression')
+    return
+  }
+  void nextTick(() => {
+    field.value?.focus()
+    field.value?.setSelectionRange(0, draft.value.length)
+  })
+}
+
+/** A literal is replaced by the variable; inside a formula, the variable goes at the caret. */
 function insert(id: string) {
   const reference = formula.reference(id)
-  const literal = preview.value.result?.kind === 'literal'
-  const range =
-    literal || !selection.value ? { start: 0, end: draft.value.length } : selection.value
+  if (showsSwitch.value || preview.value.edit?.kind === 'literal' || !selection.value) {
+    const parsed = formula.parse(modeId, reference)
+    emit('apply', parsed.value)
+    return
+  }
+  const range = selection.value
   draft.value = draft.value.slice(0, range.start) + reference + draft.value.slice(range.end)
   insertionCaret.value = range.start + reference.length
 }
@@ -166,9 +222,8 @@ function restoreInputFocus(event: Event) {
 }
 function detach() {
   try {
-    const { resolved } = formula.parse(modeId, formula.format(variable.valuesByMode[modeId]))
-    draft.value = tokenValueText(variable, resolved)
-    apply()
+    const { resolved } = formula.parse(modeId, formula.format(value.value))
+    emit('apply', resolved)
   } catch (error) {
     commitError.value = error instanceof Error ? error.message : String(error)
   }
@@ -176,28 +231,39 @@ function detach() {
 </script>
 
 <template>
-  <div :class="ui.field()">
-    <div :class="ui.valueRow()">
-      <TokenFormulaField
-        ref="field"
-        :id="fieldId"
-        v-model="draft"
+  <div :class="ui.valueGrid()">
+    <div v-if="showsSwitch" :class="ui.valueControl()">
+      <AppSwitch
+        :model-value="value === true"
         :label="label"
-        :resolve="resolveReference"
-        :completions="completions"
-        :invalid="Boolean(error)"
-        :described-by="`${fieldId}-result`"
-        :state="fieldState"
-        @change="apply"
-        @enter="done"
-        @cancel="cancel"
-        @selection="selection = $event"
+        @update:model-value="emit('apply', $event)"
       />
+    </div>
+    <TokenFormulaField
+      v-else
+      ref="field"
+      :id="fieldId"
+      v-model="draft"
+      :dialect="formulaDialect"
+      :label="label"
+      :placeholder="variables.formulaPlaceholder"
+      :resolve="resolveReference"
+      :completions="completions"
+      :invalid="Boolean(error)"
+      :described-by="`${fieldId}-result`"
+      :suffix="suffix"
+      :unit="unit"
+      @change="apply"
+      @enter="done"
+      @cancel="cancel"
+      @selection="selection = $event"
+    />
+    <div :class="ui.valueActions()">
       <VariablePicker
         :items="pickerItems"
         :selected="alias"
         :state="alias ? 'bound' : 'unbound'"
-        :trigger-label="variables.insertReference"
+        :trigger-label="variables.useVariable"
         :search-placeholder="variables.searchVariables"
         :empty-label="variables.noMatchingVariables"
         :detach-label="variables.detachVariable"
@@ -205,12 +271,53 @@ function detach() {
         @detach="detach"
         @close-auto-focus="restoreInputFocus"
       />
+      <DropdownMenuRoot v-if="offersMenu">
+        <DropdownMenuTrigger as-child>
+          <IconButton
+            :label="variables.rowActions({ name: label })"
+            data-test-id="variables-value-actions"
+          >
+            <icon-lucide-ellipsis class="size-3.5" />
+          </IconButton>
+        </DropdownMenuTrigger>
+        <DropdownMenuPortal>
+          <DropdownMenuContent
+            side="bottom"
+            :side-offset="4"
+            align="end"
+            :class="menu.content"
+            @close-auto-focus="focusAfterMenu"
+          >
+            <DropdownMenuItem v-if="offersFormula" :class="menu.item" @select="writeFormula">
+              <icon-lucide-square-function :class="menu.icon" />
+              {{ variables.useFormula }}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              v-if="expression"
+              :class="menu.item"
+              @select="emit('removeExpression')"
+            >
+              <icon-lucide-x :class="menu.icon" />
+              {{ variables.removeExpression }}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              v-else-if="expression === false"
+              :class="menu.item"
+              @select="menuFocus = 'expression'"
+            >
+              <icon-lucide-code :class="menu.icon" />
+              {{ variables.addExpression }}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenuPortal>
+      </DropdownMenuRoot>
+      <!-- A row without actions keeps the column, so buttons line up across modes. -->
+      <span v-else :class="ui.actionSpace()" aria-hidden="true" />
     </div>
-    <p :id="`${fieldId}-result`" :class="resultClass" aria-live="polite">
-      {{ resultText }}
+    <p :id="`${fieldId}-result`" :class="error ? ui.error() : 'sr-only'" aria-live="polite">
+      {{ error || suffix }}
     </p>
-    <span v-if="preview.result?.kind === 'css'" :class="ui.hint()">{{
-      variables.expressionHint
-    }}</span>
+    <!-- Fields that belong to this value, such as its CSS expression, line up with it. -->
+    <slot name="below" />
   </div>
 </template>

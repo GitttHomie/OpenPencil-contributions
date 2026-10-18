@@ -24,6 +24,12 @@
   "values": "Valeurs",
   "expression": "Expression CSS",
   "expressionHint": "Écrite à la place de la valeur en CSS, par exemple clamp(1rem, 4vw, 1.5rem).",
+  "addExpression": "Ajouter une expression CSS",
+  "removeExpression": "Supprimer l’expression CSS",
+  "cssExpressionUnclosed": "Il manque la ) d’une fonction",
+  "cssExpressionNegated": "Pour inverser un jeton, écrivez calc(-1 * var({property}))",
+  "cssExpressionUnknownToken": "Aucun jeton ne s’appelle {name}",
+  "cssExpressionInvalid": "Valeur non valide pour {property}",
   "scopes": "Portées",
   "description": "Description",
   "collection": "Collection",
@@ -119,7 +125,7 @@
   "importMissingFile": "{file}, auquel {from} renvoie, n’a pas été choisi",
   "importNothing": "Ces fichiers ne contiennent aucun design token.",
   "importAction": "Importer",
-  "removeReference": "Retirer {name}",
-  "insertReference": "Insérer une variable",
-  "formulaResult": "Résultat"
+  "formula": "Formule",
+  "useFormula": "Utiliser une formule",
+  "formulaPlaceholder": "Valeur ou formule"
 }

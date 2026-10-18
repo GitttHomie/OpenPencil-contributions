@@ -65,20 +65,33 @@ export default {
       'w-full min-w-0 rounded border border-accent bg-input px-1.5 py-0.5 text-xs text-surface outline-none',
     /** A mode's value control beside the button that points it at a variable. */
     valueRow: 'flex items-center gap-1 [&>*:first-child]:min-w-0 [&>*:first-child]:flex-1',
-    valueControl: 'flex min-w-0 items-center gap-1.5',
-    formulaInput: 'h-auto min-h-7 px-1.5 py-1 font-mono leading-6 break-words',
-    formulaPill:
-      'inline-flex max-w-full items-center gap-1 rounded-sm bg-component/10 px-1 align-middle font-sans text-component',
-    formulaPillLabel: 'min-w-0 truncate text-[11px] font-medium',
-    formulaPillValue: 'shrink-0 text-[11px] tabular-nums',
-    formulaPillRemove:
-      'inline-flex size-4 shrink-0 cursor-pointer items-center justify-center rounded-sm hover:bg-component/15 focus-visible:outline focus-visible:outline-accent',
+    valueControl: 'flex min-h-7 min-w-0 items-center gap-1.5',
+    /**
+     * A value field with its buttons at the end; fields that belong to the value, such as its
+     * CSS expression, stack under the field in the same column.
+     */
+    valueGrid: 'grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-1 gap-y-1 *:col-start-1',
+    valueActions: 'col-start-2! row-start-1 flex h-7 items-center gap-1',
+    /** A CSS expression's field and buttons, in the value grid's columns under the value's. */
+    actionSpace: 'size-6 shrink-0',
+    expressionField: 'col-start-1',
+    expressionActions: 'col-start-2 flex h-7 items-center gap-1',
+    /** The value field, an input holding pills and operators, with the result at its end. */
+    formulaField:
+      'flex h-auto min-h-7 cursor-text items-end gap-1.5 py-[3px] focus-within:border-panel-focus focus-within:ring-1 focus-within:ring-accent/25 data-[invalid]:border-error data-[invalid]:focus-within:border-error',
+    formulaEditor: 'flex min-w-0 flex-1 *:min-w-0 *:flex-1',
+    /** Muted text at the field's start or end, such as CSS or the result. */
+    formulaAffix: 'shrink-0 leading-5 text-muted',
+    formulaPrefix: 'self-start',
+    formulaSuffix: 'max-w-[45%] truncate tabular-nums',
+    /** Marks a list value that a formula gives. */
+    formulaIcon: 'size-3 shrink-0 text-muted',
     empty: 'px-4 py-8 text-center text-xs text-muted'
   },
   variants: {
     /** Beside the token list on desktop; the whole panel, behind a back button, on mobile. */
     layout: {
-      side: { inspector: 'w-64 border-l border-border @6xl/tokens:w-72', output: 'h-56' },
+      side: { inspector: 'w-72 border-l border-border @6xl/tokens:w-80', output: 'h-56' },
       full: { inspector: 'min-h-0 w-full flex-1', output: 'min-h-0 flex-1 border-t-0' }
     }
   },

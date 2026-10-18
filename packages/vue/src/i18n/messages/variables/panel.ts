@@ -28,6 +28,12 @@ export const variablesMessageDefaults = {
   values: 'Values',
   expression: 'CSS expression',
   expressionHint: 'Written instead of the value in CSS, such as clamp(1rem, 4vw, 1.5rem).',
+  addExpression: 'Add CSS expression',
+  removeExpression: 'Remove CSS expression',
+  cssExpressionUnclosed: 'A function is missing its )',
+  cssExpressionNegated: params('To negate a token, write calc(-1 * var({property}))'),
+  cssExpressionUnknownToken: params('No token is named {name}'),
+  cssExpressionInvalid: params('Not a valid value for {property}'),
   scopes: 'Scopes',
   description: 'Description',
   collection: 'Collection',
@@ -57,7 +63,6 @@ export const variablesMessageDefaults = {
   cssNameInvalid: 'Use letters, digits, hyphens and underscores, starting with a letter or digit.',
   useVariable: 'Use a variable',
   detachVariable: 'Detach variable',
-  removeReference: params('Remove {name}'),
   searchVariables: 'Search variables',
   noMatchingVariables: 'No variables of this type',
   hiddenFromPublishing: 'Hide from publishing',
@@ -129,8 +134,9 @@ export const variablesMessageDefaults = {
   importMissingFile: params('{file}, which {from} refers to, wasn’t picked'),
   importNothing: 'These files hold no design tokens.',
   importAction: 'Import',
-  insertReference: 'Insert variable',
-  formulaResult: 'Result'
+  formula: 'Formula',
+  useFormula: 'Use a formula',
+  formulaPlaceholder: 'Value or formula'
 } as const
 
 export const variablesMessages = i18n('variables', variablesMessageDefaults)

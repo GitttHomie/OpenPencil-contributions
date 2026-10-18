@@ -7,22 +7,23 @@ import {
 } from '@codemirror/autocomplete'
 import { defaultKeymap, history, isolateHistory, redo, undo } from '@codemirror/commands'
 import { Annotation, EditorSelection, EditorState, Prec } from '@codemirror/state'
-import { EditorView, keymap } from '@codemirror/view'
-import { watch, type Ref, type ShallowRef } from 'vue'
+import { EditorView, keymap, placeholder, tooltips } from '@codemirror/view'
+import { getCurrentInstance, watch, type Ref, type ShallowRef } from 'vue'
 
 import { useCodeMirror } from '@/components/code-editor/useCodeMirror'
 import { formulaEditorTheme } from '@/theme/code/formula'
 
-import { completeFormula, type FormulaCompletion } from './completion'
+import type { ExpressionDialect, ReferenceCompletion } from './dialects/types'
 import { formulaReferences, referencePills } from './references'
 import { formulaSegments, type FormulaPill, type FormulaSelection } from './source'
 
 interface FormulaFieldOptions {
-  completions: () => readonly FormulaCompletion[]
+  dialect: ExpressionDialect
+  completions: () => readonly ReferenceCompletion[]
   label: () => string
+  placeholder: () => string
   attributes: () => Record<string, string>
   resolve: (source: string) => FormulaPill | undefined
-  removeLabel: (name: string) => string
   onChange: () => void
   onEnter: () => void
   onCancel: () => void
@@ -31,19 +32,35 @@ interface FormulaFieldOptions {
 
 const externalUpdate = Annotation.define<boolean>()
 
+/**
+ * The completion list lives in the surrounding dialog and keeps within it: the inspector scrolls
+ * and would clip it, and a modal dialog takes no pointer events outside itself.
+ */
+function completionPlacement(host: HTMLElement | null) {
+  const container = host?.closest<HTMLElement>('[role="dialog"]')
+  if (!container) return tooltips({ position: 'fixed' })
+  return tooltips({
+    position: 'absolute',
+    parent: container,
+    tooltipSpace: () => container.getBoundingClientRect()
+  })
+}
+
 /** CodeMirror owns document edits, atomic references, selection, composition and history. */
 export function useFormulaField(
   host: Readonly<ShallowRef<HTMLDivElement | null>>,
   model: Ref<string>,
   options: FormulaFieldOptions
 ) {
+  const appContext = getCurrentInstance()?.appContext ?? null
   const view = useCodeMirror(host, {
     doc: () => model.value,
     label: options.label,
     theme: formulaEditorTheme,
     extensions: [
       history(),
-      autocompletion({ override: [completeFormula(options.completions)] }),
+      options.dialect.language,
+      autocompletion({ override: [options.dialect.complete(options.completions)], icons: false }),
       keymap.of([...completionKeymap, { key: 'Tab', run: acceptCompletion }]),
       referencePills,
       EditorView.lineWrapping,
@@ -101,15 +118,21 @@ export function useFormulaField(
       })
     ],
     reactive: [
+      () => completionPlacement(host.value),
       () => EditorView.contentAttributes.of(options.attributes()),
+      () => placeholder(options.placeholder()),
       () =>
-        formulaReferences.of(
-          new Map(
-            formulaSegments(model.value, options.resolve).flatMap(({ source, pill }) =>
-              pill ? [[source, { ...pill, removeLabel: options.removeLabel(pill.label) }]] : []
-            )
+        formulaReferences.of({
+          appContext,
+          ranges: options.dialect.references,
+          pills: new Map(
+            formulaSegments(
+              model.value,
+              options.dialect.references(model.value),
+              options.resolve
+            ).flatMap(({ source, pill }) => (pill ? [[source, pill]] : []))
           )
-        )
+        })
     ]
   })
 
