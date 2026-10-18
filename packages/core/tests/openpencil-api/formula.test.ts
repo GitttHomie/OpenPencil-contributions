@@ -15,32 +15,34 @@ test('AI scripts author formulas through the same validation as the inspector', 
   const result = await compileScript(`
     return [
       openpencil.setVariableFormula('Tokens', 'gap', '{base} * 2'),
-      openpencil.setVariableFormula('Tokens', 'visible', 'NOT {enabled}')
+      openpencil.setVariableFormula('Tokens', 'visible', 'not {enabled}'),
+      openpencil.setVariableFormula('Tokens', 'visible', '{gap} > 6 and {enabled}')
     ]
   `)(figma)
-  expect(result).toEqual([8, false])
+  expect(result).toEqual([8, false, true])
   expect(graph.resolveVariable(gap.id)).toBe(8)
-  expect(graph.resolveVariable(visible.id)).toBe(false)
+  expect(graph.resolveVariable(visible.id)).toBe(true)
   await expect(
     compileScript(`openpencil.setVariableFormula('Tokens', 'gap', '1 / 0')`)(figma)
   ).rejects.toThrow()
   expect(graph.resolveVariable(gap.id)).toBe(8)
 })
 
-
-test('script formulas and literals replace CSS metadata only in the edited mode', async () => {
+test('a mode’s CSS expression outlives a script formula and records a script number', async () => {
   const graph = new SceneGraph()
   const collection = graph.createCollection('Tokens')
-  const gap = graph.createVariable('gap', 'FLOAT', collection.id, 4)
+  graph.createVariable('base', 'FLOAT', collection.id, 4)
+  const gap = graph.createVariable('gap', 'FLOAT', collection.id, 16)
   graph.addMode(collection.id, 'large', 'Large')
+  gap.valuesByMode.large = 32
   const mode = collection.defaultModeId
-  const figma = new FigmaAPI(graph)
-  for (const source of ['2 * 3', '12']) {
-    gap.expressions = {
-      [mode]: { css: '1rem', resolved: 4 },
-      large: { css: '2rem', resolved: 32 }
-    }
-    await compileScript(`openpencil.setVariableFormula('Tokens', 'gap', '${source}')`)(figma)
-    expect(gap.expressions).toEqual({ large: { css: '2rem', resolved: 32 } })
+  gap.expressions = {
+    [mode]: { css: '1rem', resolved: 16 },
+    large: { css: '2rem', resolved: 32 }
   }
+  const figma = new FigmaAPI(graph)
+  await compileScript(`openpencil.setVariableFormula('Tokens', 'gap', '{base} * 4')`)(figma)
+  expect(gap.expressions).toEqual({ [mode]: { css: '1rem' }, large: { css: '2rem', resolved: 32 } })
+  figma.setVariableValue(gap.id, 'large', 40)
+  expect(gap.expressions).toEqual({ [mode]: { css: '1rem' }, large: { css: '2rem', resolved: 40 } })
 })

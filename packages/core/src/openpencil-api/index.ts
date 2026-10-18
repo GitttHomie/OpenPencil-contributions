@@ -1,5 +1,3 @@
-import { omit } from 'es-toolkit'
-
 import {
   BEHAVIOUR_CONTRACTS,
   BEHAVIOUR_KINDS,
@@ -46,7 +44,8 @@ export class OpenPencilAPI {
 
   /**
    * Set a numeric or Boolean token formula by collection, variable and optional mode names.
-   * References use `{variable/name}` or `{Collection::variable/name}` and persist by ID.
+   * References use `{variable/name}` or `{Collection::variable/name}` and persist by ID; a
+   * true/false formula can compare numbers, as in `{width} > 600 and not {loading}`.
    */
   setVariableFormula(
     collectionName: string,
@@ -74,11 +73,6 @@ export class OpenPencilAPI {
     if (!mode || modes.length !== 1) throw new Error(`Unknown or ambiguous mode: ${modeName}`)
     const { value, resolved } = parseVariableFormula(graph, variable.id, mode.modeId, source)
     this.figma.setVariableValue(variable.id, mode.modeId, value)
-    // Match the inspector: a live formula supersedes this mode's CSS-only expression.
-    if (variable.expressions) {
-      variable.expressions = omit(variable.expressions, [mode.modeId])
-      if (Object.keys(variable.expressions).length === 0) delete variable.expressions
-    }
     return resolved
   }
 

@@ -863,10 +863,14 @@ export type CodeSyntaxPlatform = (typeof CODE_SYNTAX_PLATFORMS)[number]
 export const TOKEN_UNITS = ['none', 'px', 'rem', '%', 'ms', 's', 'deg'] as const
 export type TokenUnit = (typeof TOKEN_UNITS)[number]
 
-/** A mode value authored as raw CSS. `resolved` is the number the canvas drew for it. */
+/**
+ * CSS written in place of a number mode's value, such as `clamp(1rem, 4vw, 1.5rem)`. While the
+ * mode holds a plain number, `resolved` records it, so a number later edited elsewhere, Figma
+ * included, shows the CSS no longer describes it.
+ */
 export interface TokenExpression {
   css: string
-  resolved: number
+  resolved?: number
 }
 
 export interface Variable {
