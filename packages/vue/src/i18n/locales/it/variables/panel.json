@@ -127,5 +127,7 @@
   "importAction": "Importa",
   "formula": "Formula",
   "useFormula": "Usa una formula",
-  "formulaPlaceholder": "Valore o formula"
+  "formulaPlaceholder": "Valore o formula",
+  "expandEditor": "Apri un editor più grande",
+  "expandEditorHint": "Invio applica · Maiusc+Invio inizia una nuova riga · Esc torna indietro"
 }

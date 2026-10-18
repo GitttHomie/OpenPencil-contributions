@@ -83,8 +83,14 @@ export default {
     expressionActions: 'col-start-2 flex h-7 items-center gap-1',
     /** The value field, an input holding pills and operators, with the result at its end. */
     formulaField:
-      'flex h-auto min-h-7 cursor-text items-end gap-1.5 py-[3px] focus-within:border-panel-focus focus-within:ring-1 focus-within:ring-accent/25 data-[invalid]:border-error data-[invalid]:focus-within:border-error',
+      'group/field flex h-auto min-h-7 cursor-text items-end gap-1.5 py-[3px] focus-within:border-panel-focus focus-within:ring-1 focus-within:ring-accent/25 data-[invalid]:border-error data-[invalid]:focus-within:border-error',
     formulaEditor: 'flex min-w-0 flex-1 *:min-w-0 *:flex-1',
+    /** Opens the larger editor; it shows while the field is hovered or focused. */
+    formulaExpand:
+      'flex size-5 shrink-0 cursor-pointer items-center justify-center self-start rounded-sm text-muted opacity-0 outline-none group-focus-within/field:opacity-100 group-hover/field:opacity-100 hover:bg-hover hover:text-surface focus-visible:opacity-100',
+    /** The larger editor, beside the inspector over the list. */
+    formulaEditorPanel:
+      'z-[100] flex w-[30rem] max-w-[calc(100vw-1rem)] flex-col gap-1.5 rounded-xl bg-panel p-2 text-surface shadow-[0_0_0_1px_var(--color-border),0_8px_30px_rgb(0_0_0/0.4)] outline-none',
     /** Muted text at the field's start or end, such as CSS or the result. */
     formulaAffix: 'shrink-0 leading-5 text-muted',
     formulaPrefix: 'self-start',
@@ -98,6 +104,11 @@ export default {
     layout: {
       side: { inspector: 'w-72 border-l border-border @6xl/tokens:w-80', output: 'h-56' },
       full: { inspector: 'min-h-0 w-full flex-1', output: 'min-h-0 flex-1 border-t-0' }
+    },
+    /** The larger editor's field: taller, its text from the top, scrolling past 20rem. */
+    expanded: {
+      true: { formulaField: 'min-h-40 items-start [--formula-max-height:20rem]' },
+      false: {}
     }
   },
   defaultVariants: { layout: 'side' }

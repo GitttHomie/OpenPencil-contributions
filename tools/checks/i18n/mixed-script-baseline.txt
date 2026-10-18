@@ -419,6 +419,7 @@ ja:variables.expression
 ja:variables.addExpression
 ja:variables.removeExpression
 ja:variables.cssExpressionNegated
+ja:variables.expandEditorHint
 ja:variables.expressionHint
 ja:variables.conditionHint
 ja:variables.conditionCustom
@@ -429,6 +430,7 @@ zh-cn:variables.expression
 zh-cn:variables.addExpression
 zh-cn:variables.removeExpression
 zh-cn:variables.cssExpressionNegated
+zh-cn:variables.expandEditorHint
 zh-cn:variables.expressionHint
 zh-cn:variables.conditionHint
 zh-cn:variables.conditionCustom

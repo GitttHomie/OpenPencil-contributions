@@ -5,8 +5,15 @@ import {
   acceptCompletion,
   closeCompletion
 } from '@codemirror/autocomplete'
-import { defaultKeymap, history, isolateHistory, redo, undo } from '@codemirror/commands'
-import { Annotation, EditorSelection, EditorState, Prec } from '@codemirror/state'
+import {
+  defaultKeymap,
+  history,
+  insertNewline,
+  isolateHistory,
+  redo,
+  undo
+} from '@codemirror/commands'
+import { Annotation, EditorSelection, Prec } from '@codemirror/state'
 import { EditorView, keymap, placeholder, tooltips } from '@codemirror/view'
 import { getCurrentInstance, watch, type Ref, type ShallowRef } from 'vue'
 
@@ -65,10 +72,6 @@ export function useFormulaField(
       referencePills,
       EditorView.lineWrapping,
       keymap.of(defaultKeymap),
-      EditorState.transactionFilter.of((transaction) =>
-        transaction.newDoc.lines > 1 ? [] : transaction
-      ),
-      EditorView.clipboardInputFilter.of((text) => text.replace(/[\r\n]+/g, ' ')),
       Prec.highest(
         EditorView.domEventHandlers({
           keydown(event, editor) {
@@ -82,6 +85,11 @@ export function useFormulaField(
               if (event.shiftKey || event.code === 'KeyY') redo(editor)
               else undo(editor)
               return true
+            }
+            // Line breaks are whitespace in both syntaxes, so long values can span lines.
+            if (event.code === 'Enter' && event.shiftKey) {
+              event.preventDefault()
+              return insertNewline(editor)
             }
             if (event.code === 'Enter' || event.code === 'Escape') {
               event.preventDefault()

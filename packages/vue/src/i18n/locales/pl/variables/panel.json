@@ -127,5 +127,7 @@
   "importAction": "Importuj",
   "formula": "Formuła",
   "useFormula": "Użyj formuły",
-  "formulaPlaceholder": "Wartość lub formuła"
+  "formulaPlaceholder": "Wartość lub formuła",
+  "expandEditor": "Otwórz większy edytor",
+  "expandEditorHint": "Enter zatwierdza · Shift+Enter zaczyna nowy wiersz · Esc wraca"
 }

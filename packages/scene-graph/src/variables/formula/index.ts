@@ -3,9 +3,9 @@ import type { SceneGraph, VariableValue } from '@open-pencil/scene-graph'
 import { resolveVariableInModes } from '../resolution'
 import { VariableFormulaError } from './evaluate'
 import { parseFormulaSyntax, type FormulaReference } from './parse'
-import { printFormula } from './print'
+import { printFormula, type PrintFormulaOptions } from './print'
 
-export { printFormula } from './print'
+export { printFormula, type PrintFormulaOptions } from './print'
 export {
   formulaTokenName,
   formulaTokens,
@@ -50,16 +50,20 @@ export function variableFormulaReference(graph: SceneGraph, id: string): string 
 }
 
 /** The formula's source text, with `{name}` for each reference, as the clipboard and scripts write it. */
-export function formatVariableFormula(graph: SceneGraph, value: VariableValue): string {
+export function formatVariableFormula(
+  graph: SceneGraph,
+  value: VariableValue,
+  options?: PrintFormulaOptions
+): string {
   const reference = (id: string) => variableFormulaReference(graph, id)
   if (typeof value === 'object' && 'expression' in value && value.expression === 'FORMULA')
-    return printFormula(value.value, reference)
+    return printFormula(value.value, reference, options)
   if (
     typeof value === 'number' ||
     typeof value === 'boolean' ||
     (typeof value === 'object' && 'aliasId' in value)
   )
-    return printFormula(value, reference)
+    return printFormula(value, reference, options)
   return ''
 }
 

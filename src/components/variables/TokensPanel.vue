@@ -142,6 +142,8 @@ const bulkIds = computed(
 const candidates = computed(() =>
   editedRow.value ? aliasCandidates(editor.graph, editedRow.value.variable) : []
 )
+/** Characters of source text a formula fits on one line before it breaks. */
+const FORMULA_LINE_WIDTH = 48
 const referenceCandidates = computed(() =>
   editedRow.value ? formulaCandidates(editor.graph, editedRow.value.variable) : []
 )
@@ -290,7 +292,9 @@ const tokenInspector = computed(() => {
           candidates: referenceCandidates.value,
           parse: (modeId: string, source: string) =>
             parseVariableFormula(editor.graph, id, modeId, source),
-          format: (value: VariableValue) => formatVariableFormula(editor.graph, value),
+          // A long formula reads on several lines in its field.
+          format: (value: VariableValue) =>
+            formatVariableFormula(editor.graph, value, { width: FORMULA_LINE_WIDTH }),
           reference: (id: string) => variableFormulaReference(editor.graph, id)
         }
       : undefined,

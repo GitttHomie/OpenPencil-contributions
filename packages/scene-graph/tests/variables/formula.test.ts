@@ -360,3 +360,20 @@ test('the tokenizer reads half-typed formulas without failing, as an editor need
     [6, 7]
   ])
 })
+
+test('a long formula breaks before its outermost and, or, + and -, and reads back the same', () => {
+  const { graph, collection, parse } = setup('BOOLEAN')
+  graph.createVariable('viewport', 'FLOAT', collection.id, 1280)
+  graph.createVariable('loading', 'BOOLEAN', collection.id, false)
+  const source = '{viewport} > 1024 and not {loading} and ({base} or {viewport} < 600)'
+  const { value } = parse(source)
+  expect(formatVariableFormula(graph, value, { width: 40 })).toBe(
+    '{viewport} > 1024\n  and not {loading}\n  and ({base} or {viewport} < 600)'
+  )
+  expect(formatVariableFormula(graph, value, { width: 200 })).toBe(source)
+  expect(parse(formatVariableFormula(graph, value, { width: 40 })).value).toEqual(value)
+  // A chain inside parentheses, or an operator that does not break, stays on its line.
+  expect(formatVariableFormula(graph, parse('{viewport} * 2 > 1000').value, { width: 5 })).toBe(
+    '{viewport} * 2 > 1000'
+  )
+})
