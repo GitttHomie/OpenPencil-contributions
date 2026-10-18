@@ -24,7 +24,7 @@ Use `openpencil --help`, per-command help, and the connected MCP server’s tool
 
 ## Variable formulas
 
-Inside `eval`, use `openpencil.setVariableFormula('Spacing', 'large', '{base} * 2')` for numeric formulas or `openpencil.setVariableFormula('State', 'visible', 'NOT {loading}')` for Boolean formulas. Collections and variables must already exist. An optional fourth argument selects a mode by name; otherwise the default mode is edited. The call validates before mutation, returns the resolved value, and replaces any CSS expression for that mode. Length formulas use stored pixels. CSS and design-token exports currently report live formulas as unsupported.
+Inside `eval`, use `openpencil.setVariableFormula('Spacing', 'large', '{base} * 2')` for numeric formulas or `openpencil.setVariableFormula('State', 'visible', '{viewport} > 1024 and not {loading}')` for Boolean formulas, which use `and`, `or`, `not` and number comparisons. Collections and variables must already exist. An optional fourth argument selects a mode by name; otherwise the default mode is edited. The call validates before mutation and returns the resolved value. Length formulas use stored pixels. The CSS stylesheet writes number formulas as `calc()`; design-token files hold the result with the formula in `$extensions`.
 
 ## Requirements
 

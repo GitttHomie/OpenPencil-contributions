@@ -1,2 +1,4 @@
-- Number and Boolean variables support live formulas, edited in one value field with removable reference pills and resolved values, preserved through undo, copy/paste, sharing, and `.fig` saves.
+- Number and true/false variables take live formulas: references show as pills, the field shows the result, true/false formulas can compare numbers, and formulas survive undo, copy and paste, sharing and `.fig` saves.
+- The token stylesheet writes number formulas as `calc()` over the variables they use, and design-token files keep each formula beside its result.
+- CSS expressions complete token names as `var()` pills, are checked when committed, and can be added to any number mode from its value menu.
 - Imported Figma color and opacity expressions retain their variable references.
