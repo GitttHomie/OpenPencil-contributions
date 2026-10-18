@@ -1,6 +1,6 @@
 import type { Canvas } from 'canvaskit-wasm'
 
-import { slotPropertyId } from '@open-pencil/scene-graph'
+import { layerRotates, slotPropertyId } from '@open-pencil/scene-graph'
 import type { SceneGraph, SceneNode } from '@open-pencil/scene-graph'
 import { computeBounds, rotatedCorners } from '@open-pencil/scene-graph/geometry'
 import Matrix from '@open-pencil/scene-graph/matrix'
@@ -289,7 +289,7 @@ function drawTextPathSelection(
 
 /**
  * Figma's corner handles and our rotation stalk, absent for a layer that does not turn; a layer
- * too small for handles shows none.
+ * too small for handles, or in a read-only document, shows none.
  */
 function drawBoundsHandles(
   r: SkiaRenderer,
@@ -300,7 +300,7 @@ function drawBoundsHandles(
   maxY: number,
   stalk: RotationHandleLayout | null
 ): void {
-  if (!hasTransformHandles((maxX - minX) * r.zoom, (maxY - minY) * r.zoom)) return
+  if (r.readOnly || !hasTransformHandles((maxX - minX) * r.zoom, (maxY - minY) * r.zoom)) return
   r.drawHandle(canvas, minX, minY)
   r.drawHandle(canvas, maxX, minY)
   r.drawHandle(canvas, minX, maxY)
@@ -355,8 +355,8 @@ export function drawNodeSelection(
         y1,
         x2,
         y2,
-        // FigJam keeps sticky notes upright.
-        node.type === 'STICKY'
+        // A generated frame such as a sticky note may stay upright.
+        !layerRotates(node)
           ? null
           : rotationHandleLayout(node, createSceneGeometry(graph, preview), r.zoom, {
               x: x1,

@@ -5,7 +5,7 @@ description: Keep documents on OpenPencil Cloud or your team's own server, share
 
 # OpenPencil Cloud
 
-OpenPencil Cloud keeps documents on a server so they follow you across devices and several people can edit them at once. Use the hosted service at `cloud.openpencil.dev` or a server your team runs itself. Cloud is optional: documents on your device and in your own [storage bucket](./cloud-storage) work the same with or without it.
+OpenPencil Cloud keeps documents on a server so they follow you across devices and several people can edit them at once. Use the hosted service at `cloud.openpencil.dev` or a server your team runs itself ([self-hosting guide](/reference/self-hosting-cloud)). Cloud is optional: documents on your device and in your own [storage bucket](./cloud-storage) work the same with or without it.
 
 ## Connect a Server
 
@@ -84,6 +84,8 @@ The server keeps only a fingerprint of each link, so a link can be copied only o
 ## Open an Invitation
 
 An invitation link opens OpenPencil with who invited you, to which document, and on which server. If you have never used that server, OpenPencil warns you to sign in only if you trust it. Sign in with the address the invitation was sent to; if you are signed in as someone else, choose **Use another account**. Once you accept, the document opens and stays under **Shared with you** on Home.
+
+Invitation and share links open in the browser. If you use the desktop app, choose **Open in the desktop app** in the invitation, or on the notice that appears after a shared document opens; your browser asks before it switches to the app.
 
 ## Edit Together
 

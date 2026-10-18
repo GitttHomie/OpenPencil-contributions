@@ -203,19 +203,3 @@ export function filePrefix(filePath: string): string | null {
   const match = /^([a-z][a-z0-9]+)-[a-z0-9-]+$/.exec(fileStem(filePath))
   return match?.[1] ?? null
 }
-
-/**
- * Prefix groups that existed before the rule counted a bare `prefix` file, as `folder::prefix`.
- * The list only shrinks: moving a group into its folder means deleting its line.
- */
-export const FILE_PREFIX_BASELINE_PATH = 'tools/checks/architecture/file-prefix-baseline.txt'
-
-export function readFilePrefixBaseline(rootPath: string): Set<string> {
-  const text = readFileSync(path.join(rootPath, FILE_PREFIX_BASELINE_PATH), 'utf8')
-  return new Set(
-    text
-      .split('\n')
-      .map((line) => line.trim())
-      .filter((line) => line && !line.startsWith('#'))
-  )
-}

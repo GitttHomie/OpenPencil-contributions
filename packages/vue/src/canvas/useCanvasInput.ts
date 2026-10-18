@@ -22,8 +22,8 @@ import {
 import { resolveAutoLayoutHover } from '#vue/shared/input/auto-layout-hover'
 import { createClickCounter } from '#vue/shared/input/click-count'
 import { handleDrawMove } from '#vue/shared/input/draw'
-import { handleMoveMove, handleMoveUp } from '#vue/shared/input/move'
-import { setupPanZoom } from '#vue/shared/input/pan-zoom'
+import { cancelMove, handleMoveMove, handleMoveUp } from '#vue/shared/input/move/drag'
+import { setupPanZoom } from '#vue/shared/input/pan/zoom'
 import { applyResize, cancelResizePreview, commitResizePreview } from '#vue/shared/input/resize'
 import { updateHoverCursor } from '#vue/shared/input/select'
 import { resolveShapeHandleHover } from '#vue/shared/input/shape-handles'
@@ -107,10 +107,17 @@ export function useCanvasInput(
       hitFns,
       mode === 'deep' || hoverDeep()
     )
-    editor.setAutoLayoutHover(
-      mode === 'off' ? resolveAutoLayoutHover(pointer.cx, pointer.cy, editor) : null
-    )
-    editor.setShapeHandleHover(resolveShapeHandleHover(editor, pointer.sx, pointer.sy, altHeld))
+    editor.setAutoLayoutHover(autoLayoutHoverAt(pointer.cx, pointer.cy, mode))
+    editor.setShapeHandleHover(shapeHandleHoverAt(pointer.sx, pointer.sy, altHeld))
+  }
+
+  // Handles that edit, which a read-only document does not offer.
+  function autoLayoutHoverAt(cx: number, cy: number, mode: typeof editor.state.measurementMode) {
+    return mode === 'off' && !editor.state.readOnly ? resolveAutoLayoutHover(cx, cy, editor) : null
+  }
+
+  function shapeHandleHoverAt(sx: number, sy: number, altKey: boolean) {
+    return editor.state.readOnly ? null : resolveShapeHandleHover(editor, sx, sy, altKey)
   }
 
   function updateModifier(code: string, held: boolean) {
@@ -169,7 +176,7 @@ export function useCanvasInput(
   function onDblClick(e: MouseEvent) {
     if (editor.state.play) return
     const { cx, cy } = getCoords(e)
-    if (valueEdit.start(cx, cy)) {
+    if (!editor.state.readOnly && valueEdit.start(cx, cy)) {
       e.preventDefault()
       e.stopPropagation()
       return
@@ -185,17 +192,22 @@ export function useCanvasInput(
       e.preventDefault()
       return
     }
+    // Safari treats an unprevented press as the start of a text selection drag and freezes the
+    // cursor until the pointer leaves the canvas; the canvas handles its own drags.
+    if (e.button === 0) e.preventDefault()
     editor.setMeasurementMode('off')
     const openValueEdit = valueEdit.edit.value
     if (openValueEdit) valueEdit.commit(openValueEdit.value)
     if (!editor.state.editingTextId) canvasRef.value?.focus()
     editor.setHoveredNode(null)
     const { sx, sy, cx, cy } = getCoords(e)
-    if (e.button === 0 && guideInput.tryStartExisting(sx, sy, e.altKey)) {
+    // Guides belong to the document, so a read-only one neither moves nor gains them.
+    const guidesEditable = e.button === 0 && !editor.state.readOnly
+    if (guidesEditable && guideInput.tryStartExisting(sx, sy, e.altKey)) {
       e.preventDefault()
       return
     }
-    if (e.button === 0 && guideInput.tryStartFromRuler(sx, sy, cx, cy)) {
+    if (guidesEditable && guideInput.tryStartFromRuler(sx, sy, cx, cy)) {
       e.preventDefault()
       return
     }
@@ -240,12 +252,12 @@ export function useCanvasInput(
     if (!drag.value) {
       const { cx, cy, sx, sy } = coords
       updateNodeEditHover(editor, cx, cy)
-      editor.setShapeHandleHover(resolveShapeHandleHover(editor, sx, sy, e.altKey))
+      editor.setShapeHandleHover(shapeHandleHoverAt(sx, sy, e.altKey))
     }
 
     if (!drag.value && editor.state.activeTool === 'SELECT') {
       const { sx, sy, cx, cy } = coords
-      const guideCursor = guideInput.updateHover(sx, sy)
+      const guideCursor = editor.state.readOnly ? null : guideInput.updateHover(sx, sy)
       cursorOverride.value =
         guideCursor ??
         updateHoverCursor(
@@ -255,9 +267,7 @@ export function useCanvasInput(
           hitFns,
           editor.state.measurementMode === 'deep' || hoverDeep(e)
         )
-      editor.setAutoLayoutHover(
-        editor.state.measurementMode === 'off' ? resolveAutoLayoutHover(cx, cy, editor) : null
-      )
+      editor.setAutoLayoutHover(autoLayoutHoverAt(cx, cy, editor.state.measurementMode))
     }
 
     if (!drag.value) return
@@ -330,9 +340,8 @@ export function useCanvasInput(
       return
     }
 
-    if (d.type === 'place') {
-      d.x = cx
-      d.y = cy
+    if (d.type === 'sticky-draw') {
+      d.move(cx, cy)
       return
     }
 
@@ -395,37 +404,28 @@ export function useCanvasInput(
   /** Drops what a resize or pencil stroke showed without changing the document. */
   function discardDrawnPreview(d: DragState) {
     if (d.type === 'resize') cancelResizePreview(d, editor)
-    else if (d.type === 'sticky-scale') d.cancel()
+    else if (d.type === 'sticky-scale' || d.type === 'sticky-draw') d.cancel()
     else if (d.type === 'pencil-drag') editor.pencilCancel()
   }
 
-  function cancelPointerInteraction() {
-    if (drag.value) discardDrawnPreview(drag.value)
-    if (drag.value?.type === 'rotate') {
-      const rotation = drag.value
-      drag.value = null
-      if (editor.state.rotationPreview?.nodeId === rotation.nodeId) editor.setRotationPreview(null)
-    }
-    if (
-      drag.value?.type === 'draw' ||
-      drag.value?.type === 'gradient' ||
-      drag.value?.type === 'shape-handle'
-    ) {
-      const drawing = drag.value
-      drag.value = null
-      drawing.cancel()
-    }
-    if (
-      drag.value?.type === 'edit-node' ||
-      drag.value?.type === 'edit-handle' ||
-      drag.value?.type === 'bend-handle'
-    ) {
-      const methods = editor as Editor & {
-        nodeEditCancelDrag?: () => void
-      }
+  /** Takes back what a drag in progress has previewed, by its kind. */
+  function discardDrag(d: DragState) {
+    discardDrawnPreview(d)
+    if (d.type === 'move') cancelMove(d, editor)
+    else if (d.type === 'rotate') {
+      if (editor.state.rotationPreview?.nodeId === d.nodeId) editor.setRotationPreview(null)
+    } else if (d.type === 'draw' || d.type === 'gradient' || d.type === 'shape-handle') d.cancel()
+    else if (d.type === 'edit-node' || d.type === 'edit-handle' || d.type === 'bend-handle') {
+      const methods = editor as Editor & { nodeEditCancelDrag?: () => void }
       methods.nodeEditCancelDrag?.()
     }
+  }
+
+  function cancelPointerInteraction() {
+    const d = drag.value
+    // Cleared first: ending a preview fires events whose listeners cancel again.
     drag.value = null
+    if (d) discardDrag(d)
     cursorOverride.value = null
     clearTransientInteractionFeedback()
   }
@@ -521,12 +521,20 @@ export function useCanvasInput(
     editor.setMeasurementMode('off')
     cancelPointerInteraction()
   })
+  // A document that turns read-only mid-gesture drops the gesture and any open inline edit.
+  const stopReadOnlyListener = editor.onEditorEvent('document:read-only-changed', (readOnly) => {
+    if (!readOnly) return
+    valueEdit.cancel()
+    canvasLabelEdit.cancel()
+    cancelPointerInteraction()
+  })
   const stopPlayListeners = (['selection:changed', 'page:changed', 'graph:replaced'] as const).map(
     (event) =>
       editor.onEditorEvent(event, () => {
         const type = drag.value?.type
         if (
           type === 'draw' ||
+          type === 'sticky-draw' ||
           type === 'rotate' ||
           type === 'shape-handle' ||
           type === 'sticky-scale'
@@ -537,6 +545,7 @@ export function useCanvasInput(
   onScopeDispose(() => {
     stopRotationListener()
     stopToolListener()
+    stopReadOnlyListener()
     for (const stop of stopPlayListeners) stop()
     cancelPointerInteraction()
   })

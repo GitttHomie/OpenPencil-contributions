@@ -1,4 +1,5 @@
 import type { Editor } from '@open-pencil/core/editor'
+import { layerRotates } from '@open-pencil/scene-graph'
 
 import {
   buildResizeCursor,
@@ -33,7 +34,7 @@ function getRotationCursorForSelection(cx: number, cy: number, editor: Editor): 
 
   const id = [...editor.state.selectedIds][0]
   const node = editor.graph.getNode(id)
-  if (!node || node.type === 'STICKY') return null
+  if (!node || !layerRotates(node)) return null
 
   const corner = hitTestCornerRotationByMatrix(
     cx,
@@ -82,10 +83,11 @@ export function updateHoverCursor(
     return null
   }
 
-  // As a press does: resizing first, then a label, then rotation.
-  const cursor =
-    getResizeCursorForSelection(cx, cy, editor) ??
-    (hitTestLabel(cx, cy, fns) ? null : getRotationCursorForSelection(cx, cy, editor))
+  // As a press does: resizing first, then a label, then rotation; a read-only document has none.
+  const cursor = editor.state.readOnly
+    ? null
+    : (getResizeCursorForSelection(cx, cy, editor) ??
+      (hitTestLabel(cx, cy, fns) ? null : getRotationCursorForSelection(cx, cy, editor)))
   updateHoveredNode(cx, cy, editor, fns, deep)
   return cursor
 }

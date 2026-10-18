@@ -22,16 +22,25 @@ import type { CloudInvitationState, CloudInvitationSummary } from './types'
 const {
   state,
   invitation = null,
-  account = null
+  account = null,
+  offerDesktop = false
 } = defineProps<{
   state: CloudInvitationState
   invitation?: CloudInvitationSummary | null
   /** The account signed in to the invitation's server, if any. */
   account?: { email: string } | null
+  /** The web editor on a computer can hand the invitation to the desktop app. */
+  offerDesktop?: boolean
 }>()
 
 const open = defineModel<boolean>('open', { default: false })
-const emit = defineEmits<{ accept: []; signIn: []; switchAccount: []; cancel: [] }>()
+const emit = defineEmits<{
+  accept: []
+  signIn: []
+  switchAccount: []
+  openInDesktop: []
+  cancel: []
+}>()
 
 const ui = cloudInvitation()
 const t = useCloudMessages()
@@ -78,7 +87,7 @@ const target = computed(() => {
       </p>
     </AppDialogBody>
 
-    <AppDialogBody v-else-if="state === 'unavailable'">
+    <AppDialogBody v-else-if="state === 'unavailable'" data-test-id="cloud-invitation-unavailable">
       <div :class="ui.unavailable()">
         <span :class="ui.unavailableIcon()"><icon-lucide-mail-x class="size-4" /></span>
         <p :class="ui.unavailableDescription()">
@@ -142,6 +151,16 @@ const target = computed(() => {
         <AppButton variant="outline" @click="emit('cancel')">{{ common.close }}</AppButton>
       </template>
       <template v-else>
+        <AppButton
+          v-if="offerDesktop"
+          :class="ui.desktop()"
+          variant="ghost"
+          :disabled="state === 'accepting'"
+          @click="emit('openInDesktop')"
+        >
+          <template #leading><icon-lucide-monitor class="size-3.5" /></template>
+          {{ t.openInDesktopApp }}
+        </AppButton>
         <AppButton variant="ghost" @click="emit('cancel')">{{ t.notNow }}</AppButton>
         <AppButton
           v-if="state === 'sign-in'"
