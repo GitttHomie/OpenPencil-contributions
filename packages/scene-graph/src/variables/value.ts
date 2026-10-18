@@ -6,7 +6,6 @@ import {
   mapFormulaReferences,
   VariableFormulaError
 } from './formula/evaluate'
-import { variableFormulaSchema } from './formula/schema'
 import { variableColorExpressionSchema } from './schema'
 
 /** All references in one definition, including color and opacity operands. */
@@ -54,9 +53,10 @@ export function resolveVariableValue(
   if ('aliasId' in value) return resolve(value.aliasId)
   if (!('expression' in value)) return value
   if (value.expression === 'FORMULA') {
-    const formula = v.parse(variableFormulaSchema, value)
-    const result = evaluateVariableFormula(formula.value, resolve)
-    if (typeof result !== (formula.type === 'FLOAT' ? 'number' : 'boolean'))
+    // Evaluation checks every node it visits, so drawing never walks the tree twice; files are
+    // checked against the full schema where they are read.
+    const result = evaluateVariableFormula(value.value, resolve)
+    if (typeof result !== (value.type === 'FLOAT' ? 'number' : 'boolean'))
       throw new VariableFormulaError('Wrong formula result type')
     return result
   }

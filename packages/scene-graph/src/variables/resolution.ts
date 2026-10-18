@@ -48,7 +48,7 @@ export function resolveVariable(
       modeId && initial?.collectionId === collectionId
         ? modeId
         : getActiveModeId(graph, collectionId),
-    visited ?? new Set()
+    visited
   )
 }
 
@@ -63,16 +63,21 @@ export class VariableResolutionError extends VariableFormulaError {
   }
 }
 
-/** Resolve a draft or saved definition with identical mode, dependency and error semantics. */
+const RESULT_TYPES = { FLOAT: 'number', BOOLEAN: 'boolean', STRING: 'string', COLOR: 'object' }
+
+/**
+ * Resolve a draft or saved definition with identical mode, dependency and error semantics. A
+ * memo shares values between lookups in one mode context; without one, nothing is cached.
+ */
 export function resolveVariableInModes(
   graph: SceneGraph,
   variableId: string,
   modeFor: (collectionId: string) => string,
   visiting = new Set<string>(),
-  memo = new Map<string, VariableLiteral>(),
+  memo?: Map<string, VariableLiteral>,
   overrides?: ReadonlyMap<string, VariableValue>
 ): VariableLiteral {
-  const cached = memo.get(variableId)
+  const cached = memo?.get(variableId)
   if (cached !== undefined) return cached
   if (visiting.has(variableId))
     throw new VariableResolutionError('cycle', variableId, 'Circular variable reference')
@@ -94,15 +99,26 @@ export function resolveVariableInModes(
       variableId,
       `Missing value: ${variable.name}`
     )
+  return evaluateDefinition(graph, variable, value, modeFor, visiting, memo, overrides)
+}
+
+/** Resolve one variable's definition in its mode context, its dependencies in theirs. */
+function evaluateDefinition(
+  graph: SceneGraph,
+  variable: Variable,
+  value: VariableValue,
+  modeFor: (collectionId: string) => string,
+  visiting: Set<string>,
+  memo?: Map<string, VariableLiteral>,
+  overrides?: ReadonlyMap<string, VariableValue>
+): VariableLiteral {
+  const variableId = variable.id
   visiting.add(variableId)
   try {
     const result = resolveVariableValue(value, (id) =>
       resolveVariableInModes(graph, id, modeFor, visiting, memo, overrides)
     )
-    const expected = { FLOAT: 'number', BOOLEAN: 'boolean', STRING: 'string', COLOR: 'object' }[
-      variable.type
-    ]
-    if (result === undefined || typeof result !== expected)
+    if (result === undefined || typeof result !== RESULT_TYPES[variable.type])
       throw new VariableResolutionError('type', variableId, `Wrong result type: ${variable.name}`)
     if (typeof result === 'number' && !Number.isFinite(result))
       throw new VariableResolutionError(
@@ -111,25 +127,60 @@ export function resolveVariableInModes(
         `Non-finite value: ${variable.name}`
       )
     // Failures can depend on the current path's depth. Only completed values are reusable.
-    memo.set(variableId, result)
+    memo?.set(variableId, result)
     return result
   } finally {
     visiting.delete(variableId)
   }
 }
 
+/**
+ * What the canvas draws for a variable, or nothing when it cannot be resolved. Literals and alias
+ * chains, which most bindings are, resolve in a loop; an expression on the way takes the full
+ * resolver, whose diagnostics the canvas does not need.
+ */
 function resolveInModes(
   graph: SceneGraph,
   variableId: string,
   modeFor: (collectionId: string) => string,
-  visiting: Set<string>,
-  memo = new Map<string, VariableLiteral>()
+  visiting?: Set<string>,
+  memo?: Map<string, VariableLiteral>
 ): VariableLiteral | undefined {
-  try {
-    return resolveVariableInModes(graph, variableId, modeFor, visiting, memo)
-  } catch {
-    return undefined
+  const cached = memo?.get(variableId)
+  if (cached !== undefined) return cached
+  const initial = graph.variables.get(variableId)
+  if (!initial) return undefined
+  const type = initial.type
+  let id = variableId
+  for (let depth = visiting?.size ?? 0; depth < MAX_FORMULA_DEPTH; depth++) {
+    const variable = id === variableId ? initial : graph.variables.get(id)
+    if (!variable || visiting?.has(id)) return undefined
+    const value = variableValueInMode(graph, variable, modeFor(variable.collectionId))
+    if (value === undefined) return undefined
+    if (typeof value === 'object' && 'aliasId' in value) {
+      id = value.aliasId
+      continue
+    }
+    if (typeof value === 'object' && 'expression' in value) {
+      try {
+        // A formula shares its dependencies' values for the length of one resolution.
+        const result = evaluateDefinition(
+          graph,
+          variable,
+          value,
+          modeFor,
+          visiting ?? new Set(),
+          memo ?? new Map()
+        )
+        return typeof result === RESULT_TYPES[type] ? result : undefined
+      } catch {
+        return undefined
+      }
+    }
+    if (typeof value !== RESULT_TYPES[type]) return undefined
+    return typeof value === 'number' && !Number.isFinite(value) ? undefined : value
   }
+  return undefined
 }
 
 /** Shared mode fallback for canvas resolution and formula draft validation. */
@@ -138,10 +189,11 @@ export function variableValueInMode(
   variable: Variable,
   modeId: string
 ): VariableValue | undefined {
-  const read = (id: string) =>
-    Object.hasOwn(variable.valuesByMode, id) ? variable.valuesByMode[id] : undefined
+  const values = variable.valuesByMode
+  if (Object.hasOwn(values, modeId)) return values[modeId]
   const defaultMode = graph.variableCollections.get(variable.collectionId)?.defaultModeId ?? ''
-  return read(modeId) ?? read(defaultMode) ?? Object.values(variable.valuesByMode).at(0)
+  if (Object.hasOwn(values, defaultMode)) return values[defaultMode]
+  return Object.values(values).at(0)
 }
 
 export type NodeVariableResolver = (
@@ -165,7 +217,7 @@ export function createBatchVariableResolver(graph: SceneGraph): NodeVariableReso
       graph,
       variableId,
       (id) => modes[collections.indexOf(id)] ?? '',
-      new Set(),
+      undefined,
       memo
     )
   }
@@ -213,8 +265,7 @@ export function resolveVariableForNode(
   return resolveInModes(
     graph,
     variableId,
-    (collectionId) => getNodeVariableModeId(graph, nodeId, collectionId, fallback),
-    new Set()
+    (collectionId) => getNodeVariableModeId(graph, nodeId, collectionId, fallback)
   )
 }
 
