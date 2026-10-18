@@ -20,7 +20,7 @@ import {
 import { VariablePicker } from '@/components/ui/binding'
 import tokensPanelTheme from '@/theme/tokens-panel'
 
-import type { FormulaSelection } from './formula-field'
+import type { FormulaSelection } from './formula-field/source'
 import type TokenFormulaField from './TokenFormulaField.vue'
 
 const { variable, modeId, label, candidates, formula } = defineProps<{
@@ -76,6 +76,13 @@ const pickerItems = computed(() =>
       return { ...candidate, text: '—' }
     }
   })
+)
+const completions = computed(() =>
+  pickerItems.value.map((item) => ({
+    label: item.name,
+    detail: `${item.collection} · ${item.text}`,
+    source: formula.reference(item.id)
+  }))
 )
 const candidatesById = computed(() => new Map(pickerItems.value.map((item) => [item.id, item])))
 function resolveReference(source: string) {
@@ -175,10 +182,11 @@ function detach() {
         ref="field"
         :id="fieldId"
         v-model="draft"
-        :aria-label="label"
+        :label="label"
         :resolve="resolveReference"
-        :aria-invalid="Boolean(error)"
-        :aria-describedby="`${fieldId}-result`"
+        :completions="completions"
+        :invalid="Boolean(error)"
+        :described-by="`${fieldId}-result`"
         :state="fieldState"
         @change="apply"
         @enter="done"

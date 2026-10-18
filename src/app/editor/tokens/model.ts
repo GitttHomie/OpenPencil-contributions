@@ -28,6 +28,10 @@ export interface TokenModeValue {
   modeId: string
   css: string
   color?: Color
+  formula?: {
+    source: string
+    references: Record<string, { label: string; displayValue: string }>
+  }
   /** The aliased variable's name, when the value points at another token. */
   alias?: string
   /** Resolved numeric alias value, formatted in the consuming token's unit. */
@@ -91,7 +95,22 @@ function modeValue(
     if (typeof resolved === 'number') result = tokenNumberToCSS(resolved, variableUnit(variable))
     if (typeof resolved === 'boolean') result = String(resolved)
     const formula = formatVariableFormula(graph, value)
-    return { modeId, css: result ?? formula, alias: formula, numericValue: result }
+    return {
+      modeId,
+      css: result ?? formula,
+      formula: {
+        source: formula,
+        references: Object.fromEntries(
+          variableValueReferences(value).map((id) => [
+            formatVariableFormula(graph, { aliasId: id }),
+            {
+              label: graph.variables.get(id)?.name ?? id,
+              displayValue: tokenValueText(variable, graph.resolveVariable(id, modeId))
+            }
+          ])
+        )
+      }
+    }
   }
   if (typeof value === 'object' && 'aliasId' in value) {
     const target = graph.variables.get(value.aliasId)
@@ -216,7 +235,9 @@ export function searchTokenIds(rows: readonly TokenRow[], query: string): Set<st
     name: row.variable.name,
     css: `--${row.cssName}`,
     description: row.variable.description,
-    values: row.values.flatMap((value) => compact([value.css, value.alias, value.expression]))
+    values: row.values.flatMap((value) =>
+      compact([value.css, value.alias, value.expression, value.formula?.source])
+    )
   }))
   return new Set(fuzzyFilter(entries, TOKEN_SEARCH_KEYS, query).map((entry) => entry.id))
 }

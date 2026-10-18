@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test'
+import type { Locator, Page } from '@playwright/test'
 
 /** A number and Boolean token bound to ordinary frame geometry and visibility. */
 export async function seedFormulaScene(page: Page) {
@@ -61,4 +61,16 @@ export async function updateFormulaNumber(
     },
     { ...ids, value }
   )
+}
+
+/** Paste through the editor's clipboard handler, preserving a distinct undoable edit. */
+export async function pasteFormulaText(field: Locator, text: string) {
+  await field.press('Meta+a')
+  await field.evaluate((element, text) => {
+    const clipboardData = new DataTransfer()
+    clipboardData.setData('text/plain', text)
+    element.dispatchEvent(
+      new ClipboardEvent('paste', { clipboardData, bubbles: true, cancelable: true })
+    )
+  }, text)
 }

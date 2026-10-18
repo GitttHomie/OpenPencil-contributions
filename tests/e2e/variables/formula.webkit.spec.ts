@@ -3,6 +3,7 @@ import { CanvasHelper } from '#tests/helpers/canvas'
 import { cloudDiscoveryFixture } from '#tests/helpers/cloud/discovery'
 import {
   formulaSceneState,
+  pasteFormulaText,
   seedFormulaScene,
   updateFormulaNumber
 } from '#tests/helpers/variables/formula'
@@ -137,7 +138,7 @@ test('references are removable atomic pills with editable operators and plain so
   await value.press('Backspace')
   await expect(pill).toHaveCount(0)
   await expect(value).toHaveText('')
-  await value.fill('{base} + 1')
+  await pasteFormulaText(value, '{base} + 1')
   await value.press('End')
   await page.keyboard.insertText('0')
   await expect(inspector.getByText('Result: 14', { exact: true })).toBeVisible()
@@ -217,4 +218,39 @@ test('redo preserves the selection restored after an external value update', asy
   await value.press('Enter')
   expect((await formulaSceneState(page, ids)).width).toBe(5978)
   canvas.assertNoErrors()
+})
+
+test('formula completion inserts a reference and the table displays its pill', async ({ page }) => {
+  const canvas = new CanvasHelper(page)
+  await page.goto('/?test')
+  await canvas.waitForInit()
+  const ids = await seedFormulaScene(page)
+  await page
+    .getByRole('region', { name: 'Variables' })
+    .getByRole('button', { name: 'Open variables' })
+    .click()
+  const dialog = page.getByTestId('variables-dialog')
+  const row = dialog.locator(`[data-variable-id="${ids.width}"]`)
+  await row.click()
+  const inspector = dialog.getByTestId('token-inspector')
+  const value = inspector.getByRole('textbox', { name: 'Value', exact: true })
+  await value.fill('2 * ')
+  await value.press('End')
+  await value.pressSequentially('{ba')
+  await expect(inspector.getByRole('option', { name: /base/ })).toBeVisible()
+  await value.press('ArrowDown')
+  await value.press('Enter')
+  await expect(value).toContainText('base')
+  await expect(value).toBeFocused()
+  await value.press('Enter')
+  await expect.poll(async () => (await formulaSceneState(page, ids)).width).toBe(8)
+  await expect(row).toContainText('base')
+  await expect(row).not.toContainText('::')
+  await expect(row).not.toContainText('{')
+  await value.fill('{ba')
+  await expect(inspector.getByRole('option', { name: /base/ })).toBeVisible()
+  await value.press('Escape')
+  await expect(value).toHaveText('{ba')
+  await value.press('Escape')
+  await expect(value).toContainText('base')
 })
