@@ -55,6 +55,8 @@ export default {
       'truncate text-[11px] font-normal text-muted data-[code]:font-mono data-[code]:text-[10px]',
     section: 'flex flex-col gap-2',
     sectionTitle: 'text-[11px] font-semibold text-muted',
+    /** A scope's checkbox and name, only as wide as they are, so a click beside them toggles nothing. */
+    scope: 'flex w-fit items-center gap-2 text-xs text-surface',
     field: 'flex flex-col gap-1',
     /** One mode in the collection inspector: its name, when it applies, and the CSS it writes. */
     /** The CSS a mode is written under, wrapped rather than cut so it reads in full. */
@@ -79,13 +81,11 @@ export default {
     expressionField: 'min-w-0',
     /** The value field, an input holding pills and operators, with the result at its end. */
     formulaField:
-      'group/field flex h-auto min-h-7 cursor-text items-end gap-1.5 py-[3px] focus-within:border-panel-focus focus-within:ring-1 focus-within:ring-accent/25 data-[invalid]:border-error data-[invalid]:focus-within:border-error',
+      'flex h-auto min-h-7 cursor-text items-end gap-1.5 py-[3px] focus-within:border-panel-focus focus-within:ring-1 focus-within:ring-accent/25 data-[invalid]:border-error data-[invalid]:focus-within:border-error',
     formulaEditor: 'flex min-w-0 flex-1 *:min-w-0 *:flex-1',
     /** The larger editor, beside the inspector over the list. */
     /** Buttons at the field's end, such as the variable button, on its first line. */
     formulaActions: 'flex h-5 shrink-0 items-center self-start',
-    /** The larger editor's keys, in a quiet row under it. */
-    formulaEditorKeys: 'flex justify-end gap-3 px-0.5 text-[11px] text-muted',
     formulaEditorPanel:
       'z-[100] flex w-[30rem] max-w-[calc(100vw-1rem)] flex-col gap-1.5 rounded-xl bg-panel p-2 text-surface shadow-[0_0_0_1px_var(--color-border),0_8px_30px_rgb(0_0_0/0.4)] outline-none',
     /** Muted text at the field's start or end, such as CSS or the result. */
@@ -100,11 +100,6 @@ export default {
     layout: {
       side: { inspector: 'w-72 border-l border-border @6xl/tokens:w-80', output: 'h-56' },
       full: { inspector: 'min-h-0 w-full flex-1', output: 'min-h-0 flex-1 border-t-0' }
-    },
-    /** The larger editor's field: taller, its text from the top, scrolling past 20rem. */
-    expanded: {
-      true: { formulaField: 'min-h-40 items-start [--formula-max-height:20rem]' },
-      false: {}
     }
   },
   defaultVariants: { layout: 'side' }

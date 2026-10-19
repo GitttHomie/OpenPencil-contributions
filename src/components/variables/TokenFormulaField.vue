@@ -1,11 +1,7 @@
 <script setup lang="ts">
-import { PopoverAnchor, PopoverContent, PopoverPortal, PopoverRoot } from 'reka-ui'
 import { tv } from 'tailwind-variants'
-import { nextTick, ref, useTemplateRef } from 'vue'
+import { useTemplateRef } from 'vue'
 
-import { formatShortcut, useI18n, useRetainedPopup } from '@open-pencil/vue'
-
-import AppShortcutText from '@/components/ui/menu/AppShortcutText.vue'
 import inputTheme from '@/theme/input/input'
 import tokensPanelTheme from '@/theme/tokens-panel'
 
@@ -25,8 +21,7 @@ const {
   completions,
   prefix,
   suffix,
-  unit,
-  expanded = false
+  unit
 } = defineProps<{
   /** The syntax the field edits; fixed for the field's lifetime. */
   dialect: ExpressionDialect
@@ -39,12 +34,10 @@ const {
   resolve: (source: string) => FormulaPill | undefined
   /** What the field holds, such as CSS, shown at its start. */
   prefix?: string
-  /** What the formula gives, shown at the field's end. */
+  /** What the formula gives, shown after its text. */
   suffix?: string
-  /** The unit a plain number is in, shown at the field's end in place of a result. */
+  /** The unit a plain number is in, shown after it in place of a result. */
   unit?: string
-  /** The larger editor a field opens for a long value, which opens no editor of its own. */
-  expanded?: boolean
 }>()
 const emit = defineEmits<{
   change: []
@@ -55,25 +48,6 @@ const emit = defineEmits<{
 const field = useTemplateRef<HTMLDivElement>('field')
 const ui = tv(tokensPanelTheme)()
 const inputUI = tv(inputTheme)
-const { variables, common } = useI18n()
-/** What the larger editor's keys do, shown as a menu shows shortcuts. */
-const EDITOR_KEYS = [
-  { label: () => common.value.apply, shortcut: 'Enter' },
-  { label: () => variables.value.newLine, shortcut: 'SHIFT+Enter' },
-  { label: () => common.value.back, shortcut: 'Esc' }
-]
-
-/**
- * The larger editor edits the same draft. While it is open, this field does not commit on
- * losing focus; closing it with Enter commits, Escape returns here, and clicking away commits.
- */
-const editorOpen = ref(false)
-const { portalActive } = useRetainedPopup(editorOpen)
-const larger = useTemplateRef<{
-  focus: () => void
-  setSelectionRange: (start: number, end: number) => void
-}>('larger')
-let closedBy: 'enter' | 'cancel' | null = null
 
 const editing = useFormulaField(field, model, {
   dialect,
@@ -88,43 +62,13 @@ const editing = useFormulaField(field, model, {
   }),
   resolve: (source) => resolve(source),
   result: () => (suffix ? `= ${suffix}` : unit),
-  onExpand: expanded ? undefined : () => openEditor(),
-  onChange: () => {
-    if (!editorOpen.value) emit('change')
-  },
+  onChange: () => emit('change'),
   onEnter: () => emit('enter'),
   onCancel: () => emit('cancel'),
   onSelection: (range) => emit('selection', range)
 })
 
-function openEditor() {
-  closedBy = null
-  editorOpen.value = true
-}
-function focusLarger() {
-  void nextTick(() => {
-    larger.value?.focus()
-    larger.value?.setSelectionRange(model.value.length, model.value.length)
-  })
-}
-function closeEditor(reason: 'enter' | 'cancel') {
-  closedBy = reason
-  setEditorOpen(false)
-}
-function setEditorOpen(open: boolean) {
-  editorOpen.value = open
-  if (open) return
-  if (closedBy === 'enter') emit('enter')
-  else if (closedBy === null) emit('change')
-}
-function returnFocus(event: Event) {
-  if (closedBy !== 'cancel') return
-  event.preventDefault()
-  editing.focus()
-}
-
 defineExpose({
-  openEditor,
   focus: editing.focus,
   blur: editing.blur,
   setSelectionRange: editing.setSelectionRange
@@ -133,61 +77,17 @@ defineOptions({ inheritAttrs: false })
 </script>
 
 <template>
-  <PopoverRoot :open="editorOpen" @update:open="setEditorOpen">
-    <PopoverAnchor as-child>
-      <div
-        :class="[inputUI({ size: 'sm' }), ui.formulaField({ expanded })]"
-        :data-invalid="invalid ? '' : undefined"
-        @pointerdown.self.prevent="editing.focus()"
-      >
-        <span v-if="prefix" :class="[ui.formulaAffix(), ui.formulaPrefix()]" aria-hidden="true">{{
-          prefix
-        }}</span>
-        <div ref="field" :class="ui.formulaEditor()" />
-
-        <span v-if="!expanded && $slots.actions" :class="ui.formulaActions()">
-          <slot name="actions" />
-        </span>
-      </div>
-    </PopoverAnchor>
-    <PopoverPortal v-if="!expanded && portalActive">
-      <PopoverContent
-        side="left"
-        align="start"
-        :side-offset="8"
-        :collision-padding="8"
-        :aria-label="label"
-        :class="ui.formulaEditorPanel()"
-        @open-auto-focus.prevent="focusLarger"
-        @close-auto-focus="returnFocus"
-      >
-        <TokenFormulaField
-          :id="`${id}-expanded`"
-          ref="larger"
-          v-model="model"
-          expanded
-          :dialect="dialect"
-          :label="label"
-          :placeholder="placeholder"
-          :completions="completions"
-          :resolve="resolve"
-          :invalid="invalid"
-          :prefix="prefix"
-          :suffix="suffix"
-          :unit="unit"
-          @enter="closeEditor('enter')"
-          @cancel="closeEditor('cancel')"
-          @selection="emit('selection', $event)"
-        />
-        <p :class="ui.formulaEditorKeys()">
-          <span v-for="key in EDITOR_KEYS" :key="key.shortcut">
-            {{ key.label() }}
-            <AppShortcutText :ui="{ base: 'ml-1 text-surface/50' }">{{
-              formatShortcut(key.shortcut)
-            }}</AppShortcutText>
-          </span>
-        </p>
-      </PopoverContent>
-    </PopoverPortal>
-  </PopoverRoot>
+  <div
+    :class="[inputUI({ size: 'sm' }), ui.formulaField()]"
+    :data-invalid="invalid ? '' : undefined"
+    @pointerdown.self.prevent="editing.focus()"
+  >
+    <span v-if="prefix" :class="[ui.formulaAffix(), ui.formulaPrefix()]" aria-hidden="true">{{
+      prefix
+    }}</span>
+    <div ref="field" :class="ui.formulaEditor()" />
+    <span v-if="$slots.actions" :class="ui.formulaActions()">
+      <slot name="actions" />
+    </span>
+  </div>
 </template>

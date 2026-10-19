@@ -40,8 +40,8 @@ const completions = computed(() =>
     insert: reference(candidate)
   }))
 )
-const byReference = computed(
-  () => new Map(candidates.map((candidate) => [reference(candidate), candidate]))
+const byProperty = computed(
+  () => new Map(candidates.map((candidate) => [`--${candidate.cssName}`, candidate]))
 )
 const pickerItems = computed(() =>
   candidates.map(({ id: candidateId, name, collection, text }) => ({
@@ -52,12 +52,12 @@ const pickerItems = computed(() =>
   }))
 )
 
-/** A `var()` pill is named by the CSS name it writes; the tooltip gives the token. */
-function resolveReference(source: string) {
-  const candidate = byReference.value.get(source.replaceAll(' ', ''))
+/** The custom property in a `var()` shows as a pill of its name; the tooltip gives the token. */
+function resolveReference(property: string) {
+  const candidate = byProperty.value.get(property)
   if (!candidate) return undefined
   return {
-    label: candidate.cssName,
+    label: property,
     tooltip: `${candidate.collection} · ${candidate.name} · ${candidate.text}`
   }
 }

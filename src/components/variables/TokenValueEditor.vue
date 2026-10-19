@@ -4,7 +4,7 @@ import { computed, nextTick, ref, useId, useTemplateRef, watch } from 'vue'
 
 import { tokenNumberToCSS, variableUnit } from '@open-pencil/dom-css/export'
 import type { Variable, VariableValue } from '@open-pencil/scene-graph'
-import { formatShortcut, useI18n } from '@open-pencil/vue'
+import { useI18n } from '@open-pencil/vue'
 
 import {
   referencePillName,
@@ -181,9 +181,6 @@ function cancel() {
 }
 
 const offersFormula = computed(() => showsSwitch.value)
-/** The larger editor's shortcut, which works in the field as well. */
-const EXPAND_SHORTCUT = formatShortcut('MOD+SHIFT+Enter')
-const expandLabel = computed(() => `${variables.value.expandEditor} (${EXPAND_SHORTCUT ?? ''})`)
 async function writeFormula() {
   writingFormula.value = true
   await nextTick()
@@ -252,14 +249,6 @@ function detach() {
           @click="writeFormula"
         >
           <icon-lucide-square-function class="size-3.5" />
-        </IconButton>
-        <IconButton
-          v-else
-          :label="expandLabel"
-          data-test-id="variables-expand-editor"
-          @click="field?.openEditor()"
-        >
-          <icon-lucide-maximize-2 class="size-3.5" />
         </IconButton>
         <IconButton
           v-if="expression !== undefined"

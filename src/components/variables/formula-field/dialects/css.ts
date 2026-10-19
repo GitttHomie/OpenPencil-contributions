@@ -7,7 +7,11 @@ import { StreamLanguage } from '@codemirror/language'
 import type { EditorState } from '@codemirror/state'
 import { tags } from '@lezer/highlight'
 
-import { cssValueTokens, type CSSValueTokenKind } from '@open-pencil/scene-graph/css'
+import {
+  cssReferenceProperty,
+  cssValueTokens,
+  type CSSValueTokenKind
+} from '@open-pencil/scene-graph/css'
 
 import { nodeText, tokenBefore, type SyntaxNode } from './syntax'
 import type { ExpressionDialect, ReferenceCompletion } from './types'
@@ -113,8 +117,12 @@ function completeCSSValue(references: () => readonly ReferenceCompletion[]) {
 export const cssValueDialect: ExpressionDialect = {
   language: cssValueLanguage,
   complete: completeCSSValue,
+  // The pill covers the custom property inside `var()`, which stays visible as CSS.
   references: (source) =>
-    cssValueTokens(source).flatMap(({ kind, text, from, to }) =>
-      kind === 'reference' ? [{ source: text, from, to }] : []
-    )
+    cssValueTokens(source).flatMap((token) => {
+      if (token.kind !== 'reference') return []
+      const property = cssReferenceProperty(token)
+      const from = token.from + token.text.indexOf(property)
+      return [{ source: property, from, to: from + property.length }]
+    })
 }

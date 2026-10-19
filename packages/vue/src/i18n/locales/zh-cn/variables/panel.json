@@ -127,7 +127,5 @@
   "importAction": "导入",
   "formula": "公式",
   "useFormula": "使用公式",
-  "formulaPlaceholder": "值或公式",
-  "expandEditor": "打开更大的编辑器",
-  "newLine": "换行"
+  "formulaPlaceholder": "值或公式"
 }

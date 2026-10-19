@@ -448,11 +448,7 @@ function cssNameDone(event: KeyboardEvent) {
 
     <section v-if="scopes.length > 0" :class="ui.section()">
       <h3 :class="ui.sectionTitle()">{{ variables.scopes }}</h3>
-      <label
-        v-for="scope in scopes"
-        :key="scope"
-        class="flex items-center gap-2 text-xs text-surface"
-      >
+      <label v-for="scope in scopes" :key="scope" :class="ui.scope()">
         <AppCheckbox
           :model-value="hasScope(scope)"
           :ariaLabel="SCOPE_MESSAGES[scope]?.() ?? scope"

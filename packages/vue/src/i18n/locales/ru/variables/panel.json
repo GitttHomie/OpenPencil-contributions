@@ -127,7 +127,5 @@
   "importAction": "Импортировать",
   "formula": "Формула",
   "useFormula": "Использовать формулу",
-  "formulaPlaceholder": "Значение или формула",
-  "expandEditor": "Открыть большой редактор",
-  "newLine": "Новая строка"
+  "formulaPlaceholder": "Значение или формула"
 }

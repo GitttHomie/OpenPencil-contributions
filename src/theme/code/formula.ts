@@ -10,11 +10,11 @@ export function formulaEditorTheme(dark: boolean) {
     {
       '&': { fontSize: '12px' },
       '&.cm-focused': { outline: 'none' },
-      // About six lines, then the value scrolls inside the field.
+      // About twelve lines, then the value scrolls inside the field.
       '.cm-scroller': {
         fontFamily: 'inherit',
         lineHeight: '20px',
-        maxHeight: 'var(--formula-max-height, 120px)',
+        maxHeight: '240px',
         overflowX: 'hidden',
         overflowY: 'auto'
       },

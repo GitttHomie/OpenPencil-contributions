@@ -261,7 +261,7 @@ test('a CSS expression completes token names as var() pills and functions', asyn
   await expect(completion.getByRole('option', { name: /^clamp/ })).toHaveCount(0)
   await page.keyboard.press('Enter')
   await page.keyboard.type(', 2rem)')
-  await expect(css.locator('[data-reference]')).toHaveText('base')
+  await expect(css.locator('[data-reference]')).toHaveText('--base')
   await page.keyboard.press('Enter')
   await expect(page.getByTestId('token-output')).toContainText('clamp(1rem, var(--base), 2rem)')
 
@@ -288,12 +288,12 @@ test('a CSS expression completes token names as var() pills and functions', asyn
   canvas.assertNoErrors()
 })
 
-test('long values span lines and open in a larger editor', async ({ page }) => {
+test('long values span lines', async ({ page }) => {
   const canvas = new CanvasHelper(page)
   await page.goto('/?test')
   await canvas.waitForInit()
   const ids = await seedFormulaScene(page)
-  const { dialog, inspector } = await openToken(page, ids.width)
+  const { inspector } = await openToken(page, ids.width)
   const value = inspector.getByRole('textbox', { name: 'Value', exact: true })
   await value.fill('{base} * 2')
   await value.press('End')
@@ -302,20 +302,5 @@ test('long values span lines and open in a larger editor', async ({ page }) => {
   await expect(value.locator('.cm-line')).toHaveCount(2)
   await value.press('Enter')
   expect((await formulaSceneState(page, ids)).width).toBe(12)
-
-  await inspector.getByTestId('variables-expand-editor').click()
-  const larger = dialog.getByRole('textbox', { name: 'Value', exact: true }).last()
-  await expect(larger).toBeFocused()
-  await page.keyboard.insertText(' + 1')
-  await expect(value).toContainText('+ 1')
-  await page.keyboard.press('Escape')
-  await expect(value).toBeFocused()
-  expect((await formulaSceneState(page, ids)).width).toBe(12)
-
-  await value.press('Meta+Shift+Enter')
-  await expect(larger).toBeFocused()
-  await page.keyboard.press('Enter')
-  await expect(larger).toHaveCount(0)
-  expect((await formulaSceneState(page, ids)).width).toBe(13)
   canvas.assertNoErrors()
 })

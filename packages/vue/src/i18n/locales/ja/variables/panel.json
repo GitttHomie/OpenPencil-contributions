@@ -127,7 +127,5 @@
   "importAction": "読み込む",
   "formula": "数式",
   "useFormula": "数式を使用",
-  "formulaPlaceholder": "値または数式",
-  "expandEditor": "大きなエディタを開く",
-  "newLine": "改行"
+  "formulaPlaceholder": "値または数式"
 }
