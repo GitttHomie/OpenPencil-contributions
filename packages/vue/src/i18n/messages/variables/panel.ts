@@ -138,7 +138,6 @@ export const variablesMessageDefaults = {
   useFormula: 'Use a formula',
   formulaPlaceholder: 'Value or formula',
   expandEditor: 'Open a larger editor',
-  expandExpression: 'Open CSS in a larger editor',
   newLine: 'New line'
 } as const
 

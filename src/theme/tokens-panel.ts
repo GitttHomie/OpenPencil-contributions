@@ -71,14 +71,12 @@ export default {
     /** A mode's value control beside the button that points it at a variable. */
     valueRow: 'flex items-center gap-1 [&>*:first-child]:min-w-0 [&>*:first-child]:flex-1',
     valueControl: 'flex min-h-7 min-w-0 items-center gap-1.5',
-    /**
-     * A value field with its buttons at the end; fields that belong to the value, such as its
-     * CSS expression, stack under the field in the same column.
-     */
-    valueGrid: 'grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-1 gap-y-1 *:col-start-1',
-    valueActions: 'col-start-2! row-start-1 flex h-7 items-center',
+    /** A value editor: its label with its tools, then its field and what belongs to it. */
+    valueField: 'flex flex-col gap-1',
+    valueHeader: 'flex min-h-6 items-center justify-between gap-2',
+    valueTools: 'flex shrink-0 items-center',
     /** A CSS expression's field and buttons, in the value grid's columns under the value's. */
-    expressionField: 'col-start-1 min-w-0',
+    expressionField: 'min-w-0',
     /** The value field, an input holding pills and operators, with the result at its end. */
     formulaField:
       'group/field flex h-auto min-h-7 cursor-text items-end gap-1.5 py-[3px] focus-within:border-panel-focus focus-within:ring-1 focus-within:ring-accent/25 data-[invalid]:border-error data-[invalid]:focus-within:border-error',

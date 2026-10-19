@@ -227,9 +227,6 @@ function commitExpression(modeId: string, css: string) {
   emit('updateToken', { expressions: isEmptyObject(expressions) ? undefined : expressions })
 }
 
-/** Asks a mode's expression field to open its larger editor, from the value's menu. */
-const expandRequests = reactive<Record<string, number>>({})
-
 /** The mode whose expression field was asked for, which shows until it is committed. */
 const addingExpression = ref<string | null>(null)
 const expressionId = `${useId()}-expression`
@@ -253,6 +250,11 @@ function clearExpression(modeId: string) {
   draft.expressions[modeId] = ''
   commitExpression(modeId, '')
 }
+
+/** Numbers and true/false values edit in the value editor, which takes formulas. */
+const editsValues = computed(
+  () => Boolean(formula) && (variable.value.type === 'FLOAT' || variable.value.type === 'BOOLEAN')
+)
 
 function hasScope(scope: VariableScope) {
   return variable.value.scopes?.includes(scope) ?? false
@@ -351,14 +353,18 @@ function cssNameDone(event: KeyboardEvent) {
     </section>
 
     <section :class="ui.section()">
-      <h3 :class="ui.sectionTitle()">{{ singleMode ? variables.value : variables.values }}</h3>
+      <!-- A value editor heads itself, its tools on its label's row; the section title is for several. -->
+      <h3 v-if="!editsValues || !singleMode" :class="ui.sectionTitle()">
+        {{ singleMode ? variables.value : variables.values }}
+      </h3>
       <div v-for="mode in collection.modes" :key="mode.modeId" :class="ui.field()">
-        <span v-if="!singleMode" :class="ui.label()">{{ mode.name }}</span>
+        <span v-if="!editsValues && !singleMode" :class="ui.label()">{{ mode.name }}</span>
         <TokenValueEditor
-          v-if="formula && (variable.type === 'FLOAT' || variable.type === 'BOOLEAN')"
+          v-if="editsValues && formula"
           :variable="variable"
           :mode-id="mode.modeId"
           :label="singleMode ? variables.value : mode.name"
+          :heading="singleMode ? 'section' : 'mode'"
           :candidates="aliasCandidates"
           :formula="formula"
           :expression="variable.type === 'FLOAT' ? showsExpression(mode.modeId) : undefined"
@@ -366,7 +372,6 @@ function cssNameDone(event: KeyboardEvent) {
           @done="emit('done')"
           @add-expression="addExpression(mode.modeId)"
           @remove-expression="clearExpression(mode.modeId)"
-          @expand-expression="expandRequests[mode.modeId] = (expandRequests[mode.modeId] ?? 0) + 1"
         >
           <template #below>
             <TokenCSSExpression
@@ -377,7 +382,6 @@ function cssNameDone(event: KeyboardEvent) {
               :unit="numberUnit"
               :candidates="cssCandidates"
               :described-by="`${expressionId}-hint`"
-              :expand-request="expandRequests[mode.modeId]"
               @commit="commitExpression(mode.modeId, $event)"
               @cancel="cancelExpression(mode.modeId)"
             />

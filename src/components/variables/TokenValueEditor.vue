@@ -1,11 +1,4 @@
 <script setup lang="ts">
-import {
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuPortal,
-  DropdownMenuRoot,
-  DropdownMenuTrigger
-} from 'reka-ui'
 import { tv } from 'tailwind-variants'
 import { computed, nextTick, ref, useId, useTemplateRef, watch } from 'vue'
 
@@ -21,8 +14,6 @@ import {
 import { parseTokenEditorText, tokenEditorText } from '@/app/editor/tokens/value-editor'
 import { VariablePicker } from '@/components/ui/binding'
 import IconButton from '@/components/ui/button/IconButton.vue'
-import AppShortcutText from '@/components/ui/menu/AppShortcutText.vue'
-import { useMenuUI } from '@/components/ui/menu/menu'
 import AppSwitch from '@/components/ui/toggle/AppSwitch.vue'
 import tokensPanelTheme from '@/theme/tokens-panel'
 
@@ -30,10 +21,20 @@ import { formulaDialect } from './formula-field/dialects/formula'
 import type { FormulaSelection } from './formula-field/source'
 import type TokenFormulaField from './TokenFormulaField.vue'
 
-const { variable, modeId, label, candidates, formula, expression } = defineProps<{
+const {
+  variable,
+  modeId,
+  label,
+  heading = 'mode',
+  candidates,
+  formula,
+  expression
+} = defineProps<{
   variable: Variable
   modeId: string
   label: string
+  /** A lone value's label reads as the section's title; one of several, as its mode's name. */
+  heading?: 'section' | 'mode'
   candidates: AliasCandidate[]
   formula: TokenFormulaActions
   /** Whether the mode has a CSS expression; left out where the value takes none. */
@@ -44,11 +45,9 @@ const emit = defineEmits<{
   done: []
   addExpression: []
   removeExpression: []
-  expandExpression: []
 }>()
 const { variables } = useI18n()
 const ui = tv(tokensPanelTheme)()
-const menu = useMenuUI({ content: 'w-60', item: 'justify-start gap-2' })
 const fieldId = useId()
 const field = useTemplateRef<InstanceType<typeof TokenFormulaField>>('field')
 
@@ -181,29 +180,20 @@ function cancel() {
   field.value?.blur()
 }
 
-/** Where focus goes once the menu closes, when an action moves it to a field. */
-const menuFocus = ref<'formula' | 'expression' | 'expand' | 'expand-expression' | null>(null)
 const offersFormula = computed(() => showsSwitch.value)
 /** The larger editor's shortcut, which works in the field as well. */
 const EXPAND_SHORTCUT = formatShortcut('MOD+SHIFT+Enter')
-function writeFormula() {
+const expandLabel = computed(() => `${variables.value.expandEditor} (${EXPAND_SHORTCUT ?? ''})`)
+async function writeFormula() {
   writingFormula.value = true
-  menuFocus.value = 'formula'
+  await nextTick()
+  field.value?.focus()
+  field.value?.setSelectionRange(0, draft.value.length)
 }
-/** The menu hands focus back to its button on closing; a field an action opened takes it instead. */
-function focusAfterMenu(event: Event) {
-  const target = menuFocus.value
-  menuFocus.value = null
-  if (!target) return
-  event.preventDefault()
-  if (target === 'expression') emit('addExpression')
-  else if (target === 'expand-expression') emit('expandExpression')
-  else if (target === 'expand') field.value?.openEditor()
-  else
-    void nextTick(() => {
-      field.value?.focus()
-      field.value?.setSelectionRange(0, draft.value.length)
-    })
+/** One button adds a CSS expression, focusing its field, and removes the one there is. */
+function toggleExpression() {
+  if (expression) emit('removeExpression')
+  else emit('addExpression')
 }
 
 /** A literal is replaced by the variable; inside a formula, the variable goes at the caret. */
@@ -251,7 +241,38 @@ function detach() {
 </script>
 
 <template>
-  <div :class="ui.valueGrid()">
+  <div :class="ui.valueField()">
+    <div :class="ui.valueHeader()">
+      <span :class="heading === 'section' ? ui.sectionTitle() : ui.label()">{{ label }}</span>
+      <span :class="ui.valueTools()">
+        <IconButton
+          v-if="offersFormula"
+          :label="variables.useFormula"
+          data-test-id="variables-use-formula"
+          @click="writeFormula"
+        >
+          <icon-lucide-square-function class="size-3.5" />
+        </IconButton>
+        <IconButton
+          v-else
+          :label="expandLabel"
+          data-test-id="variables-expand-editor"
+          @click="field?.openEditor()"
+        >
+          <icon-lucide-maximize-2 class="size-3.5" />
+        </IconButton>
+        <IconButton
+          v-if="expression !== undefined"
+          :label="expression ? variables.removeExpression : variables.addExpression"
+          :active="expression"
+          toggle
+          data-test-id="variables-css-expression"
+          @click="toggleExpression"
+        >
+          <icon-lucide-code class="size-3.5" />
+        </IconButton>
+      </span>
+    </div>
     <div v-if="showsSwitch" :class="ui.valueControl()">
       <AppSwitch
         :model-value="value === true"
@@ -281,65 +302,10 @@ function detach() {
     >
       <template #actions><VariablePicker v-bind="picker" /></template>
     </TokenFormulaField>
-    <div :class="ui.valueActions()">
-      <DropdownMenuRoot>
-        <DropdownMenuTrigger as-child>
-          <IconButton
-            :label="variables.rowActions({ name: label })"
-            data-test-id="variables-value-actions"
-          >
-            <icon-lucide-ellipsis class="size-3.5" />
-          </IconButton>
-        </DropdownMenuTrigger>
-        <DropdownMenuPortal>
-          <DropdownMenuContent
-            side="bottom"
-            :side-offset="4"
-            align="end"
-            :class="menu.content"
-            @close-auto-focus="focusAfterMenu"
-          >
-            <DropdownMenuItem v-if="offersFormula" :class="menu.item" @select="writeFormula">
-              <icon-lucide-square-function :class="menu.icon" />
-              {{ variables.useFormula }}
-            </DropdownMenuItem>
-            <DropdownMenuItem v-else :class="menu.item" @select="menuFocus = 'expand'">
-              <icon-lucide-maximize-2 :class="menu.icon" />
-              <span class="flex-1">{{ variables.expandEditor }}</span>
-              <AppShortcutText>{{ EXPAND_SHORTCUT }}</AppShortcutText>
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              v-if="expression"
-              :class="menu.item"
-              @select="menuFocus = 'expand-expression'"
-            >
-              <icon-lucide-maximize-2 :class="menu.icon" />
-              {{ variables.expandExpression }}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              v-if="expression"
-              :class="menu.item"
-              @select="emit('removeExpression')"
-            >
-              <icon-lucide-x :class="menu.icon" />
-              {{ variables.removeExpression }}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              v-else-if="expression === false"
-              :class="menu.item"
-              @select="menuFocus = 'expression'"
-            >
-              <icon-lucide-code :class="menu.icon" />
-              {{ variables.addExpression }}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenuPortal>
-      </DropdownMenuRoot>
-    </div>
     <p :id="`${fieldId}-result`" :class="error ? ui.error() : 'sr-only'" aria-live="polite">
       {{ error || suffix }}
     </p>
-    <!-- Fields that belong to this value, such as its CSS expression, line up with it. -->
+    <!-- Fields that belong to this value, such as its CSS expression, follow it. -->
     <slot name="below" />
   </div>
 </template>
