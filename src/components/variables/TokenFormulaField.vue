@@ -5,7 +5,7 @@ import { nextTick, ref, useTemplateRef } from 'vue'
 
 import { formatShortcut, useI18n, useRetainedPopup } from '@open-pencil/vue'
 
-import Tip from '@/components/ui/overlay/Tip.vue'
+import AppShortcutText from '@/components/ui/menu/AppShortcutText.vue'
 import inputTheme from '@/theme/input/input'
 import tokensPanelTheme from '@/theme/tokens-panel'
 
@@ -87,6 +87,8 @@ const editing = useFormulaField(field, model, {
     'aria-multiline': 'true'
   }),
   resolve: (source) => resolve(source),
+  result: () => (suffix ? `= ${suffix}` : unit),
+  onExpand: expanded ? undefined : () => openEditor(),
   onChange: () => {
     if (!editorOpen.value) emit('change')
   },
@@ -122,6 +124,7 @@ function returnFocus(event: Event) {
 }
 
 defineExpose({
+  openEditor,
   focus: editing.focus,
   blur: editing.blur,
   setSelectionRange: editing.setSelectionRange
@@ -141,23 +144,6 @@ defineOptions({ inheritAttrs: false })
           prefix
         }}</span>
         <div ref="field" :class="ui.formulaEditor()" />
-        <!-- Before the result, so its space while hidden falls in the field's empty part. -->
-        <Tip v-if="!expanded" :label="variables.expandEditor">
-          <button
-            type="button"
-            :class="ui.formulaExpand()"
-            :aria-label="variables.expandEditor"
-            data-test-id="formula-expand"
-            @pointerdown.prevent
-            @click="openEditor"
-          >
-            <icon-lucide-maximize-2 class="size-3" />
-          </button>
-        </Tip>
-        <span v-if="suffix" :class="[ui.formulaAffix(), ui.formulaSuffix()]" aria-hidden="true"
-          >= {{ suffix }}</span
-        >
-        <span v-else-if="unit" :class="ui.formulaAffix()" aria-hidden="true">{{ unit }}</span>
 
         <span v-if="!expanded && $slots.actions" :class="ui.formulaActions()">
           <slot name="actions" />
@@ -196,7 +182,9 @@ defineOptions({ inheritAttrs: false })
         <p :class="ui.formulaEditorKeys()">
           <span v-for="key in EDITOR_KEYS" :key="key.shortcut">
             {{ key.label() }}
-            <kbd :class="ui.formulaEditorKey()">{{ formatShortcut(key.shortcut) }}</kbd>
+            <AppShortcutText :ui="{ base: 'ml-1 text-surface/50' }">{{
+              formatShortcut(key.shortcut)
+            }}</AppShortcutText>
           </span>
         </p>
       </PopoverContent>

@@ -18,9 +18,18 @@ export function formulaEditorTheme(dark: boolean) {
         overflowX: 'hidden',
         overflowY: 'auto'
       },
-      '.cm-content': { padding: '0', caretColor: 'var(--color-surface)' },
+      // The content may be narrower than its longest pill, which then truncates, so the field
+      // never grows past the inspector.
+      '.cm-content': { padding: '0', minWidth: '0', caretColor: 'var(--color-surface)' },
       '.cm-line': { padding: '0' },
       '.cm-placeholder': { color: 'var(--color-muted)' },
+      '.cm-formula-result': {
+        paddingLeft: '8px',
+        color: 'var(--color-muted)',
+        fontVariantNumeric: 'tabular-nums',
+        pointerEvents: 'none',
+        userSelect: 'none'
+      },
       '.cm-tooltip.cm-tooltip-autocomplete': {
         backgroundColor: 'var(--color-panel)',
         color: 'var(--color-surface)',

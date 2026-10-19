@@ -129,5 +129,6 @@
   "useFormula": "Usar una fórmula",
   "formulaPlaceholder": "Valor o fórmula",
   "expandEditor": "Abrir un editor más grande",
+  "expandExpression": "Abrir el CSS en un editor más grande",
   "newLine": "Nueva línea"
 }

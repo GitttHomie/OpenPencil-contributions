@@ -129,5 +129,6 @@
   "useFormula": "Использовать формулу",
   "formulaPlaceholder": "Значение или формула",
   "expandEditor": "Открыть большой редактор",
+  "expandExpression": "Открыть CSS в большом редакторе",
   "newLine": "Новая строка"
 }

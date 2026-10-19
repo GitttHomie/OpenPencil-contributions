@@ -22,6 +22,7 @@ import { formulaEditorTheme } from '@/theme/code/formula'
 
 import type { ExpressionDialect, ReferenceCompletion } from './dialects/types'
 import { formulaReferences, referencePills } from './references'
+import { formulaResult, resultDecoration } from './result'
 import { formulaSegments, type FormulaPill, type FormulaSelection } from './source'
 
 interface FormulaFieldOptions {
@@ -31,6 +32,10 @@ interface FormulaFieldOptions {
   placeholder: () => string
   attributes: () => Record<string, string>
   resolve: (source: string) => FormulaPill | undefined
+  /** What the value gives, or a plain number's unit, shown after its text. */
+  result: () => string | undefined
+  /** Opens the larger editor, where there is one. */
+  onExpand?: () => void
   onChange: () => void
   onEnter: () => void
   onCancel: () => void
@@ -70,6 +75,7 @@ export function useFormulaField(
       autocompletion({ override: [options.dialect.complete(options.completions)], icons: false }),
       keymap.of([...completionKeymap, { key: 'Tab', run: acceptCompletion }]),
       referencePills,
+      resultDecoration,
       EditorView.lineWrapping,
       keymap.of(defaultKeymap),
       Prec.highest(
@@ -85,6 +91,11 @@ export function useFormulaField(
               if (event.shiftKey || event.code === 'KeyY') redo(editor)
               else undo(editor)
               return true
+            }
+            if (event.code === 'Enter' && event.shiftKey && (event.metaKey || event.ctrlKey)) {
+              event.preventDefault()
+              options.onExpand?.()
+              return Boolean(options.onExpand)
             }
             // Line breaks are whitespace in both syntaxes, so long values can span lines.
             if (event.code === 'Enter' && event.shiftKey) {
@@ -129,6 +140,7 @@ export function useFormulaField(
       () => completionPlacement(host.value),
       () => EditorView.contentAttributes.of(options.attributes()),
       () => placeholder(options.placeholder()),
+      () => formulaResult.of(options.result() ?? ''),
       () =>
         formulaReferences.of({
           appContext,

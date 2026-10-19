@@ -305,8 +305,8 @@ test('long values span lines and open in a larger editor', async ({ page }) => {
   await value.press('Enter')
   expect((await formulaSceneState(page, ids)).width).toBe(12)
 
-  await value.hover()
-  await inspector.getByTestId('formula-expand').click()
+  await inspector.getByRole('button', { name: 'Value actions' }).click()
+  await page.getByRole('menuitem', { name: /Open a larger editor/ }).click()
   const larger = dialog.getByRole('textbox', { name: 'Value', exact: true }).last()
   await expect(larger).toBeFocused()
   await page.keyboard.insertText(' + 1')
@@ -315,7 +315,7 @@ test('long values span lines and open in a larger editor', async ({ page }) => {
   await expect(value).toBeFocused()
   expect((await formulaSceneState(page, ids)).width).toBe(12)
 
-  await inspector.getByTestId('formula-expand').click()
+  await value.press('Meta+Shift+Enter')
   await expect(larger).toBeFocused()
   await page.keyboard.press('Enter')
   await expect(larger).toHaveCount(0)

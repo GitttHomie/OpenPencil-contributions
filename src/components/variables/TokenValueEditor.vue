@@ -11,7 +11,7 @@ import { computed, nextTick, ref, useId, useTemplateRef, watch } from 'vue'
 
 import { tokenNumberToCSS, variableUnit } from '@open-pencil/dom-css/export'
 import type { Variable, VariableValue } from '@open-pencil/scene-graph'
-import { useI18n } from '@open-pencil/vue'
+import { formatShortcut, useI18n } from '@open-pencil/vue'
 
 import {
   referencePillName,
@@ -21,6 +21,7 @@ import {
 import { parseTokenEditorText, tokenEditorText } from '@/app/editor/tokens/value-editor'
 import { VariablePicker } from '@/components/ui/binding'
 import IconButton from '@/components/ui/button/IconButton.vue'
+import AppShortcutText from '@/components/ui/menu/AppShortcutText.vue'
 import { useMenuUI } from '@/components/ui/menu/menu'
 import AppSwitch from '@/components/ui/toggle/AppSwitch.vue'
 import tokensPanelTheme from '@/theme/tokens-panel'
@@ -43,10 +44,11 @@ const emit = defineEmits<{
   done: []
   addExpression: []
   removeExpression: []
+  expandExpression: []
 }>()
 const { variables } = useI18n()
 const ui = tv(tokensPanelTheme)()
-const menu = useMenuUI({ content: 'w-48', item: 'justify-start gap-2' })
+const menu = useMenuUI({ content: 'w-60', item: 'justify-start gap-2' })
 const fieldId = useId()
 const field = useTemplateRef<InstanceType<typeof TokenFormulaField>>('field')
 
@@ -180,9 +182,10 @@ function cancel() {
 }
 
 /** Where focus goes once the menu closes, when an action moves it to a field. */
-const menuFocus = ref<'formula' | 'expression' | null>(null)
+const menuFocus = ref<'formula' | 'expression' | 'expand' | 'expand-expression' | null>(null)
 const offersFormula = computed(() => showsSwitch.value)
-const offersMenu = computed(() => offersFormula.value || expression !== undefined)
+/** The larger editor's shortcut, which works in the field as well. */
+const EXPAND_SHORTCUT = formatShortcut('MOD+SHIFT+Enter')
 function writeFormula() {
   writingFormula.value = true
   menuFocus.value = 'formula'
@@ -193,14 +196,14 @@ function focusAfterMenu(event: Event) {
   menuFocus.value = null
   if (!target) return
   event.preventDefault()
-  if (target === 'expression') {
-    emit('addExpression')
-    return
-  }
-  void nextTick(() => {
-    field.value?.focus()
-    field.value?.setSelectionRange(0, draft.value.length)
-  })
+  if (target === 'expression') emit('addExpression')
+  else if (target === 'expand-expression') emit('expandExpression')
+  else if (target === 'expand') field.value?.openEditor()
+  else
+    void nextTick(() => {
+      field.value?.focus()
+      field.value?.setSelectionRange(0, draft.value.length)
+    })
 }
 
 /** A literal is replaced by the variable; inside a formula, the variable goes at the caret. */
@@ -279,7 +282,7 @@ function detach() {
       <template #actions><VariablePicker v-bind="picker" /></template>
     </TokenFormulaField>
     <div :class="ui.valueActions()">
-      <DropdownMenuRoot v-if="offersMenu">
+      <DropdownMenuRoot>
         <DropdownMenuTrigger as-child>
           <IconButton
             :label="variables.rowActions({ name: label })"
@@ -300,6 +303,19 @@ function detach() {
               <icon-lucide-square-function :class="menu.icon" />
               {{ variables.useFormula }}
             </DropdownMenuItem>
+            <DropdownMenuItem v-else :class="menu.item" @select="menuFocus = 'expand'">
+              <icon-lucide-maximize-2 :class="menu.icon" />
+              <span class="flex-1">{{ variables.expandEditor }}</span>
+              <AppShortcutText>{{ EXPAND_SHORTCUT }}</AppShortcutText>
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              v-if="expression"
+              :class="menu.item"
+              @select="menuFocus = 'expand-expression'"
+            >
+              <icon-lucide-maximize-2 :class="menu.icon" />
+              {{ variables.expandExpression }}
+            </DropdownMenuItem>
             <DropdownMenuItem
               v-if="expression"
               :class="menu.item"
@@ -319,8 +335,6 @@ function detach() {
           </DropdownMenuContent>
         </DropdownMenuPortal>
       </DropdownMenuRoot>
-      <!-- A row without actions keeps the column, so buttons line up across modes. -->
-      <span v-else :class="ui.actionSpace()" aria-hidden="true" />
     </div>
     <p :id="`${fieldId}-result`" :class="error ? ui.error() : 'sr-only'" aria-live="polite">
       {{ error || suffix }}

@@ -129,5 +129,6 @@
   "useFormula": "数式を使用",
   "formulaPlaceholder": "値または数式",
   "expandEditor": "大きなエディタを開く",
+  "expandExpression": "CSS を大きなエディタで開く",
   "newLine": "改行"
 }

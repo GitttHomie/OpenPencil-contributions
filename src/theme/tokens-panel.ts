@@ -78,27 +78,21 @@ export default {
     valueGrid: 'grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-1 gap-y-1 *:col-start-1',
     valueActions: 'col-start-2! row-start-1 flex h-7 items-center',
     /** A CSS expression's field and buttons, in the value grid's columns under the value's. */
-    actionSpace: 'size-6 shrink-0',
-    expressionField: 'col-start-1',
+    expressionField: 'col-start-1 min-w-0',
     /** The value field, an input holding pills and operators, with the result at its end. */
     formulaField:
       'group/field flex h-auto min-h-7 cursor-text items-end gap-1.5 py-[3px] focus-within:border-panel-focus focus-within:ring-1 focus-within:ring-accent/25 data-[invalid]:border-error data-[invalid]:focus-within:border-error',
     formulaEditor: 'flex min-w-0 flex-1 *:min-w-0 *:flex-1',
-    /** Opens the larger editor; it shows while the field is hovered or focused. */
-    formulaExpand:
-      'flex size-5 shrink-0 cursor-pointer items-center justify-center self-start rounded-sm text-muted opacity-0 outline-none group-focus-within/field:opacity-100 group-hover/field:opacity-100 hover:bg-hover hover:text-surface focus-visible:opacity-100',
     /** The larger editor, beside the inspector over the list. */
     /** Buttons at the field's end, such as the variable button, on its first line. */
     formulaActions: 'flex h-5 shrink-0 items-center self-start',
     /** The larger editor's keys, in a quiet row under it. */
     formulaEditorKeys: 'flex justify-end gap-3 px-0.5 text-[11px] text-muted',
-    formulaEditorKey: 'ml-1 font-sans text-surface/50',
     formulaEditorPanel:
       'z-[100] flex w-[30rem] max-w-[calc(100vw-1rem)] flex-col gap-1.5 rounded-xl bg-panel p-2 text-surface shadow-[0_0_0_1px_var(--color-border),0_8px_30px_rgb(0_0_0/0.4)] outline-none',
     /** Muted text at the field's start or end, such as CSS or the result. */
     formulaAffix: 'shrink-0 leading-5 text-muted',
     formulaPrefix: 'self-start',
-    formulaSuffix: 'max-w-[45%] truncate tabular-nums',
     /** Marks a list value that a formula gives. */
     formulaIcon: 'size-3 shrink-0 text-muted',
     empty: 'px-4 py-8 text-center text-xs text-muted'

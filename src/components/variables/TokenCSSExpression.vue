@@ -18,13 +18,22 @@ import type TokenFormulaField from './TokenFormulaField.vue'
 const EXAMPLE = 'clamp(1rem, 4vw, 1.5rem)'
 
 const css = defineModel<string>({ required: true })
-const { id, label, unit, candidates, describedBy } = defineProps<{
+const {
+  id,
+  label,
+  unit,
+  candidates,
+  describedBy,
+  expandRequest = 0
+} = defineProps<{
   id: string
   label: string
   unit: TokenUnit
   /** Number tokens the expression can name as `var(--name)`. */
   candidates: CSSReferenceCandidate[]
   describedBy: string
+  /** Changes each time the value's menu asks to open this expression in the larger editor. */
+  expandRequest?: number
 }>()
 const emit = defineEmits<{ commit: [css: string]; cancel: [] }>()
 const { variables } = useI18n()
@@ -110,6 +119,11 @@ function restoreFocus(event: Event) {
   field.value?.focus()
   field.value?.setSelectionRange(caret, caret)
 }
+
+watch(
+  () => expandRequest,
+  () => field.value?.openEditor()
+)
 
 defineExpose({ focus: () => field.value?.focus() })
 </script>

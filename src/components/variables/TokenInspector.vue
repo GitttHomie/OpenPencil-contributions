@@ -227,6 +227,9 @@ function commitExpression(modeId: string, css: string) {
   emit('updateToken', { expressions: isEmptyObject(expressions) ? undefined : expressions })
 }
 
+/** Asks a mode's expression field to open its larger editor, from the value's menu. */
+const expandRequests = reactive<Record<string, number>>({})
+
 /** The mode whose expression field was asked for, which shows until it is committed. */
 const addingExpression = ref<string | null>(null)
 const expressionId = `${useId()}-expression`
@@ -363,6 +366,7 @@ function cssNameDone(event: KeyboardEvent) {
           @done="emit('done')"
           @add-expression="addExpression(mode.modeId)"
           @remove-expression="clearExpression(mode.modeId)"
+          @expand-expression="expandRequests[mode.modeId] = (expandRequests[mode.modeId] ?? 0) + 1"
         >
           <template #below>
             <TokenCSSExpression
@@ -373,6 +377,7 @@ function cssNameDone(event: KeyboardEvent) {
               :unit="numberUnit"
               :candidates="cssCandidates"
               :described-by="`${expressionId}-hint`"
+              :expand-request="expandRequests[mode.modeId]"
               @commit="commitExpression(mode.modeId, $event)"
               @cancel="cancelExpression(mode.modeId)"
             />

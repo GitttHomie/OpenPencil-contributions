@@ -17,8 +17,11 @@ interface FormulaReferences {
 
 export const formulaReferences = Facet.define<FormulaReferences>()
 
-/** A pill inside the line, sitting on the text like a word. */
-const PILL_UI = { pill: 'mx-px inline-flex max-w-40 flex-none align-middle' }
+/**
+ * A pill inside the line, sitting on the text like a word. It leaves room on its line for an
+ * operator before it, so a long name truncates instead of parting from its operator.
+ */
+const PILL_UI = { pill: 'mx-px inline-flex max-w-[calc(100%-2.5rem)] flex-none align-middle' }
 
 class ReferenceWidget extends WidgetType {
   constructor(
@@ -40,7 +43,10 @@ class ReferenceWidget extends WidgetType {
   toDOM(view: EditorView) {
     const host = view.dom.ownerDocument.createElement('span')
     host.contentEditable = 'false'
-    host.dataset.reference = this.source
+    // A zero-width space lets a line break before the pill, even right after `(`.
+    const pill = view.dom.ownerDocument.createElement('span')
+    pill.dataset.reference = this.source
+    host.append('\u200B', pill)
     // Vue rendering flushes watchers; defer it until CodeMirror finishes its transaction.
     void nextTick(() => {
       if (!host.isConnected) return
@@ -50,14 +56,15 @@ class ReferenceWidget extends WidgetType {
         ui: PILL_UI
       })
       vnode.appContext = this.appContext
-      render(vnode, host)
+      render(vnode, pill)
       view.requestMeasure()
     })
     return host
   }
 
   destroy(host: HTMLElement) {
-    void nextTick(() => render(null, host))
+    const pill = host.lastElementChild
+    if (pill instanceof HTMLElement) void nextTick(() => render(null, pill))
   }
 }
 
