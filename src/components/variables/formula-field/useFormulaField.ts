@@ -22,7 +22,7 @@ import { formulaEditorTheme } from '@/theme/code/formula'
 
 import type { ExpressionDialect, ReferenceCompletion } from './dialects/types'
 import { formulaReferences, referencePills } from './references'
-import { formulaResult, resultDecoration } from './result'
+import { formulaButtonSpace, formulaResult, resultDecoration } from './result'
 import { formulaSegments, type FormulaPill, type FormulaSelection } from './source'
 
 interface FormulaFieldOptions {
@@ -34,6 +34,8 @@ interface FormulaFieldOptions {
   resolve: (source: string) => FormulaPill | undefined
   /** What the value gives, or a plain number's unit, shown after its text. */
   result: () => string | undefined
+  /** Whether buttons sit over the field's top right corner, which the first line keeps clear. */
+  buttons: () => boolean
   onChange: () => void
   onEnter: () => void
   onCancel: () => void
@@ -134,6 +136,7 @@ export function useFormulaField(
       () => EditorView.contentAttributes.of(options.attributes()),
       () => placeholder(options.placeholder()),
       () => formulaResult.of(options.result() ?? ''),
+      () => formulaButtonSpace.of(options.buttons()),
       () =>
         formulaReferences.of({
           appContext,

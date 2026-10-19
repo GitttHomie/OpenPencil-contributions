@@ -81,13 +81,10 @@ export default {
     expressionField: 'min-w-0',
     /** The value field, an input holding pills and operators, with the result at its end. */
     formulaField:
-      'flex h-auto min-h-7 cursor-text items-end gap-1.5 py-[3px] focus-within:border-panel-focus focus-within:ring-1 focus-within:ring-accent/25 data-[invalid]:border-error data-[invalid]:focus-within:border-error',
+      'relative flex h-auto min-h-7 cursor-text items-end gap-1.5 py-[3px] focus-within:border-panel-focus focus-within:ring-1 focus-within:ring-accent/25 data-[invalid]:border-error data-[invalid]:focus-within:border-error',
     formulaEditor: 'flex min-w-0 flex-1 *:min-w-0 *:flex-1',
-    /** The larger editor, beside the inspector over the list. */
-    /** Buttons at the field's end, such as the variable button, on its first line. */
-    formulaActions: 'flex h-5 shrink-0 items-center self-start',
-    formulaEditorPanel:
-      'z-[100] flex w-[30rem] max-w-[calc(100vw-1rem)] flex-col gap-1.5 rounded-xl bg-panel p-2 text-surface shadow-[0_0_0_1px_var(--color-border),0_8px_30px_rgb(0_0_0/0.4)] outline-none',
+    /** Buttons over the field's top right corner, which the text's first line keeps clear. */
+    formulaActions: 'absolute top-[3px] right-2 flex h-5 items-center',
     /** Muted text at the field's start or end, such as CSS or the result. */
     formulaAffix: 'shrink-0 leading-5 text-muted',
     formulaPrefix: 'self-start',

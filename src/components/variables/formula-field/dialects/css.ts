@@ -68,7 +68,9 @@ interface CompletionRange {
 function completionRange(context: CompletionContext): CompletionRange | undefined {
   const { state, pos } = context
   const token = tokenBefore(state, pos)
-  const typed = token?.to === pos && ['property', 'keyword'].includes(token.name)
+  // A `-` at the caret may be the start of a custom property, so the list reads from it.
+  const minus = token?.to === pos && token.name === 'operator' && nodeText(state, token) === '-'
+  const typed = token?.to === pos && (minus || ['property', 'keyword'].includes(token.name))
   const variable = token ? openVarStart(state, token, pos) : undefined
   if (token && variable !== undefined)
     return { from: typed ? token.from : pos, replace: variable, variablesOnly: true }

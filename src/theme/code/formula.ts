@@ -23,6 +23,7 @@ export function formulaEditorTheme(dark: boolean) {
       '.cm-content': { padding: '0', minWidth: '0', caretColor: 'var(--color-surface)' },
       '.cm-line': { padding: '0' },
       '.cm-placeholder': { color: 'var(--color-muted)' },
+      '.cm-formula-button-space': { width: '26px', height: '20px' },
       '.cm-formula-result': {
         paddingLeft: '8px',
         color: 'var(--color-muted)',

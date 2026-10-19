@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { tv } from 'tailwind-variants'
-import { useTemplateRef } from 'vue'
+import { useSlots, useTemplateRef } from 'vue'
 
 import inputTheme from '@/theme/input/input'
 import tokensPanelTheme from '@/theme/tokens-panel'
@@ -46,6 +46,7 @@ const emit = defineEmits<{
   selection: [range: FormulaSelection]
 }>()
 const field = useTemplateRef<HTMLDivElement>('field')
+const slots = useSlots()
 const ui = tv(tokensPanelTheme)()
 const inputUI = tv(inputTheme)
 
@@ -62,6 +63,7 @@ const editing = useFormulaField(field, model, {
   }),
   resolve: (source) => resolve(source),
   result: () => (suffix ? `= ${suffix}` : unit),
+  buttons: () => Boolean(slots.actions),
   onChange: () => emit('change'),
   onEnter: () => emit('enter'),
   onCancel: () => emit('cancel'),
