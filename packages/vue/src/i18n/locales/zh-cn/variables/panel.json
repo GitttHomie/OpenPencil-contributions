@@ -27,6 +27,7 @@
   "addExpression": "添加 CSS 表达式",
   "removeExpression": "移除 CSS 表达式",
   "cssExpressionUnclosed": "函数缺少 )",
+  "cssExpressionSyntax": "不是有效的 CSS",
   "cssExpressionNegated": "要取负值，请写 calc(-1 * var({property}))",
   "cssExpressionUnknownToken": "没有名为 {name} 的令牌",
   "cssExpressionInvalid": "不是 {property} 的有效值",

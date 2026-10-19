@@ -27,6 +27,7 @@
   "addExpression": "Ajouter une expression CSS",
   "removeExpression": "Supprimer l’expression CSS",
   "cssExpressionUnclosed": "Il manque la ) d’une fonction",
+  "cssExpressionSyntax": "CSS non valide",
   "cssExpressionNegated": "Pour inverser un jeton, écrivez calc(-1 * var({property}))",
   "cssExpressionUnknownToken": "Aucun jeton ne s’appelle {name}",
   "cssExpressionInvalid": "Valeur non valide pour {property}",

@@ -1,12 +1,17 @@
 <script setup lang="ts">
+import { computedAsync } from '@vueuse/core'
 import { tv } from 'tailwind-variants'
 import { computed, ref, useTemplateRef, watch } from 'vue'
 
-import { tokenNumberToCSS } from '@open-pencil/dom-css/export'
+import {
+  cssExpressionProblem,
+  loadTokenValidator,
+  tokenNumberToCSS
+} from '@open-pencil/dom-css/export'
 import type { TokenUnit } from '@open-pencil/scene-graph'
 import { useI18n } from '@open-pencil/vue'
 
-import { cssExpressionPreview, cssExpressionProblem } from '@/app/editor/tokens/css-expression'
+import { cssExpressionPreview } from '@/app/editor/tokens/css-expression'
 import type { CSSReferenceCandidate } from '@/app/editor/tokens/model'
 import { VariablePicker } from '@/components/ui/binding'
 import tokensPanelTheme from '@/theme/tokens-panel'
@@ -89,15 +94,19 @@ const previewText = computed(() =>
 /** Errors show once the expression is committed, as the value field's do. */
 const error = ref('')
 watch(css, () => (error.value = ''))
+const validator = computedAsync(loadTokenValidator, null)
 function message(text: string) {
+  if (!validator.value) return ''
   const problem = cssExpressionProblem(
     text,
     unit,
-    new Set(candidates.map((candidate) => `--${candidate.cssName}`)),
+    new Set(byProperty.value.keys()),
+    validator.value,
     (property, value) => CSS.supports(property, value)
   )
   if (!problem) return ''
   if (problem.kind === 'unclosed') return variables.value.cssExpressionUnclosed
+  if (problem.kind === 'syntax') return variables.value.cssExpressionSyntax
   if (problem.kind === 'negated-reference')
     return variables.value.cssExpressionNegated({ property: problem.property })
   if (problem.kind === 'unknown-token')

@@ -27,6 +27,7 @@
   "addExpression": "Añadir expresión CSS",
   "removeExpression": "Quitar la expresión CSS",
   "cssExpressionUnclosed": "A una función le falta su )",
+  "cssExpressionSyntax": "CSS no válido",
   "cssExpressionNegated": "Para negar un token, escribe calc(-1 * var({property}))",
   "cssExpressionUnknownToken": "Ningún token se llama {name}",
   "cssExpressionInvalid": "No es un valor válido para {property}",

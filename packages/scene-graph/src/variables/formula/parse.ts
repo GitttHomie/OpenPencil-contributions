@@ -10,6 +10,13 @@ import {
 } from './evaluate'
 import { formulaTokenName, formulaTokens, type FormulaToken } from './tokens'
 
+/*
+ * A small Pratt parser rather than a library. jsep configures operators globally, which the calc
+ * tool's grammar already relies on, and gives no token stream for the editor to highlight and
+ * complete from. A Lezer grammar would add its runtime (about 18 KB gzipped) to every Scene Graph
+ * consumer, and its generic error recovery would still need these type and arity messages.
+ */
+
 /** Binding strength of each binary operator; prefix operators bind tighter than all of them. */
 export const FORMULA_PRECEDENCE: Partial<Record<VariableFormulaOperator, number>> = {
   OR: 1,

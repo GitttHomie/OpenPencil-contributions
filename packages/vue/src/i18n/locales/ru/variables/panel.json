@@ -27,6 +27,7 @@
   "addExpression": "Добавить CSS-выражение",
   "removeExpression": "Удалить CSS-выражение",
   "cssExpressionUnclosed": "У функции нет закрывающей )",
+  "cssExpressionSyntax": "Некорректный CSS",
   "cssExpressionNegated": "Чтобы взять токен с минусом, напишите calc(-1 * var({property}))",
   "cssExpressionUnknownToken": "Нет токена с именем {name}",
   "cssExpressionInvalid": "Недопустимое значение для {property}",

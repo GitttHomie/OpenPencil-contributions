@@ -8,10 +8,10 @@ import type { EditorState } from '@codemirror/state'
 import { tags } from '@lezer/highlight'
 
 import {
-  cssReferenceProperty,
+  cssTokenProperty,
   cssValueTokens,
   type CSSValueTokenKind
-} from '@open-pencil/scene-graph/css'
+} from '@open-pencil/dom-css/export'
 
 import { nodeText, tokenBefore, type SyntaxNode } from './syntax'
 import type { ExpressionDialect, ReferenceCompletion } from './types'
@@ -122,8 +122,8 @@ export const cssValueDialect: ExpressionDialect = {
   // The pill covers the custom property inside `var()`, which stays visible as CSS.
   references: (source) =>
     cssValueTokens(source).flatMap((token) => {
-      if (token.kind !== 'reference') return []
-      const property = cssReferenceProperty(token)
+      const property = token.kind === 'reference' ? cssTokenProperty(token) : undefined
+      if (!property) return []
       const from = token.from + token.text.indexOf(property)
       return [{ source: property, from, to: from + property.length }]
     })

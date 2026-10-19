@@ -31,6 +31,7 @@ export const variablesMessageDefaults = {
   addExpression: 'Add CSS expression',
   removeExpression: 'Remove CSS expression',
   cssExpressionUnclosed: 'A function is missing its )',
+  cssExpressionSyntax: 'Not valid CSS',
   cssExpressionNegated: params('To negate a token, write calc(-1 * var({property}))'),
   cssExpressionUnknownToken: params('No token is named {name}'),
   cssExpressionInvalid: params('Not a valid value for {property}'),
