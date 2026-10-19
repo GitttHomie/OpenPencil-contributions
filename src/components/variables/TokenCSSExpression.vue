@@ -2,10 +2,11 @@
 import { tv } from 'tailwind-variants'
 import { computed, ref, useTemplateRef, watch } from 'vue'
 
+import { tokenNumberToCSS } from '@open-pencil/dom-css/export'
 import type { TokenUnit } from '@open-pencil/scene-graph'
 import { useI18n } from '@open-pencil/vue'
 
-import { cssExpressionProblem } from '@/app/editor/tokens/css-expression'
+import { cssExpressionPreview, cssExpressionProblem } from '@/app/editor/tokens/css-expression'
 import type { CSSReferenceCandidate } from '@/app/editor/tokens/model'
 import { VariablePicker } from '@/components/ui/binding'
 import tokensPanelTheme from '@/theme/tokens-panel'
@@ -61,6 +62,29 @@ function resolveReference(property: string) {
     tooltip: `${candidate.collection} · ${candidate.name} · ${candidate.text}`
   }
 }
+
+/**
+ * What the expression comes to, computed by the browser on a hidden probe with the tokens it
+ * names, shown as the value field shows its result.
+ */
+const probe = useTemplateRef<HTMLDivElement>('probe')
+function measure(property: string, value: string, variables: ReadonlyMap<string, string>) {
+  const element = probe.value
+  if (!element) return ''
+  element.style.cssText = ''
+  for (const [name, text] of variables) element.style.setProperty(name, text)
+  element.style.setProperty(property, value)
+  return getComputedStyle(element).getPropertyValue(property)
+}
+const preview = computed(() => {
+  const text = css.value.trim()
+  if (!text || error.value || !probe.value) return undefined
+  const tokens = new Map(candidates.map((candidate) => [`--${candidate.cssName}`, candidate.text]))
+  return cssExpressionPreview(text, unit, tokens, measure)
+})
+const previewText = computed(() =>
+  preview.value ? tokenNumberToCSS(preview.value.value, unit) : undefined
+)
 
 /** Errors show once the expression is committed, as the value field's do. */
 const error = ref('')
@@ -129,6 +153,8 @@ defineExpose({ focus: () => field.value?.focus() })
         :completions="completions"
         :resolve="resolveReference"
         :invalid="Boolean(error)"
+        :suffix="previewText"
+        :approximate="preview?.approximate"
         :described-by="describedBy"
         @change="commit"
         @enter="enter"
@@ -151,5 +177,6 @@ defineExpose({ focus: () => field.value?.focus() })
     </div>
 
     <p v-if="error" :class="[ui.error(), ui.expressionField()]" role="alert">{{ error }}</p>
+    <div ref="probe" :class="ui.expressionProbe()" aria-hidden="true" />
   </div>
 </template>

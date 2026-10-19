@@ -21,6 +21,7 @@ const {
   completions,
   prefix,
   suffix,
+  approximate = false,
   unit
 } = defineProps<{
   /** The syntax the field edits; fixed for the field's lifetime. */
@@ -36,6 +37,8 @@ const {
   prefix?: string
   /** What the formula gives, shown after its text. */
   suffix?: string
+  /** Whether the result holds only where it was computed, such as for this window. */
+  approximate?: boolean
   /** The unit a plain number is in, shown after it in place of a result. */
   unit?: string
 }>()
@@ -62,7 +65,7 @@ const editing = useFormulaField(field, model, {
     'aria-multiline': 'true'
   }),
   resolve: (source) => resolve(source),
-  result: () => (suffix ? `= ${suffix}` : unit),
+  result: () => (suffix ? `${approximate ? '≈' : '='} ${suffix}` : unit),
   buttons: () => Boolean(slots.actions),
   onChange: () => emit('change'),
   onEnter: () => emit('enter'),

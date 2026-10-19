@@ -1,4 +1,6 @@
+import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'
 import { EditorView } from '@codemirror/view'
+import { tags } from '@lezer/highlight'
 
 /**
  * A one-line value field in the UI font, without the gutters or panels of the code editor. Its
@@ -6,6 +8,25 @@ import { EditorView } from '@codemirror/view'
  * collection, each value at the row's end.
  */
 export function formulaEditorTheme(dark: boolean) {
+  return [formulaTheme(dark), formulaHighlighting]
+}
+
+/** The code editor's token colours, quieter for a field: operators and brackets recede. */
+const formulaHighlighting = syntaxHighlighting(
+  HighlightStyle.define([
+    { tag: tags.keyword, color: 'var(--color-code-keyword)' },
+    { tag: [tags.number, tags.bool], color: 'var(--color-code-number)' },
+    { tag: tags.string, color: 'var(--color-code-string)' },
+    { tag: tags.function(tags.variableName), color: 'var(--color-code-tag)' },
+    {
+      tag: [tags.operator, tags.punctuation, tags.paren, tags.separator],
+      color: 'var(--color-muted)'
+    },
+    { tag: tags.invalid, color: 'var(--color-error)', textDecoration: 'underline wavy' }
+  ])
+)
+
+function formulaTheme(dark: boolean) {
   return EditorView.theme(
     {
       '&': { fontSize: '12px' },

@@ -79,6 +79,8 @@ export default {
     valueTools: 'flex shrink-0 items-center',
     /** A CSS expression's field and buttons, in the value grid's columns under the value's. */
     expressionField: 'min-w-0',
+    /** Where the browser computes a CSS expression's preview, out of sight. */
+    expressionProbe: 'pointer-events-none invisible absolute size-0 overflow-hidden',
     /** The value field, an input holding pills and operators, with the result at its end. */
     formulaField:
       'relative flex h-auto min-h-7 cursor-text items-end gap-1.5 py-[3px] focus-within:border-panel-focus focus-within:ring-1 focus-within:ring-accent/25 data-[invalid]:border-error data-[invalid]:focus-within:border-error',
