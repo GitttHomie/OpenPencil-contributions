@@ -45,15 +45,15 @@ import TokenTable from '@/components/variables/TokenTable.vue'
 import TokenTypeFilter from '@/components/variables/TokenTypeFilter.vue'
 import { useTokenActions } from '@/components/variables/useTokenActions'
 import { swapTransition } from '@/theme/motion/styles'
-import tokensPanelTheme, {
+import panelTheme, {
   TOKENS_PANEL_COMPACT_WIDTH,
   TOKENS_PANEL_SIDEBAR_WIDTH
-} from '@/theme/tokens-panel'
+} from '@/theme/variables/panel'
 
 const emit = defineEmits<{ copy: [format: TokenStylesheetFormat]; export: [] }>()
 
 const { variables: messages, common } = useI18n()
-const ui = tv(tokensPanelTheme)()
+const ui = tv(panelTheme)()
 
 /**
  * The panel lays out by its own width, not the window: inside a dialog, a split view, or a phone.

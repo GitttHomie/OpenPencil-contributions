@@ -14,7 +14,7 @@ import { useI18n } from '@open-pencil/vue'
 import { cssExpressionPreview } from '@/app/editor/tokens/css-expression'
 import type { CSSReferenceCandidate } from '@/app/editor/tokens/model'
 import { VariablePicker } from '@/components/ui/binding'
-import tokensPanelTheme from '@/theme/tokens-panel'
+import cssExpressionTheme from '@/theme/variables/css-expression'
 
 import { cssValueDialect } from './formula-field/dialects/css'
 import type { FormulaSelection } from './formula-field/source'
@@ -34,7 +34,7 @@ const { id, label, unit, candidates, describedBy } = defineProps<{
 }>()
 const emit = defineEmits<{ commit: [css: string]; cancel: [] }>()
 const { variables } = useI18n()
-const ui = tv(tokensPanelTheme)()
+const ui = tv(cssExpressionTheme)()
 const field = useTemplateRef<InstanceType<typeof TokenFormulaField>>('field')
 
 const reference = (candidate: CSSReferenceCandidate) => `var(--${candidate.cssName})`
@@ -150,7 +150,7 @@ defineExpose({ focus: () => field.value?.focus() })
 <template>
   <!-- The field and its error sit in the value grid's first column, under the value field. -->
   <div class="contents">
-    <div :class="ui.expressionField()">
+    <div :class="ui.field()">
       <TokenFormulaField
         :id="id"
         ref="field"
@@ -185,7 +185,7 @@ defineExpose({ focus: () => field.value?.focus() })
       </TokenFormulaField>
     </div>
 
-    <p v-if="error" :class="[ui.error(), ui.expressionField()]" role="alert">{{ error }}</p>
-    <div ref="probe" :class="ui.expressionProbe()" aria-hidden="true" />
+    <p v-if="error" :class="[ui.error(), ui.field()]" role="alert">{{ error }}</p>
+    <div ref="probe" :class="ui.probe()" aria-hidden="true" />
   </div>
 </template>

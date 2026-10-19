@@ -3,7 +3,7 @@ import { tv } from 'tailwind-variants'
 import { useSlots, useTemplateRef } from 'vue'
 
 import inputTheme from '@/theme/input/input'
-import tokensPanelTheme from '@/theme/tokens-panel'
+import formulaFieldTheme from '@/theme/variables/formula-field'
 
 import type { ExpressionDialect, ReferenceCompletion } from './formula-field/dialects/types'
 import type { FormulaPill, FormulaSelection } from './formula-field/source'
@@ -50,7 +50,7 @@ const emit = defineEmits<{
 }>()
 const field = useTemplateRef<HTMLDivElement>('field')
 const slots = useSlots()
-const ui = tv(tokensPanelTheme)()
+const ui = tv(formulaFieldTheme)()
 const inputUI = tv(inputTheme)
 
 const editing = useFormulaField(field, model, {
@@ -83,15 +83,13 @@ defineOptions({ inheritAttrs: false })
 
 <template>
   <div
-    :class="[inputUI({ size: 'sm' }), ui.formulaField()]"
+    :class="[inputUI({ size: 'sm' }), ui.root()]"
     :data-invalid="invalid ? '' : undefined"
     @pointerdown.self.prevent="editing.focus()"
   >
-    <span v-if="prefix" :class="[ui.formulaAffix(), ui.formulaPrefix()]" aria-hidden="true">{{
-      prefix
-    }}</span>
-    <div ref="field" :class="ui.formulaEditor()" />
-    <span v-if="$slots.actions" :class="ui.formulaActions()">
+    <span v-if="prefix" :class="ui.prefix()" aria-hidden="true">{{ prefix }}</span>
+    <div ref="field" :class="ui.editor()" />
+    <span v-if="$slots.actions" :class="ui.actions()">
       <slot name="actions" />
     </span>
   </div>

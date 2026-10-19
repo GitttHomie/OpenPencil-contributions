@@ -23,7 +23,7 @@ import TokenCellInput from '@/components/variables/TokenCellInput.vue'
 import TokenRowMenu from '@/components/variables/TokenRowMenu.vue'
 import { VARIABLE_TYPE_ICONS } from '@/components/variables/type-icons'
 import { useConditionLabels } from '@/components/variables/useConditionLabels'
-import tokensPanelTheme from '@/theme/tokens-panel'
+import tableTheme from '@/theme/variables/table'
 
 const { collection, groups, labels, modeIds, groupOptions } = defineProps<{
   collection: VariableCollection
@@ -47,7 +47,7 @@ const emit = defineEmits<{
 }>()
 
 const { variables } = useI18n()
-const ui = tv(tokensPanelTheme)()
+const ui = tv(tableTheme)()
 /** Figma does not show a variable the file adds to a library's collection; such a row says so. */
 const libraryCollection = computed(() => isLibraryCollection(collection))
 
@@ -186,7 +186,7 @@ function dropEdge(id: string) {
     v-model="selectedIds"
     multiple
     selection-behavior="replace"
-    :class="ui.list()"
+    :class="ui.root()"
     highlight-on-hover
     data-test-id="token-list"
     @keydown="onKeydown"
@@ -238,7 +238,7 @@ function dropEdge(id: string) {
           >
             <span :class="ui.name()" @dblclick.stop="startRename(row.variable.id)">
               <span :class="ui.nameLine()">
-                <component :is="VARIABLE_TYPE_ICONS[row.variable.type]" :class="ui.typeIcon()" />
+                <component :is="VARIABLE_TYPE_ICONS[row.variable.type]" :class="ui.icon()" />
                 <TokenCellInput
                   v-if="isEditing(row.variable.id)"
                   :value="row.label"
@@ -291,7 +291,7 @@ function dropEdge(id: string) {
                 <template v-if="value.formula">
                   <Tip :label="value.formula">
                     <icon-lucide-square-function
-                      :class="ui.formulaIcon()"
+                      :class="ui.icon()"
                       :aria-label="variables.formula"
                     />
                   </Tip>

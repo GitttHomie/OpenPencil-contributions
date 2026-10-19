@@ -15,7 +15,7 @@ import { parseTokenEditorText, tokenEditorText } from '@/app/editor/tokens/value
 import { VariablePicker } from '@/components/ui/binding'
 import IconButton from '@/components/ui/button/IconButton.vue'
 import AppSwitch from '@/components/ui/toggle/AppSwitch.vue'
-import tokensPanelTheme from '@/theme/tokens-panel'
+import valueEditorTheme from '@/theme/variables/value-editor'
 
 import { formulaDialect } from './formula-field/dialects/formula'
 import type { FormulaSelection } from './formula-field/source'
@@ -47,7 +47,7 @@ const emit = defineEmits<{
   removeExpression: []
 }>()
 const { variables } = useI18n()
-const ui = tv(tokensPanelTheme)()
+const ui = computed(() => tv(valueEditorTheme)({ heading }))
 const fieldId = useId()
 const field = useTemplateRef<InstanceType<typeof TokenFormulaField>>('field')
 
@@ -238,10 +238,10 @@ function detach() {
 </script>
 
 <template>
-  <div :class="ui.valueField()">
-    <div :class="ui.valueHeader()">
-      <span :class="heading === 'section' ? ui.sectionTitle() : ui.label()">{{ label }}</span>
-      <span :class="ui.valueTools()">
+  <div :class="ui.root()">
+    <div :class="ui.header()">
+      <span :class="ui.label()">{{ label }}</span>
+      <span :class="ui.tools()">
         <IconButton
           v-if="offersFormula"
           :label="variables.useFormula"
@@ -262,7 +262,7 @@ function detach() {
         </IconButton>
       </span>
     </div>
-    <div v-if="showsSwitch" :class="ui.valueControl()">
+    <div v-if="showsSwitch" :class="ui.control()">
       <AppSwitch
         :model-value="value === true"
         :label="label"

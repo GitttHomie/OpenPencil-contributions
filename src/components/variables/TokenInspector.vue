@@ -40,9 +40,10 @@ import AppInput from '@/components/ui/input/AppInput.vue'
 import AppTextarea from '@/components/ui/input/AppTextarea.vue'
 import Tip from '@/components/ui/overlay/Tip.vue'
 import FillSwatch from '@/components/ui/paint/FillSwatch.vue'
+import PanelFieldGroup from '@/components/ui/panel/PanelFieldGroup.vue'
 import AppSelect from '@/components/ui/select/AppSelect.vue'
 import AppCheckbox from '@/components/ui/toggle/AppCheckbox.vue'
-import tokensPanelTheme from '@/theme/tokens-panel'
+import inspectorTheme from '@/theme/variables/inspector'
 
 import TokenCSSExpression from './TokenCSSExpression.vue'
 import TokenValueEditor from './TokenValueEditor.vue'
@@ -77,7 +78,7 @@ const emit = defineEmits<{
 }>()
 
 const { variables } = useI18n()
-const ui = computed(() => tv(tokensPanelTheme)({ layout }))
+const ui = computed(() => tv(inspectorTheme)({ layout }))
 /**
  * A copy per list refresh: the graph edits a variable in place, so the same object coming back
  * would not tell the fields an inline rename or an undo changed it.
@@ -175,7 +176,11 @@ function commitName() {
 
 /** The browser's CSS parser decides what a custom property name may be. */
 const validator = computedAsync(loadTokenValidator, null)
-const cssNameErrorId = `${useId()}-css-name`
+const fieldId = useId()
+const nameId = `${fieldId}-name`
+const unitId = `${fieldId}-unit`
+const cssNameId = `${fieldId}-css-name`
+const cssNameErrorId = `${cssNameId}-error`
 const cssNameHintId = `${cssNameErrorId}-hint`
 /** The name typed, without the `--` the field shows, also when `--name` or `var(--name)` is pasted. */
 const typedCSSName = computed(() => {
@@ -317,16 +322,15 @@ function cssNameDone(event: KeyboardEvent) {
 </script>
 
 <template>
-  <aside :class="ui.inspector()" data-test-id="token-inspector">
+  <aside :class="ui.root()" data-test-id="token-inspector">
     <section :class="ui.section()">
-      <label :class="ui.field()">
-        <span :class="ui.label()">{{ variables.name }}</span>
-        <AppInput v-model="draft.name" size="sm" @change="commitName" @enter="done" />
-      </label>
-      <label :class="ui.field()">
-        <span :class="ui.label()">{{ variables.cssName }}</span>
+      <PanelFieldGroup :label="variables.name" :for="nameId">
+        <AppInput :id="nameId" v-model="draft.name" size="sm" @change="commitName" @enter="done" />
+      </PanelFieldGroup>
+      <PanelFieldGroup :label="variables.cssName" :for="cssNameId">
         <Tip :label="variables.cssNameHint">
           <AppInput
+            :id="cssNameId"
             v-model="draft.cssName"
             size="sm"
             :placeholder="row.cssName"
@@ -345,19 +349,18 @@ function cssNameDone(event: KeyboardEvent) {
           {{ variables.cssNameInvalid }}
         </p>
         <span :id="cssNameHintId" class="sr-only">{{ variables.cssNameHint }}</span>
-      </label>
-      <label v-if="variable.type === 'FLOAT'" :class="ui.field()">
-        <span :class="ui.label()">{{ variables.unit }}</span>
-        <AppSelect v-model="unit" :options="unitOptions" />
-      </label>
+      </PanelFieldGroup>
+      <PanelFieldGroup v-if="variable.type === 'FLOAT'" :label="variables.unit" :for="unitId">
+        <AppSelect :id="unitId" v-model="unit" :options="unitOptions" />
+      </PanelFieldGroup>
     </section>
 
     <section :class="ui.section()">
       <!-- A value editor heads itself, its tools on its label's row; the section title is for several. -->
-      <h3 v-if="!editsValues || !singleMode" :class="ui.sectionTitle()">
+      <h3 v-if="!editsValues || !singleMode" :class="ui.title()">
         {{ singleMode ? variables.value : variables.values }}
       </h3>
-      <div v-for="mode in collection.modes" :key="mode.modeId" :class="ui.field()">
+      <div v-for="mode in collection.modes" :key="mode.modeId" :class="ui.value()">
         <span v-if="!editsValues && !singleMode" :class="ui.label()">{{ mode.name }}</span>
         <TokenValueEditor
           v-if="editsValues && formula"
@@ -447,7 +450,7 @@ function cssNameDone(event: KeyboardEvent) {
     </section>
 
     <section v-if="scopes.length > 0" :class="ui.section()">
-      <h3 :class="ui.sectionTitle()">{{ variables.scopes }}</h3>
+      <h3 :class="ui.title()">{{ variables.scopes }}</h3>
       <label v-for="scope in scopes" :key="scope" :class="ui.scope()">
         <AppCheckbox
           :model-value="hasScope(scope)"
@@ -459,7 +462,7 @@ function cssNameDone(event: KeyboardEvent) {
     </section>
 
     <section :class="ui.section()">
-      <h3 :class="ui.sectionTitle()">{{ variables.description }}</h3>
+      <h3 :class="ui.title()">{{ variables.description }}</h3>
       <AppTextarea v-model="draft.description" :rows="2" @change="commitDescription" />
     </section>
 
