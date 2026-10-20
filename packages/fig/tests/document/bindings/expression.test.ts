@@ -90,7 +90,7 @@ test('STRINGIFY of one alias is that alias, as Figma binds a number to text cont
   ).toThrow('STRINGIFY')
 })
 
-test('IS_TRUTHY preserves a Boolean alias without flattening its current value', () => {
+test('IS_TRUTHY of one alias is that alias, as Figma binds a boolean or text to visibility', () => {
   const truthy = (...expressionArguments: VariableDataEntry[]): VariableDataEntry => ({
     dataType: 'EXPRESSION',
     resolvedDataType: 'BOOLEAN',
@@ -115,7 +115,9 @@ test('IS_TRUTHY preserves a Boolean alias without flattening its current value',
   expect(() => linearVariableExpression(truthy())).toThrow('one alias')
   expect(() => linearVariableExpression(truthy(booleanAlias, booleanAlias))).toThrow('one alias')
   expect(() => linearVariableExpression(truthy(multiply(literal(2), alias)))).toThrow('one alias')
-  expect(() => linearVariableExpression(truthy({ ...alias, resolvedDataType: 'FLOAT' }))).toThrow(
-    'Boolean alias'
-  )
+  // The binding resolves through Figma's truthiness, so a text alias reads the same way.
+  expect(linearVariableExpression(truthy({ ...alias, resolvedDataType: 'STRING' }))).toEqual({
+    reference: alias.value?.alias,
+    multiplier: 1
+  })
 })

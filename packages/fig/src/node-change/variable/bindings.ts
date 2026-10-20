@@ -194,8 +194,10 @@ function consumptionEntry(
     resolvedDataType: variable.type,
     value: { alias: variableAlias(graph, variableId, ids) }
   }
+  // Figma's layer panel tests a variable bound to visibility with IS_TRUTHY, and writes a number
+  // or boolean bound to text content as STRINGIFY.
   let conversion: 'IS_TRUTHY' | 'STRINGIFY' | undefined
-  if (variableField === 'VISIBLE' && variable.type === 'BOOLEAN') conversion = 'IS_TRUTHY'
+  if (variableField === 'VISIBLE') conversion = 'IS_TRUTHY'
   else if (variableField === 'TEXT_DATA' && variable.type !== 'STRING') conversion = 'STRINGIFY'
   if (conversion) {
     return {
