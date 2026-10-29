@@ -21,14 +21,14 @@ test('variable-backed text styles survive repeated saves and reopening', async (
     sharedStyleType: 'TEXT',
     internalOnly: true,
     fontSize: 48,
-    letterSpacing: -0.96,
+    letterSpacing: { value: -0.96, unit: 'PIXELS' },
     boundVariables: { fontSize: size.id, letterSpacing: tracking.id }
   })
   definition.source.id = 'style:display-large'
   const target = graph.createNode('TEXT', page.id, { name: 'Sample', text: 'Display sample' })
   graph.updateNode(target.id, {
     fontSize: 48,
-    letterSpacing: -0.96,
+    letterSpacing: { value: -0.96, unit: 'PIXELS' },
     boundVariables: { fontSize: size.id, letterSpacing: tracking.id },
     textStyleId: definition.source.id
   })
@@ -45,7 +45,8 @@ test('variable-backed text styles survive repeated saves and reopening', async (
       getSharedStyles(graph, 'text').find((style) => style.id === sample?.textStyleId)?.name
     ).toBe('Display/Large')
     expect(sample?.fontSize).toBe(48)
-    expect(sample?.letterSpacing).toBeCloseTo(-0.96)
+    expect(sample?.letterSpacing?.unit).toBe('PIXELS')
+    expect(sample?.letterSpacing?.value).toBeCloseTo(-0.96)
     expect(Object.keys(sample?.boundVariables ?? {}).sort()).toEqual(['fontSize', 'letterSpacing'])
     // Force a patched write as well as the first full export.
     if (sample) graph.updateNode(sample.id, { text: `Display sample ${save}` })
