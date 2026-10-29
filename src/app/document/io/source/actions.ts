@@ -132,7 +132,8 @@ export function createDocumentSourceActions({
     const trimmed = name.trim()
     if (state.readOnly || !trimmed || trimmed === state.documentName) return
     state.documentName = trimmed
-    changes.markChanged()
+    // Storage keeps the name with the document; a file's name is its path, which saving leaves as is.
+    if (getStorageBinding()) changes.markChanged()
   }
 
   function setDocumentSource(
