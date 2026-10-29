@@ -35,8 +35,7 @@ export function unbindVariable(graph: SceneGraph, node: NodeRef, field: string):
   if (!(field in target.boundVariables))
     throw new Error(`${target.name} has no variable bound to ${field}`)
   // A paint keeps the color its variable last gave it, as values do and as Figma's detach does.
-  if (paintBindingTarget(field))
-    graph.updateBoundValues(target.id, resolvedPaintBindings(graph, target))
+  if (paintBindingTarget(field)) graph.updateNode(target.id, resolvedPaintBindings(graph, target))
   graph.unbindVariable(target.id, field)
   reconcileVariableLayouts(graph, { subtrees: [target.id] })
 }

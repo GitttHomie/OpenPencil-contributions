@@ -20,8 +20,7 @@ interface SceneGraph {
   getPages(): Node[]
 
   createNode(type: NodeType, parent: string, props: Partial<NodeChange>): Node
-  updateNode(id: string, changes: Partial<NodeChange>): void // an edit: detaches styles it changes
-  updateBoundValues(id: string, changes: Partial<NodeChange>): void // resolved bindings: keeps styles
+  updateNode(id: string, changes: Partial<NodeChange>): void
   deleteNode(id: string): void
   moveNode(id: string, newParent: string, position: string): void
   addPage(name: string): Node

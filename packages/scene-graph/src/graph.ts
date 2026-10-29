@@ -23,7 +23,6 @@ import Matrix from './matrix'
 import { CONTAINER_TYPES, createDefaultNode } from './node-defaults'
 import { updateNodePreview, type NodePreviewObserver } from './preview'
 import type { Color, Rect, Vector } from './primitives'
-import { styleDetachmentChanges } from './shared-styles'
 import { markSourceFieldsEdited } from './source-metadata'
 import { invalidateTextCaches } from './text/picture'
 import type {
@@ -519,20 +518,11 @@ export class SceneGraph {
     if (appliedChanges) this.emitter.emit('node:previewUpdated', id, appliedChanges)
   }
 
-  /** An edit: a fill, stroke, effect, grid, or typography change detaches the matching style. */
-  updateNode(id: string, changes: Partial<SceneNode>): void {
-    this.writeNode(id, changes, true)
-  }
-
   /**
-   * The values the layer's variable bindings resolve to. Resolving is not an edit, so the
-   * layer keeps its shared styles, whose own fields the same variables may drive.
+   * Writes fields as given. Edits detach the shared styles whose fields they change before
+   * they get here (`styleDetachmentChanges`); resolving bindings or loading a file does not.
    */
-  updateBoundValues(id: string, changes: Partial<SceneNode>): void {
-    this.writeNode(id, changes, false)
-  }
-
-  private writeNode(id: string, changes: Partial<SceneNode>, detachStyles: boolean): void {
+  updateNode(id: string, changes: Partial<SceneNode>): void {
     if (this.scopeDepths.preview > 0) {
       this.updateNodePreview(id, changes)
       return
@@ -540,11 +530,7 @@ export class SceneGraph {
 
     const node = this.nodes.get(id)
     if (!node) return
-    const defined = omitBy(changes, isUndefined)
-    const written = detachStyles
-      ? omitBy(styleDetachmentChanges(node, defined), isUndefined)
-      : defined
-    this.applyNodeChanges(node, this.sizedChanges(node, written))
+    this.applyNodeChanges(node, this.sizedChanges(node, omitBy(changes, isUndefined)))
   }
 
   /** A size set from outside layout, with what it also sets on a generated frame. */

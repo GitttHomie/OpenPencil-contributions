@@ -27,8 +27,11 @@ test('resolving bindings keeps the shared styles', () => {
   })
 })
 
-test('an edit to the same field detaches the text style', () => {
+test('a graph write keeps the styles, which only an edit leaves', () => {
   const { graph, text } = styledText()
   graph.updateNode(text.id, { letterSpacing: { value: 4, unit: 'PIXELS' } })
-  expect(graph.getNode(text.id)).toMatchObject({ textStyleId: null, fillStyleId: 'style:fill' })
+  expect(graph.getNode(text.id)).toMatchObject({
+    textStyleId: 'style:text',
+    fillStyleId: 'style:fill'
+  })
 })

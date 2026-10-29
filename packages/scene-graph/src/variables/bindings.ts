@@ -270,7 +270,7 @@ export function reconcileVariableBindings(graph: SceneGraph, scope?: BindingScop
       ...resolvedRunBindings(graph, node)
     }
     if (Object.keys(updates).length === 0) continue
-    graph.updateBoundValues(node.id, updates)
+    graph.updateNode(node.id, updates)
     changed.push(node.id)
   }
   return changed

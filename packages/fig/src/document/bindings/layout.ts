@@ -44,7 +44,7 @@ export function applyDocumentLayoutBindings(
       if (typeof value !== 'number') continue
       const effectiveValue = field === 'opacity' ? value : value * (scales[field] ?? 1)
       const updates = resolvedNumericBindingUpdate(field, effectiveValue)
-      if (updates) graph.updateBoundValues(node.id, updates)
+      if (updates) graph.updateNode(node.id, updates)
     }
   }
 }
