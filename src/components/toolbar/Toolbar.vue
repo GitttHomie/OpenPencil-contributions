@@ -1,21 +1,18 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
-import {
-  ToolbarRoot,
-  useEditorCommands,
-  useI18n,
-  useToolbarState,
-  useViewportKind
-} from '@open-pencil/vue'
+import { useEditorCommands } from '@open-pencil/vue/editor/commands'
+import { useViewportKind } from '@open-pencil/vue/editor/viewport-kind'
+import { useI18n } from '@open-pencil/vue/i18n'
+import { ToolbarRoot, useToolbarState } from '@open-pencil/vue/primitives/Toolbar'
 
 import { useEditorStore } from '@/app/editor/active-store'
-import { toolIcons } from '@/app/editor/icons'
-import { toolbarItems } from '@/app/editor/toolbar/layout'
+import { readOnlyToolbarLayout, toolbarItems } from '@/app/editor/toolbar/layout'
 import { toolShortcutLabels } from '@/app/editor/toolbar/shortcuts'
 import { appPreferences } from '@/app/settings/preferences/store'
 import { useActionToast } from '@/app/shell/toast/action'
 import InsertIconButton from '@/components/icon-picker/InsertIconButton.vue'
+import { toolIcons } from '@/components/icons'
 import { useToolbarActions } from '@/components/toolbar/actions'
 import DesktopToolbar from '@/components/toolbar/DesktopToolbar.vue'
 import { useToolLabels } from '@/components/toolbar/labels'
@@ -33,9 +30,14 @@ const { menu } = useI18n()
 const toolLabels = useToolLabels()
 
 const toolShortcuts = toolShortcutLabels()
-const items = computed(() =>
-  toolbarItems(appPreferences.value.toolbar, toolLabels.value, toolShortcuts)
-)
+const items = computed(() => {
+  const layout = appPreferences.value.toolbar
+  return toolbarItems(
+    store.state.readOnly ? readOnlyToolbarLayout(layout) : layout,
+    toolLabels.value,
+    toolShortcuts
+  )
+})
 const tools = computed(() =>
   items.value.flatMap((item) => (item.kind === 'tool' ? [item.tool] : []))
 )

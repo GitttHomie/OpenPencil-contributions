@@ -1,7 +1,7 @@
 import { mapValues } from 'es-toolkit/object'
 
-import type { Tool } from '@open-pencil/core/editor'
-import { formatShortcut, type ShortcutPlatform } from '@open-pencil/vue'
+import type { Tool } from '@open-pencil/core'
+import { formatShortcut, type ShortcutPlatform } from '@open-pencil/vue/editor/commands'
 
 /** Each tool's key in the command registry's notation; empty for tools without one. */
 const TOOL_SHORTCUT_KEYS: Readonly<Record<Tool, string>> = {
@@ -16,6 +16,9 @@ const TOOL_SHORTCUT_KEYS: Readonly<Record<Tool, string>> = {
   PEN: 'P',
   PENCIL: 'SHIFT+P',
   TEXT: 'T',
+  STICKY: '',
+  SHAPE_WITH_TEXT: '',
+  CONNECTOR: '',
   HAND: 'H',
   COMMENT: 'C'
 }

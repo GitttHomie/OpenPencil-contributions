@@ -1,4 +1,4 @@
-import type { Tool } from '@open-pencil/core/editor'
+import type { Tool } from '@open-pencil/core'
 
 import commentCursorSVG from '#vue/shared/assets/cursors/comment.svg?raw'
 import handGrabCursorSVG from '#vue/shared/assets/cursors/hand-grab.svg?raw'
@@ -31,6 +31,9 @@ const TOOL_CURSORS: Record<Tool, string> = {
   POLYGON: 'crosshair',
   STAR: 'crosshair',
   TEXT: 'text',
+  STICKY: 'crosshair',
+  SHAPE_WITH_TEXT: 'crosshair',
+  CONNECTOR: 'crosshair',
   PEN: PEN_CURSOR,
   PENCIL: PENCIL_CURSOR,
   HAND: HAND_CURSOR,
