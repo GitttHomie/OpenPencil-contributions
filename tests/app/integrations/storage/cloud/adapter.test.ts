@@ -5,7 +5,6 @@ import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate'
 import { fromUint8Array } from 'js-base64'
 
 import { createCloudAPIClient } from '@open-pencil/cloud/client'
-import { CLOUD_DOCUMENT_NAME_MAX_LENGTH } from '@open-pencil/cloud/contract'
 
 import { StorageRevisionConflictError } from '@/app/integrations/storage'
 import { createCloudStorageAdapter } from '@/app/integrations/storage/cloud/adapter'
@@ -307,7 +306,8 @@ describe('Cloud storage adapter', () => {
     const bytes = new TextEncoder().encode('design')
     const first = await storage.putDocument(id, bytes, { name: '   ', updatedAt: '' })
     expect(await storage.getDocumentMetadata?.(id)).toMatchObject({ name: 'Untitled' })
-    const kept = 'a'.repeat(CLOUD_DOCUMENT_NAME_MAX_LENGTH - 1)
+    // Cloud keeps 255 UTF-16 units; the emoji's second half would be the 256th, so it goes whole.
+    const kept = 'a'.repeat(254)
     await storage.putDocument(id, bytes, { name: `${kept}😀 tail`, updatedAt: '' }, undefined, {
       baseRevision: first.revision
     })
