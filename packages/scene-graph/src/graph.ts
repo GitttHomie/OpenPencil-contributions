@@ -519,7 +519,20 @@ export class SceneGraph {
     if (appliedChanges) this.emitter.emit('node:previewUpdated', id, appliedChanges)
   }
 
+  /** An edit: a fill, stroke, effect, grid, or typography change detaches the matching style. */
   updateNode(id: string, changes: Partial<SceneNode>): void {
+    this.writeNode(id, changes, true)
+  }
+
+  /**
+   * The values the layer's variable bindings resolve to. Resolving is not an edit, so the
+   * layer keeps its shared styles, whose own fields the same variables may drive.
+   */
+  updateBoundValues(id: string, changes: Partial<SceneNode>): void {
+    this.writeNode(id, changes, false)
+  }
+
+  private writeNode(id: string, changes: Partial<SceneNode>, detachStyles: boolean): void {
     if (this.scopeDepths.preview > 0) {
       this.updateNodePreview(id, changes)
       return
@@ -528,8 +541,10 @@ export class SceneGraph {
     const node = this.nodes.get(id)
     if (!node) return
     const defined = omitBy(changes, isUndefined)
-    const detached = omitBy(styleDetachmentChanges(node, defined), isUndefined)
-    this.applyNodeChanges(node, this.sizedChanges(node, detached))
+    const written = detachStyles
+      ? omitBy(styleDetachmentChanges(node, defined), isUndefined)
+      : defined
+    this.applyNodeChanges(node, this.sizedChanges(node, written))
   }
 
   /** A size set from outside layout, with what it also sets on a generated frame. */

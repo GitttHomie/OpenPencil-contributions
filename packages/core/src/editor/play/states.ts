@@ -118,7 +118,7 @@ export function resolvePlayState(
   // whatever mode is showing now; the copy takes what the canvas draws, variants included.
   for (const node of graph.getAllNodes()) {
     const paints = resolvedPaintBindings(graph, node)
-    if (paints.fills || paints.strokes) graph.updateNode(node.id, paints)
+    if (paints.fills || paints.strokes) graph.updateBoundValues(node.id, paints)
   }
   const ordered = [...states].sort(([a], [b]) => a.split('/').length - b.split('/').length)
   for (const [path, state] of ordered) {

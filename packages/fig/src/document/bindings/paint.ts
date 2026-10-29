@@ -8,11 +8,6 @@ export function applyDocumentPaintBindings(
 ): void {
   for (const node of materialized) {
     const changes = resolvedPaintBindings(graph, node)
-    if (changes.fills || changes.strokes)
-      graph.updateNode(node.id, {
-        ...changes,
-        fillStyleId: node.fillStyleId,
-        strokeStyleId: node.strokeStyleId
-      })
+    if (changes.fills || changes.strokes) graph.updateBoundValues(node.id, changes)
   }
 }

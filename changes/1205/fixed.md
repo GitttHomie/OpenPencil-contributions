@@ -1,1 +1,1 @@
-- Preserve text, fill, and stroke style assignments when resolving variables during `.fig` save and reopen.
+- Layers keep their text, fill, and stroke styles when their variable bindings resolve, on `.fig` open and save and when a variable or mode changes.
