@@ -112,9 +112,11 @@ export const workspaceUsageSchema = v.object({
 })
 export type WorkspaceUsage = v.InferOutput<typeof workspaceUsageSchema>
 
+export const CLOUD_DOCUMENT_NAME_MAX_LENGTH = 255
+
 export const createDocumentSchema = v.object({
   id: v.optional(v.pipe(v.string(), v.uuid())),
-  name: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(255))
+  name: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(CLOUD_DOCUMENT_NAME_MAX_LENGTH))
 })
 export type CreateDocumentInput = v.InferOutput<typeof createDocumentSchema>
 

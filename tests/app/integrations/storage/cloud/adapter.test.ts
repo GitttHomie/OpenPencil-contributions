@@ -5,6 +5,7 @@ import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate'
 import { fromUint8Array } from 'js-base64'
 
 import { createCloudAPIClient } from '@open-pencil/cloud/client'
+import { CLOUD_DOCUMENT_NAME_MAX_LENGTH } from '@open-pencil/cloud/contract'
 
 import { StorageRevisionConflictError } from '@/app/integrations/storage'
 import { createCloudStorageAdapter } from '@/app/integrations/storage/cloud/adapter'
@@ -298,6 +299,19 @@ describe('Cloud storage adapter', () => {
     })
     expect(await storage.getDocumentMetadata?.(id)).toMatchObject({ name: 'Checkout' })
     expect(await storage.listDocuments()).toMatchObject([{ id, name: 'Checkout' }])
+  })
+
+  test('saves a name Cloud accepts, whatever the editor calls the document', async () => {
+    const storage = adapter(cloudServer())
+    const id = crypto.randomUUID()
+    const bytes = new TextEncoder().encode('design')
+    const first = await storage.putDocument(id, bytes, { name: '   ', updatedAt: '' })
+    expect(await storage.getDocumentMetadata?.(id)).toMatchObject({ name: 'Untitled' })
+    const kept = 'a'.repeat(CLOUD_DOCUMENT_NAME_MAX_LENGTH - 1)
+    await storage.putDocument(id, bytes, { name: `${kept}😀 tail`, updatedAt: '' }, undefined, {
+      baseRevision: first.revision
+    })
+    expect(await storage.getDocumentMetadata?.(id)).toMatchObject({ name: kept })
   })
 
   test('creates the document on its first save and opens what it saved', async () => {
