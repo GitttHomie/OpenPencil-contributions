@@ -1,3 +1,5 @@
+import { createEventHook } from '@vueuse/core'
+
 import type { Editor, EditorState } from '@open-pencil/core'
 import { exportFigFile } from '@open-pencil/core/io/formats/fig'
 
@@ -128,6 +130,18 @@ export function createDocumentSourceActions({
     setSavedVersion(changes.capture())
   }
 
+  // Only names the person gives; a save's provisional name and the room's own are no rename.
+  const renamed = createEventHook<string>()
+
+  function renameDocument(name: string) {
+    const trimmed = name.trim()
+    if (state.readOnly || !trimmed || trimmed === state.documentName) return
+    state.documentName = trimmed
+    // Storage keeps the name with the document; a file's name is its path, which saving leaves as is.
+    if (getStorageBinding()) changes.markChanged()
+    void renamed.trigger(trimmed)
+  }
+
   function setDocumentSource(
     fileName: string,
     sourceFormat: string,
@@ -256,6 +270,8 @@ export function createDocumentSourceActions({
   }
 
   return {
+    renameDocument,
+    onDocumentRenamed: renamed.on,
     setDocumentSource,
     setStorageDocumentSource,
     setPlannedFilePath,
