@@ -49,6 +49,14 @@ describe("FigJam's connector line menu", () => {
     expect(line().strokeWeight).toBe(8)
   })
 
+  test('thickness and dashes keep the stroke style, which gives the paint only', () => {
+    const { editor, connector, line } = setup()
+    editor.graph.updateNode(line().id, { strokeStyleId: 'stroke-style' })
+    editor.setConnectorThick([connector.id], true)
+    editor.setConnectorDashed([connector.id], true)
+    expect(line().strokeStyleId).toBe('stroke-style')
+  })
+
   test('a palette colour leaves the stroke style it replaces', () => {
     const { editor, connector, line } = setup()
     editor.graph.updateNode(line().id, { strokeStyleId: 'stroke-style' })
